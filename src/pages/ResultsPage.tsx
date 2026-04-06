@@ -1,37 +1,169 @@
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Download, Square, Zap, IndianRupee, Leaf, Loader2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Download,
+  Square,
+  Zap,
+  IndianRupee,
+  Leaf,
+  AlertTriangle,
+  MapPin,
+  TreeDeciduous,
+  RefreshCw,
+  ArrowRight,
+  TrendingDown,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import ThemeToggle from "@/components/ThemeToggle";
 import MetricCard from "@/components/MetricCard";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
+import type { SolarAnalysis } from "@/lib/solar-calc";
+import { generatePDFReport } from "@/lib/pdf-generator";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+} from "recharts";
 
-interface ResultsData {
-  area: number;
-  usable: number;
-  kw: number;
-  kwh: number;
-  savings: number;
-  co2: number;
-  dailyKwh: number;
-  monthlyKwh: number;
-  monthlySavings: number;
-  twentyFiveYearSavings: number;
-  co2_25yr: number;
-  trees: number;
+interface FullResult extends SolarAnalysis {
+  location?: {
+    lat: number;
+    lng: number;
+    label: string;
+  };
+  panelCount?: number;
 }
 
-const fallbackData: ResultsData = {
-  area: 150.3, usable: 112.7, kw: 14.1, kwh: 18234, savings: 127642, co2: 14952,
-  dailyKwh: 49.9, monthlyKwh: 1519, monthlySavings: 10637,
-  twentyFiveYearSavings: 3191050, co2_25yr: 373800, trees: 680,
-};
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_KEYS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+// ─── Animated count-up hook ─────────────────────────────────
+function useCountUp(target: number, duration: number = 1200, delay: number = 0): number {
+  const [value, setValue] = useState(0);
+  const startTimeRef = useRef<number>(0);
+  const rafRef = useRef<number>(0);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      startTimeRef.current = performance.now();
+
+      const animate = (now: number) => {
+        const elapsed = now - startTimeRef.current;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic
+        const eased = 1 - Math.pow(1 - progress, 3);
+        setValue(Math.round(target * eased));
+
+        if (progress < 1) {
+          rafRef.current = requestAnimationFrame(animate);
+        } else {
+          setValue(target);
+        }
+      };
+
+      rafRef.current = requestAnimationFrame(animate);
+    }, delay);
+
+    return () => {
+      clearTimeout(timeoutId);
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, [target, duration, delay]);
+
+  return value;
+}
+
+// ─── Before/After Comparison Component ──────────────────────
+function SavingsComparison({ annualBill, annualSavings, annualWithSolar }: {
+  annualBill: number;
+  annualSavings: number;
+  annualWithSolar: number;
+}) {
+  const savingsPercent = Math.round((annualSavings / annualBill) * 100);
+  const animatedBill = useCountUp(annualBill, 1200, 200);
+  const animatedWithSolar = useCountUp(annualWithSolar, 1200, 400);
+  const animatedPercent = useCountUp(savingsPercent, 1000, 600);
+
+  return (
+    <div className="bg-urja-bg-card rounded-lg shadow-card p-6 sm:p-8 mb-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="Before and after savings comparison">
+      <div className="flex items-center gap-2 mb-6">
+        <TrendingDown className="w-5 h-5 text-urja-success" aria-hidden="true" />
+        <h2 className="text-xl font-medium text-urja-text-primary">Your Savings at a Glance</h2>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
+        {/* Without Solar */}
+        <div className="bg-destructive/[0.06] rounded-xl p-5 text-center">
+          <div className="text-xs font-medium text-destructive/70 uppercase tracking-wider mb-2">Without Solar</div>
+          <div className="font-mono text-2xl sm:text-3xl font-semibold text-destructive">
+            ₹{animatedBill.toLocaleString()}
+          </div>
+          <div className="text-xs text-urja-text-muted mt-1">per year</div>
+        </div>
+
+        {/* Arrow + savings pill */}
+        <div className="flex flex-col items-center gap-2 py-2">
+          <div className="w-10 h-10 rounded-full bg-urja-success/10 flex items-center justify-center">
+            <ArrowRight className="w-5 h-5 text-urja-success" />
+          </div>
+          <div className="bg-urja-success text-white text-sm font-semibold px-4 py-1.5 rounded-full shadow-sm">
+            Save {animatedPercent}%
+          </div>
+          <div className="text-xs text-urja-text-muted">
+            ₹{annualSavings.toLocaleString()}/year saved
+          </div>
+        </div>
+
+        {/* With Solar */}
+        <div className="bg-urja-success/[0.06] rounded-xl p-5 text-center">
+          <div className="text-xs font-medium text-urja-success/70 uppercase tracking-wider mb-2">With Solar</div>
+          <div className="font-mono text-2xl sm:text-3xl font-semibold text-urja-success">
+            ₹{animatedWithSolar.toLocaleString()}
+          </div>
+          <div className="text-xs text-urja-text-muted mt-1">per year</div>
+        </div>
+      </div>
+
+      {/* Visual comparison bar */}
+      <div className="mt-6 space-y-2">
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-urja-text-muted w-20 text-right shrink-0">Current bill</span>
+          <div className="flex-1 bg-muted rounded-full h-3 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-red-400 to-red-500 rounded-full transition-all duration-1000" style={{ width: "100%" }} />
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-urja-text-muted w-20 text-right shrink-0">With solar</span>
+          <div className="flex-1 bg-muted rounded-full h-3 overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full transition-all duration-1500 ease-out"
+              style={{ width: `${100 - savingsPercent}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Results Page
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const ResultsPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [data, setData] = useState<ResultsData | null>(null);
+  const [data, setData] = useState<FullResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [noData, setNoData] = useState(false);
 
   useEffect(() => {
     const stored = sessionStorage.getItem("urja-results");
@@ -39,117 +171,184 @@ const ResultsPage = () => {
       try {
         setData(JSON.parse(stored));
       } catch {
-        setData(fallbackData);
+        setNoData(true);
+        return;
       }
     } else {
-      setData(fallbackData);
+      setNoData(true);
+      return;
     }
-    // Simulate load delay for skeleton effect
-    setTimeout(() => setLoading(false), 600);
+    setTimeout(() => setLoading(false), 500);
   }, []);
 
-  const handleDownload = async () => {
-    setDownloading(true);
-    // Mock PDF generation delay
-    await new Promise(r => setTimeout(r, 2000));
-    toast({ title: "PDF Report", description: "Report download will be available once the backend is connected." });
-    setDownloading(false);
+  const handleBackToMap = () => navigate("/map");
+
+  const handleNewAnalysis = () => {
+    sessionStorage.removeItem("urja-results");
+    navigate("/map");
   };
 
-  const d = data || fallbackData;
+  const handleDownload = async () => {
+    if (!data) return;
+    setDownloading(true);
+    setDownloadError(null);
+
+    try {
+      const blobUrl = await generatePDFReport(data, {
+        locationLabel: data.location?.label || "India",
+      });
+
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `URJA_LINK_Solar_Report_${data.analysisId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+
+      toast({ title: "Report Downloaded", description: "Your solar analysis report has been saved." });
+    } catch (error) {
+      const msg = (error as Error).message === "REPORT_TIMEOUT"
+        ? "Report generation timed out. Please try again."
+        : "Failed to generate report. Please try again.";
+      setDownloadError(msg);
+      toast({ title: "Download Failed", description: msg, variant: "destructive" });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  if (noData) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4" role="main">
+        <div className="text-center max-w-md">
+          <div className="w-16 h-16 rounded-full bg-urja-accent/10 flex items-center justify-center mx-auto mb-4">
+            <MapPin className="w-8 h-8 text-urja-accent" />
+          </div>
+          <h1 className="font-display text-2xl text-urja-text-primary mb-2">No Analysis Found</h1>
+          <p className="text-urja-text-secondary mb-6">Draw your rooftop on the map first to generate a solar potential analysis report.</p>
+          <Button variant="cta" onClick={() => navigate("/map")}>Go to Map →</Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  // ── Before/after data ──────────────────────────────────
+  // Assume average Indian household: 300 kWh/month baseline usage
+  const estimatedMonthlyUsageKwh = Math.max(data.energy.monthlyKwh * 1.2, 300);
+  const annualBill = Math.round(estimatedMonthlyUsageKwh * 12 * data.financials.electricityRateInr);
+  const annualWithSolar = Math.max(0, annualBill - data.financials.annualSavingsInr);
+
+  // ── Monthly chart ──────────────────────────────────────
+  const hasMonthlyData = data.monthlyIrradiance && Object.keys(data.monthlyIrradiance).length > 0;
+  const monthlyChartData = hasMonthlyData
+    ? MONTH_KEYS.map((key, i) => ({
+        label: MONTH_LABELS[i],
+        psh: data.monthlyIrradiance?.[key] ?? 0,
+        kwh: Math.round(
+          (data.energy.installedCapacityKw *
+            (data.monthlyIrradiance?.[key] ?? data.energy.peakSunHoursDaily) *
+            (i === 1 ? 28 : [3, 5, 8, 10].includes(i) ? 30 : 31) *
+            0.86 * 10) / 10
+        ),
+      }))
+    : null;
+  const maxKwh = monthlyChartData ? Math.max(...monthlyChartData.map((d) => d.kwh)) : 0;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background" role="main" aria-label="Solar analysis results">
       <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-8">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 className="font-display text-3xl sm:text-4xl gradient-text leading-tight">
-              Solar Potential Analysis
-            </h1>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="w-2 h-2 rounded-full bg-urja-success" />
-              <span className="text-sm text-urja-text-secondary">Selected Location, India</span>
+            <h1 className="font-display text-3xl sm:text-4xl gradient-text leading-tight">Solar Potential Analysis</h1>
+            {data.location?.label && (
+              <div className="flex items-center gap-2 mt-1.5" aria-label={`Location: ${data.location.label}`}>
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-urja-success opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-urja-success" />
+                </span>
+                <span className="text-sm text-urja-text-secondary flex items-center gap-1">
+                  <MapPin className="w-3 h-3" aria-hidden="true" />
+                  {data.location.label}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center gap-3 mt-1.5">
+              <span className="text-xs text-urja-text-muted">ID: {data.analysisId}</span>
+              <span className="text-xs text-urja-text-muted">•</span>
+              <span className="text-xs text-urja-text-muted">Source: {data.irradianceSource === "NASA_POWER" ? "NASA POWER Satellite" : "Regional Lookup"}</span>
+              {data.panelCount && data.panelCount > 0 && (
+                <>
+                  <span className="text-xs text-urja-text-muted">•</span>
+                  <span className="text-xs text-urja-info font-medium">{data.panelCount} panels</span>
+                </>
+              )}
             </div>
           </div>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Button variant="ghost" onClick={() => navigate("/map")}>
-              <ArrowLeft className="w-4 h-4 mr-1" /> Back to Map
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <Button variant="ghost" onClick={handleBackToMap} aria-label="Go back to map">
+              <ArrowLeft className="w-4 h-4 mr-1" aria-hidden="true" /> Back to Map
             </Button>
-            <Button variant="cta" onClick={handleDownload} loading={downloading}>
-              <Download className="w-4 h-4 mr-1" /> Download Report
+            <Button variant="cta" onClick={handleDownload} loading={downloading} aria-label="Download PDF report">
+              <Download className="w-4 h-4 mr-1" aria-hidden="true" /> Download Report
             </Button>
           </div>
-        </div>
+        </header>
 
-        {/* MetricCard Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {downloadError && (
+          <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive flex items-center gap-2" role="alert">
+            <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
+            <span className="flex-1">{downloadError}</span>
+            <Button variant="ghost" size="sm" onClick={handleDownload}>Retry</Button>
+          </div>
+        )}
+
+        {/* 4-Card Summary Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8" role="region" aria-label="Key metrics summary">
           {loading ? (
             Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="bg-urja-bg-card rounded-lg shadow-card p-5 animate-pulse">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-9 h-9 rounded-md bg-muted" />
-                  <div className="h-4 w-20 bg-muted rounded" />
-                </div>
-                <div className="h-8 w-28 bg-muted rounded mb-2" />
-                <div className="h-3 w-24 bg-muted rounded" />
+              <div key={i} className="bg-urja-bg-card rounded-lg shadow-card p-5 animate-pulse" aria-hidden="true">
+                <div className="flex items-center gap-3 mb-3"><div className="w-9 h-9 rounded-md bg-muted" /><div className="h-4 w-20 bg-muted rounded" /></div>
+                <div className="h-8 w-28 bg-muted rounded mb-2" /><div className="h-3 w-24 bg-muted rounded" />
               </div>
             ))
           ) : (
             <>
-              <MetricCard
-                icon={<Square className="w-5 h-5 text-urja-info" />}
-                iconBg="hsl(211 68% 94%)"
-                label="Roof Area"
-                value={`${d.area} m²`}
-                subLabel={`Usable: ${d.usable} m²`}
-                valueColor="hsl(211 79% 42%)"
-                delay={0}
-              />
-              <MetricCard
-                icon={<Zap className="w-5 h-5" style={{ color: "#E65100" }} />}
-                iconBg="#FFF3E0"
-                label="Installed Capacity"
-                value={`${d.kw} kW`}
-                subLabel={`Annual: ${d.kwh.toLocaleString()} kWh`}
-                valueColor="#E65100"
-                delay={80}
-              />
-              <MetricCard
-                icon={<IndianRupee className="w-5 h-5 text-urja-success" />}
-                iconBg="hsl(88 44% 91%)"
-                label="Yearly Savings"
-                value={`₹${d.savings.toLocaleString()}`}
-                subLabel="Based on ₹7/kWh rate"
-                valueColor="hsl(122 46% 33%)"
-                delay={160}
-              />
-              <MetricCard
-                icon={<Leaf className="w-5 h-5 text-urja-success" />}
-                iconBg="hsl(88 44% 91%)"
-                label="CO₂ Saved"
-                value={`${d.co2.toLocaleString()} kg`}
-                subLabel="Environmental impact / year"
-                valueColor="hsl(122 46% 33%)"
-                delay={240}
-              />
+              <MetricCard icon={<Square className="w-5 h-5 text-urja-info" />} iconBg="hsl(211 68% 94%)" label="Roof Area" value={`${data.rooftop.drawnAreaM2} m²`} subLabel={`Usable: ${data.rooftop.usableAreaM2} m² (75%)`} valueColor="hsl(211 79% 42%)" delay={0} />
+              <MetricCard icon={<Zap className="w-5 h-5" style={{ color: "#E65100" }} />} iconBg="#FFF3E0" label="Installed Capacity" value={`${data.energy.installedCapacityKw} kWp`} subLabel={`Annual: ${data.energy.annualKwh.toLocaleString()} kWh`} valueColor="#E65100" delay={80} />
+              <MetricCard icon={<IndianRupee className="w-5 h-5 text-urja-success" />} iconBg="hsl(88 44% 91%)" label="Yearly Savings" value={`₹${data.financials.annualSavingsInr.toLocaleString()}`} subLabel={`@ ₹${data.financials.electricityRateInr}/kWh rate`} valueColor="hsl(122 46% 33%)" delay={160} />
+              <MetricCard icon={<Leaf className="w-5 h-5 text-urja-success" />} iconBg="hsl(88 44% 91%)" label="CO₂ Saved" value={`${data.environmental.co2AnnualKg.toLocaleString()} kg`} subLabel="Environmental impact / year" valueColor="hsl(122 46% 33%)" delay={240} />
             </>
           )}
         </div>
 
+        {/* ━━ Before/After Savings Comparison ━━━━━━━━━━━━━━ */}
+        {!loading && (
+          <SavingsComparison
+            annualBill={annualBill}
+            annualSavings={data.financials.annualSavingsInr}
+            annualWithSolar={annualWithSolar}
+          />
+        )}
+
         {/* System Details Panel */}
-        <div className="bg-urja-bg-card rounded-lg shadow-card p-6 sm:p-8 mb-8">
+        <div className="bg-urja-bg-card rounded-lg shadow-card p-6 sm:p-8 mb-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="System details">
           <h2 className="text-xl font-medium text-urja-text-primary mb-6">System Details</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <Zap className="w-5 h-5 text-urja-accent" />
+                <Zap className="w-5 h-5 text-urja-accent" aria-hidden="true" />
                 <span className="text-[15px] font-medium text-urja-text-primary">Energy Production</span>
               </div>
               {[
-                { label: "Daily Average", value: `${d.dailyKwh} kWh` },
-                { label: "Monthly Average", value: `${d.monthlyKwh.toLocaleString()} kWh` },
-                { label: "Annual Total", value: `${d.kwh.toLocaleString()} kWh` },
+                { label: "Peak Sun Hours", value: `${data.energy.peakSunHoursDaily} hrs/day` },
+                { label: "Daily Average", value: `${data.energy.dailyKwh} kWh` },
+                { label: "Monthly Average", value: `${data.energy.monthlyKwh.toLocaleString()} kWh` },
+                { label: "Annual Total", value: `${data.energy.annualKwh.toLocaleString()} kWh` },
               ].map((row, i, arr) => (
                 <div key={row.label} className={`flex justify-between items-center py-3 ${i < arr.length - 1 ? "border-b border-dashed border-foreground/[0.08]" : ""}`}>
                   <span className="text-sm text-urja-text-secondary">{row.label}</span>
@@ -159,44 +358,147 @@ const ResultsPage = () => {
             </div>
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <IndianRupee className="w-5 h-5 text-urja-success" />
+                <IndianRupee className="w-5 h-5 text-urja-success" aria-hidden="true" />
                 <span className="text-[15px] font-medium text-urja-text-primary">Financial Impact</span>
               </div>
               {[
-                { label: "Monthly Savings", value: `₹${d.monthlySavings.toLocaleString()}` },
-                { label: "Annual Savings", value: `₹${d.savings.toLocaleString()}` },
-                { label: "25-Year Savings", value: `₹${d.twentyFiveYearSavings.toLocaleString()}` },
+                { label: "Electricity Rate", value: `₹${data.financials.electricityRateInr}/kWh` },
+                { label: "Monthly Savings", value: `₹${data.financials.monthlySavingsInr.toLocaleString()}` },
+                { label: "Annual Savings", value: `₹${data.financials.annualSavingsInr.toLocaleString()}` },
+                { label: "25-Year Savings", value: `₹${data.financials.savings25yrInr.toLocaleString()}`, highlight: true },
               ].map((row, i, arr) => (
-                <div key={row.label} className={`flex justify-between items-center py-3 ${i < arr.length - 1 ? "border-b border-dashed border-foreground/[0.08]" : ""}`}>
-                  <span className="text-sm text-urja-text-secondary">{row.label}</span>
-                  <span className="font-mono font-medium text-urja-success">{row.value}</span>
+                <div key={row.label} className={`flex justify-between items-center py-3 ${row.highlight ? "bg-urja-success-light rounded-md px-3 -mx-3 mt-1" : i < arr.length - 1 ? "border-b border-dashed border-foreground/[0.08]" : ""}`}>
+                  <span className={`text-sm ${row.highlight ? "font-medium text-urja-success" : "text-urja-text-secondary"}`}>{row.label}</span>
+                  <span className={`font-mono font-medium ${row.highlight ? "text-urja-success text-lg" : "text-urja-success"}`}>{row.value}</span>
                 </div>
               ))}
             </div>
           </div>
         </div>
 
+        {/* Monthly Generation Chart */}
+        {monthlyChartData && (
+          <div className="bg-urja-bg-card rounded-lg shadow-card p-6 sm:p-8 mb-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="Monthly energy generation chart">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-xl font-medium text-urja-text-primary">Monthly Generation Estimate</h2>
+              <div className="text-sm font-mono text-urja-accent font-semibold">
+                {data.energy.annualKwh.toLocaleString()} kWh/yr
+              </div>
+            </div>
+            <p className="text-sm text-urja-text-muted mb-4">Estimated monthly energy output based on NASA satellite irradiance data</p>
+            <div style={{ width: "100%", height: 280 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={monthlyChartData}
+                  margin={{ top: 10, right: 4, left: -20, bottom: 0 }}
+                  barCategoryGap="16%"
+                >
+                  <defs>
+                    <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="hsl(38, 92%, 55%)" stopOpacity={1} />
+                      <stop offset="100%" stopColor="hsl(30, 85%, 48%)" stopOpacity={0.7} />
+                    </linearGradient>
+                    <linearGradient id="barGradientHigh" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="hsl(38, 95%, 60%)" stopOpacity={1} />
+                      <stop offset="100%" stopColor="hsl(30, 90%, 52%)" stopOpacity={0.85} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid
+                    strokeDasharray="3 6"
+                    vertical={false}
+                    stroke="var(--foreground)"
+                    strokeOpacity={0.06}
+                  />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fill: "var(--urja-text-muted, #94a3b8)", fontSize: 11, fontWeight: 500 }}
+                    tickLine={false}
+                    axisLine={{ stroke: "var(--foreground)", strokeOpacity: 0.08 }}
+                  />
+                  <YAxis
+                    tick={{ fill: "var(--urja-text-muted, #94a3b8)", fontSize: 10 }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "var(--foreground)", fillOpacity: 0.04 }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0].payload;
+                      return (
+                        <div className="bg-urja-bg-card border border-foreground/10 rounded-lg shadow-float px-4 py-3 min-w-[140px]">
+                          <div className="text-xs text-urja-text-muted font-medium mb-1">{d.label}</div>
+                          <div className="text-lg font-mono font-semibold text-urja-accent">{d.kwh.toLocaleString()} kWh</div>
+                          <div className="text-[10px] text-urja-text-muted mt-1">Peak Sun: {d.psh.toFixed(2)} hrs/day</div>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Bar dataKey="kwh" radius={[4, 4, 0, 0]} animationDuration={1200} animationEasing="ease-out">
+                    {monthlyChartData.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={entry.kwh === maxKwh ? "url(#barGradientHigh)" : "url(#barGradient)"}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex items-center justify-center gap-4 mt-3 text-xs text-urja-text-muted">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm" style={{ background: "hsl(38, 92%, 55%)" }} />
+                kWh / month
+              </span>
+              <span>•</span>
+              <span>Hover bars for details</span>
+            </div>
+          </div>
+        )}
+
         {/* Environmental Impact Card */}
-        <div className="bg-urja-success-light border border-urja-success/20 rounded-lg p-6 sm:p-8">
+        <div className="bg-urja-success-light border border-urja-success/20 rounded-lg p-6 sm:p-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="Environmental impact">
           <div className="flex items-center gap-2 mb-3">
-            <Leaf className="w-5 h-5 text-urja-success" />
+            <Leaf className="w-5 h-5 text-urja-success" aria-hidden="true" />
             <h2 className="text-xl font-medium text-urja-text-primary">Environmental Impact</h2>
           </div>
           <p className="text-[15px] text-urja-text-secondary mb-6">
             Your solar installation will offset approximately{" "}
-            <span className="font-semibold text-urja-success">{d.co2.toLocaleString()} kg</span> of CO₂ per year, equivalent to planting{" "}
-            <span className="font-semibold text-urja-success">{d.trees}</span> trees.
+            <span className="font-semibold text-urja-success">{data.environmental.co2AnnualKg.toLocaleString()} kg</span>{" "}
+            of CO₂ per year, equivalent to planting{" "}
+            <span className="font-semibold text-urja-success">{data.environmental.treesEquivalent}</span> trees over 25 years.
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div>
-              <div className="text-sm text-urja-text-secondary mb-1">25-Year CO₂ Reduction</div>
-              <div className="font-mono text-2xl font-semibold text-urja-success">{d.co2_25yr.toLocaleString()} kg</div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div className="text-center sm:text-left">
+              <div className="text-sm text-urja-text-secondary mb-1">Annual CO₂ Reduction</div>
+              <div className="font-mono text-2xl font-semibold text-urja-success">{data.environmental.co2AnnualKg.toLocaleString()} kg</div>
             </div>
-            <div>
-              <div className="text-sm text-urja-text-secondary mb-1">Equivalent Trees</div>
-              <div className="font-mono text-2xl font-semibold text-urja-success">{d.trees} trees</div>
+            <div className="text-center sm:text-left">
+              <div className="text-sm text-urja-text-secondary mb-1">25-Year CO₂ Reduction</div>
+              <div className="font-mono text-2xl font-semibold text-urja-success">{data.environmental.co2_25yrKg.toLocaleString()} kg</div>
+            </div>
+            <div className="text-center sm:text-left">
+              <div className="text-sm text-urja-text-secondary mb-1 flex items-center gap-1 justify-center sm:justify-start">
+                <TreeDeciduous className="w-3.5 h-3.5" aria-hidden="true" /> Equivalent Trees
+              </div>
+              <div className="font-mono text-2xl font-semibold text-urja-success">{data.environmental.treesEquivalent} trees</div>
             </div>
           </div>
+        </div>
+
+        {/* Source note */}
+        <div className="mt-6 text-center text-xs text-urja-text-muted">
+          Data source: {data.irradianceSource === "NASA_POWER" ? "NASA POWER API (satellite-derived irradiance)" : "Regional PSH lookup table (MNRE)"}{" "}
+          · System losses: 14% · Usable area: 75% of drawn area
+        </div>
+
+        {/* Analyze Another Roof */}
+        <div className="mt-8 text-center border-t border-foreground/[0.06] pt-8 pb-4">
+          <Button variant="ghost" className="text-urja-accent hover:text-urja-accent-hover" onClick={handleNewAnalysis} aria-label="Analyze another rooftop">
+            <RefreshCw className="w-4 h-4 mr-2" aria-hidden="true" />
+            Analyze Another Roof
+          </Button>
         </div>
       </div>
     </div>

@@ -82,6 +82,70 @@
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
+
+  /* ── Dark Mode ────────────────────────────────────────────── */
+  .dark {
+    --brand-gradient-subtle: linear-gradient(135deg, #0D1B2A 0%, #0F1F1A 100%);
+
+    /* Primary accent (slightly brighter for contrast) */
+    --color-accent: 36 91% 58%;
+    --color-accent-hover: 36 85% 52%;
+    --color-accent-text: 0 0% 100%;
+
+    /* Success */
+    --color-success: 122 46% 45%;
+    --color-success-light: 122 30% 15%;
+    --color-success-text: 122 50% 80%;
+
+    /* Info */
+    --color-info: 211 79% 60%;
+    --color-info-light: 211 40% 15%;
+    --color-info-text: 211 60% 85%;
+
+    /* Surfaces */
+    --background: 222 20% 8%;
+    --foreground: 0 0% 93%;
+    --color-bg-card: 222 16% 12%;
+    --color-bg-secondary: 222 16% 14%;
+
+    --card: 222 16% 12%;
+    --card-foreground: 0 0% 93%;
+
+    --popover: 222 16% 14%;
+    --popover-foreground: 0 0% 93%;
+
+    --primary: 36 91% 58%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 222 14% 18%;
+    --secondary-foreground: 220 10% 75%;
+
+    --muted: 222 14% 18%;
+    --muted-foreground: 218 10% 55%;
+
+    --accent: 222 14% 18%;
+    --accent-foreground: 220 10% 75%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 100% / 0.08;
+    --input: 222 14% 22%;
+    --ring: 36 91% 58%;
+
+    /* Text */
+    --color-text-primary: 0 0% 93%;
+    --color-text-secondary: 220 10% 68%;
+    --color-text-muted: 218 10% 45%;
+
+    /* Map */
+    --color-polygon-stroke: 217 91% 65%;
+    --color-polygon-fill: 217 91% 65% / 0.2;
+
+    /* Shadows (more subtle in dark) */
+    --shadow-card: 0 2px 12px rgba(0,0,0,0.25);
+    --shadow-float: 0 4px 24px rgba(0,0,0,0.4);
+  }
 }
 
 @layer base {
@@ -91,6 +155,7 @@
   body {
     @apply bg-background text-foreground;
     font-family: 'DM Sans', system-ui, sans-serif;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
   h1, h2, h3 {
     font-family: 'DM Serif Display', Georgia, serif;
@@ -133,6 +198,21 @@
   background: rgba(255,255,255,0.12);
   border: 1px solid rgba(255,255,255,0.25);
   backdrop-filter: blur(12px);
+}
+
+.dark .glass-card {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.12);
+}
+
+/* Count-up animation for numbers */
+@keyframes countUpFade {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-count-up {
+  animation: countUpFade 0.6s ease-out both;
 }
 
 /* Reduced motion */

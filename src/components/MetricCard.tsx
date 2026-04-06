@@ -16,14 +16,18 @@ const MetricCard = ({ icon, iconBg, label, value, subLabel, valueColor, classNam
     <div
       className={cn(
         "bg-urja-bg-card rounded-lg shadow-card p-5 animate-fade-slide-up",
+        "transition-all duration-200 hover:shadow-float hover:-translate-y-1",
         className
       )}
       style={{ animationDelay: `${delay}ms` }}
+      role="article"
+      aria-label={`${label}: ${value}`}
     >
       <div className="flex items-center gap-3 mb-3">
         <div
-          className="w-9 h-9 rounded-md flex items-center justify-center"
+          className="w-9 h-9 rounded-md flex items-center justify-center transition-transform duration-200 group-hover:scale-110"
           style={{ backgroundColor: iconBg }}
+          aria-hidden="true"
         >
           {icon}
         </div>
