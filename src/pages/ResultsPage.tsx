@@ -188,23 +188,15 @@ const ResultsPage = () => {
     navigate("/map");
   };
 
-  const handleDownload = async () => {
+  const handleDownload = () => {
     if (!data) return;
     setDownloading(true);
     setDownloadError(null);
 
     try {
-      const blobUrl = await generatePDFReport(data, {
+      generatePDFReport(data, {
         locationLabel: data.location?.label || "India",
       });
-
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `URJA_LINK_Solar_Report_${data.analysisId}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
 
       toast({ title: "Report Downloaded", description: "Your solar analysis report has been saved." });
     } catch (error) {
@@ -288,13 +280,16 @@ const ResultsPage = () => {
               )}
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <ThemeToggle />
-            <Button variant="ghost" onClick={handleBackToMap} aria-label="Go back to map">
-              <ArrowLeft className="w-4 h-4 mr-1" aria-hidden="true" /> Back to Map
+            <Button variant="ghost" onClick={handleBackToMap} aria-label="Go back to map" className="flex-1 sm:flex-none justify-center">
+              <ArrowLeft className="w-4 h-4 mr-1 shrink-0" aria-hidden="true" /> 
+              <span>Back <span className="hidden sm:inline">to Map</span></span>
             </Button>
-            <Button variant="cta" onClick={handleDownload} loading={downloading} aria-label="Download PDF report">
-              <Download className="w-4 h-4 mr-1" aria-hidden="true" /> Download Report
+            <Button variant="cta" onClick={handleDownload} loading={downloading} aria-label="Download PDF report" className="flex-1 sm:flex-none justify-center">
+              <Download className="w-4 h-4 mr-1 shrink-0" aria-hidden="true" /> 
+              <span className="hidden sm:inline">Download Report</span>
+              <span className="sm:hidden">Download</span>
             </Button>
           </div>
         </header>

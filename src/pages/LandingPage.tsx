@@ -51,7 +51,7 @@ const LandingPage = () => {
           <Button
             variant="hero"
             onClick={() => navigate("/map")}
-            className="mt-2"
+            className="mt-2 w-full sm:w-auto"
             id="hero-cta"
             aria-label="Start analyzing your rooftop solar potential"
           >
@@ -177,6 +177,7 @@ const LandingPage = () => {
             <Button
               variant="cta"
               onClick={() => navigate("/map")}
+              className="w-full sm:w-auto"
               id="bottom-cta"
               aria-label="Get started with free rooftop solar analysis"
             >
