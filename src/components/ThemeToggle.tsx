@@ -10,7 +10,9 @@ function getStoredTheme(): ResolvedTheme {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === "dark") return "dark";
-  } catch {}
+  } catch {
+    // ignore errors
+  }
   return "light";
 }
 
@@ -50,7 +52,9 @@ const ThemeToggle = ({ className = "" }: ThemeToggleProps) => {
       const theme: ResolvedTheme = next ? "dark" : "light";
       try {
         localStorage.setItem(STORAGE_KEY, theme);
-      } catch {}
+      } catch {
+        // ignore errors
+      }
       applyToDOM(theme);
       return next;
     });
