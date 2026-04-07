@@ -31,7 +31,7 @@ const LandingPage = () => {
           {/* Logo */}
           <div className="flex items-center gap-3">
             <Sun className="w-12 h-12 text-sunpower-accent" aria-hidden="true" />
-            <h1 className="font-display text-[clamp(36px,5vw,52px)] text-white tracking-tight">
+            <h1 className="font-display text-[clamp(42px,8vw,64px)] leading-[1.1] text-white tracking-tight">
               SUNPOWER LINK
             </h1>
           </div>
@@ -47,16 +47,18 @@ const LandingPage = () => {
             and environmental impact — all from a satellite view of your roof.
           </p>
 
-          {/* CTA */}
-          <Button
-            variant="hero"
-            onClick={() => navigate("/map")}
-            className="mt-2 w-full sm:w-auto"
-            id="hero-cta"
-            aria-label="Start analyzing your rooftop solar potential"
-          >
-            Analyze Your Rooftop →
-          </Button>
+          <div className="relative group mt-2 w-full sm:w-auto">
+            <div className="absolute -inset-0.5 bg-gradient-to-r from-sunpower-accent to-sunpower-success rounded-[999px] blur opacity-40 group-hover:opacity-70 transition duration-500"></div>
+            <Button
+              variant="hero"
+              onClick={() => navigate("/map")}
+              className="relative w-full sm:w-auto h-14 text-lg"
+              id="hero-cta"
+              aria-label="Start analyzing your rooftop solar potential"
+            >
+              Analyze Your Rooftop →
+            </Button>
+          </div>
 
           {/* Feature Cards */}
           <div className="flex flex-col sm:flex-row gap-4 mt-8 w-full max-w-[760px]">

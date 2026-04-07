@@ -91,7 +91,7 @@ function SavingsComparison({ annualBill, annualSavings, annualWithSolar }: {
   const animatedPercent = useCountUp(savingsPercent, 1000, 600);
 
   return (
-    <div className="bg-sunpower-bg-card rounded-lg shadow-card p-6 sm:p-8 mb-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="Before and after savings comparison">
+    <div className="bg-sunpower-bg-card rounded-2xl shadow-card p-5 sm:p-8 mb-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="Before and after savings comparison">
       <div className="flex items-center gap-2 mb-6">
         <TrendingDown className="w-5 h-5 text-sunpower-success" aria-hidden="true" />
         <h2 className="text-xl font-medium text-sunpower-text-primary">Your Savings at a Glance</h2>
@@ -99,7 +99,7 @@ function SavingsComparison({ annualBill, annualSavings, annualWithSolar }: {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
         {/* Without Solar */}
-        <div className="bg-destructive/[0.06] rounded-xl p-5 text-center">
+        <div className="bg-gradient-to-br from-destructive/10 to-destructive/5 border border-destructive/10 rounded-2xl p-5 text-center shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
           <div className="text-xs font-medium text-destructive/70 uppercase tracking-wider mb-2">Without Solar</div>
           <div className="font-mono text-2xl sm:text-3xl font-semibold text-destructive">
             ₹{animatedBill.toLocaleString()}
@@ -112,7 +112,7 @@ function SavingsComparison({ annualBill, annualSavings, annualWithSolar }: {
           <div className="w-10 h-10 rounded-full bg-sunpower-success/10 flex items-center justify-center">
             <ArrowRight className="w-5 h-5 text-sunpower-success" />
           </div>
-          <div className="bg-sunpower-success text-white text-sm font-semibold px-4 py-1.5 rounded-full shadow-sm">
+          <div className="bg-gradient-to-r from-sunpower-success to-emerald-500 text-white text-sm font-semibold px-4 py-1.5 rounded-full shadow-md">
             Save {animatedPercent}%
           </div>
           <div className="text-xs text-sunpower-text-muted">
@@ -121,7 +121,7 @@ function SavingsComparison({ annualBill, annualSavings, annualWithSolar }: {
         </div>
 
         {/* With Solar */}
-        <div className="bg-sunpower-success/[0.06] rounded-xl p-5 text-center">
+        <div className="bg-gradient-to-br from-sunpower-success/15 to-sunpower-success/5 border border-sunpower-success/20 rounded-2xl p-5 text-center shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]">
           <div className="text-xs font-medium text-sunpower-success/70 uppercase tracking-wider mb-2">With Solar</div>
           <div className="font-mono text-2xl sm:text-3xl font-semibold text-sunpower-success">
             ₹{animatedWithSolar.toLocaleString()}
@@ -331,7 +331,7 @@ const ResultsPage = () => {
         )}
 
         {/* System Details Panel */}
-        <div className="bg-sunpower-bg-card rounded-lg shadow-card p-6 sm:p-8 mb-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="System details">
+        <div className="bg-sunpower-bg-card rounded-2xl shadow-card p-5 sm:p-8 mb-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="System details">
           <h2 className="text-xl font-medium text-sunpower-text-primary mb-6">System Details</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div>
@@ -373,7 +373,7 @@ const ResultsPage = () => {
 
         {/* Monthly Generation Chart */}
         {monthlyChartData && (
-          <div className="bg-sunpower-bg-card rounded-lg shadow-card p-6 sm:p-8 mb-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="Monthly energy generation chart">
+          <div className="bg-sunpower-bg-card rounded-2xl shadow-card p-5 sm:p-8 mb-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="Monthly energy generation chart">
             <div className="flex items-center justify-between mb-1">
               <h2 className="text-xl font-medium text-sunpower-text-primary">Monthly Generation Estimate</h2>
               <div className="text-sm font-mono text-sunpower-accent font-semibold">
@@ -453,7 +453,7 @@ const ResultsPage = () => {
         )}
 
         {/* Environmental Impact Card */}
-        <div className="bg-sunpower-success-light border border-sunpower-success/20 rounded-lg p-6 sm:p-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="Environmental impact">
+        <div className="bg-gradient-to-br from-sunpower-success-light to-sunpower-success/10 border border-sunpower-success/20 rounded-2xl p-5 sm:p-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="Environmental impact">
           <div className="flex items-center gap-2 mb-3">
             <Leaf className="w-5 h-5 text-sunpower-success" aria-hidden="true" />
             <h2 className="text-xl font-medium text-sunpower-text-primary">Environmental Impact</h2>

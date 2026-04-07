@@ -958,7 +958,7 @@ const MapPage = () => {
       {/* ── Search Bar with Autocomplete ──────────────────── */}
       <div ref={searchContainerRef} className="absolute top-4 sm:top-6 left-16 sm:left-1/2 right-4 sm:right-auto sm:-translate-x-1/2 sm:w-[560px] z-[1000]">
         <div
-          className={`flex items-center bg-sunpower-bg-card rounded-pill shadow-float overflow-hidden transition-all duration-300 ${
+          className={`flex items-center bg-sunpower-bg-card/90 backdrop-blur-xl border border-white/20 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.15)] overflow-hidden transition-all duration-300 ${
             guideStep === 1 ? "ring-2 ring-sunpower-accent ring-offset-2 ring-offset-transparent" : ""
           } ${searchError ? "ring-2 ring-destructive" : ""} ${showSuggestions && suggestions.length > 0 ? "rounded-b-none" : ""}`}
           role="search"
@@ -974,7 +974,7 @@ const MapPage = () => {
             onChange={(e) => { setQuery(e.target.value); setSearchError(""); }}
             onKeyDown={handleSearchKeyDown}
             onFocus={() => { if (suggestions.length > 0 && query.length >= 2) setShowSuggestions(true); }}
-            placeholder="Search any address, city, or landmark..."
+            placeholder="Search address or city..."
             className="flex-1 bg-transparent border-none outline-none px-3 py-3 text-[15px] text-sunpower-text-primary placeholder:text-sunpower-text-muted font-body"
             aria-label="Search for a location"
             autoComplete="off"
@@ -1062,12 +1062,12 @@ const MapPage = () => {
 
       {/* ── Progressive Step Guide ──────────────────────── */}
       {drawState !== "COMPLETE" && (
-        <div className="absolute bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 z-[1000] w-[calc(100vw-32px)] sm:w-[480px]">
-          <div className="bg-sunpower-bg-card/95 backdrop-blur-md rounded-2xl shadow-float overflow-hidden">
+        <div className="absolute bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 z-[1000] w-[calc(100vw-24px)] sm:w-[480px]">
+          <div className="bg-sunpower-bg-card/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.15)] overflow-hidden">
             <div className="h-1 bg-muted">
               <div className="h-full bg-gradient-to-r from-sunpower-accent to-sunpower-accent transition-all duration-700 ease-out" style={{ width: `${(guideStep / 4) * 100}%` }} />
             </div>
-            <div className="px-5 py-4">
+            <div className="px-4 py-3 sm:px-5 sm:py-4">
               <div className="flex items-center gap-1.5 mb-2.5">
                 {[1, 2, 3, 4].map((s) => (
                   <div key={s} className={`flex items-center gap-1 sm:gap-1.5 text-xs font-medium transition-all duration-300 ${guideStep === s ? "text-sunpower-accent" : guideStep > s ? "text-sunpower-success" : "text-sunpower-text-muted/40"}`}>
@@ -1108,8 +1108,8 @@ const MapPage = () => {
 
       {/* ── Area Card + Panels + Calculate ───────────────── */}
       {drawState === "COMPLETE" && area !== null && (
-        <div className="absolute bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 w-[calc(100vw-32px)] sm:w-[420px] z-[1000] animate-fade-slide-up">
-          <div className="bg-sunpower-bg-card rounded-xl shadow-float p-6">
+        <div className="absolute bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 w-[calc(100vw-24px)] sm:w-[420px] z-[1000] animate-fade-slide-up">
+          <div className="bg-sunpower-bg-card/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.15)] p-4 sm:p-6">
             <div className="text-center mb-4">
               <div className="text-sm text-sunpower-text-muted mb-1">Rooftop Area</div>
               <div className={`font-mono text-[32px] font-semibold ${areaWarning ? "text-destructive" : "text-sunpower-accent"}`} aria-label={`Rooftop area: ${area} square meters`}>
