@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Moon, Sun } from "lucide-react";
 
-const STORAGE_KEY = "urja-theme";
+const STORAGE_KEY = "sunpower-theme";
 
 type ResolvedTheme = "light" | "dark";
 

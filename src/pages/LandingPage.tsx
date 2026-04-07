@@ -10,7 +10,7 @@ const LandingPage = () => {
 
   // SEO: Set document title
   useEffect(() => {
-    document.title = "URJA LINK — Rooftop Solar Potential Analyser for India";
+    document.title = "SUNPOWER LINK — Rooftop Solar Potential Analyser for India";
     const meta = document.querySelector('meta[name="description"]');
     if (meta) {
       meta.setAttribute(
@@ -30,9 +30,9 @@ const LandingPage = () => {
         <div className="text-center max-w-3xl mx-auto flex flex-col items-center gap-6">
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <Sun className="w-12 h-12 text-urja-accent" aria-hidden="true" />
+            <Sun className="w-12 h-12 text-sunpower-accent" aria-hidden="true" />
             <h1 className="font-display text-[clamp(36px,5vw,52px)] text-white tracking-tight">
-              URJA LINK
+              SUNPOWER LINK
             </h1>
           </div>
 
@@ -83,7 +83,7 @@ const LandingPage = () => {
       <section className="py-20 px-4 bg-background" aria-label="SolarNet Technology">
         <div className="max-w-5xl mx-auto text-center">
           <h2 className="font-display text-4xl gradient-text mb-3">SolarNet Technology</h2>
-          <p className="text-[15px] text-urja-text-secondary max-w-[600px] mx-auto mb-12">
+          <p className="text-[15px] text-sunpower-text-secondary max-w-[600px] mx-auto mb-12">
             Our proprietary AI model combines satellite imagery analysis with local solar irradiance
             data to deliver precise rooftop solar assessments.
           </p>
@@ -133,11 +133,11 @@ const LandingPage = () => {
           </div>
 
           {/* How SolarNet Works */}
-          <h3 className="font-display text-2xl text-urja-text-primary mb-10">How SolarNet Works</h3>
+          <h3 className="font-display text-2xl text-sunpower-text-primary mb-10">How SolarNet Works</h3>
           <div
             className="flex flex-col md:flex-row items-start md:items-center justify-center gap-8 md:gap-4 max-w-3xl mx-auto"
             role="list"
-            aria-label="Steps to use URJA LINK"
+            aria-label="Steps to use SUNPOWER LINK"
           >
             {[
               {
@@ -159,14 +159,14 @@ const LandingPage = () => {
               <div key={step.num} className="flex md:flex-col items-center md:items-center gap-4 md:gap-3 flex-1" role="listitem">
                 {/* Connector line (desktop) */}
                 {i > 0 && (
-                  <div className="hidden md:block w-full h-[2px] bg-gradient-to-r from-urja-accent/30 to-urja-accent/10 -mt-6 mb-6" aria-hidden="true" />
+                  <div className="hidden md:block w-full h-[2px] bg-gradient-to-r from-sunpower-accent/30 to-sunpower-accent/10 -mt-6 mb-6" aria-hidden="true" />
                 )}
-                <div className="w-10 h-10 rounded-full bg-urja-accent text-urja-accent-text flex items-center justify-center text-sm font-semibold shrink-0 shadow-card transition-transform duration-200 hover:scale-110" aria-hidden="true">
+                <div className="w-10 h-10 rounded-full bg-sunpower-accent text-sunpower-accent-text flex items-center justify-center text-sm font-semibold shrink-0 shadow-card transition-transform duration-200 hover:scale-110" aria-hidden="true">
                   {step.num}
                 </div>
                 <div className="text-left md:text-center">
-                  <div className="text-[15px] font-medium text-urja-text-primary">{step.title}</div>
-                  <div className="text-sm text-urja-text-secondary mt-0.5">{step.desc}</div>
+                  <div className="text-[15px] font-medium text-sunpower-text-primary">{step.title}</div>
+                  <div className="text-sm text-sunpower-text-secondary mt-0.5">{step.desc}</div>
                 </div>
               </div>
             ))}
@@ -189,12 +189,12 @@ const LandingPage = () => {
 
       {/* Footer */}
       <footer className="bg-foreground/[0.03] border-t border-foreground/[0.06] py-8 px-4" role="contentinfo">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-urja-text-muted">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-sunpower-text-muted">
           <div className="flex items-center gap-2">
-            <Sun className="w-4 h-4 text-urja-accent" aria-hidden="true" />
-            <span>URJA LINK</span>
+            <Sun className="w-4 h-4 text-sunpower-accent" aria-hidden="true" />
+            <span>SUNPOWER LINK</span>
           </div>
-          <span>© {new Date().getFullYear()} URJA LINK. Rooftop solar analysis for India.</span>
+          <span>© {new Date().getFullYear()} SUNPOWER LINK. Rooftop solar analysis for India.</span>
         </div>
       </footer>
     </div>

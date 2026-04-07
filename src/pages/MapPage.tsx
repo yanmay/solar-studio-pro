@@ -64,7 +64,7 @@ const GLOBE_DISMISS_DISTANCE = 250;
 // Nominatim requires a valid User-Agent to not return 403
 const NOMINATIM_HEADERS = {
   "Accept-Language": "en",
-  "User-Agent": "UrjaLinkSolarApp/1.0 (https://urjalink.in)",
+  "User-Agent": "SunPowerLinkSolarApp/1.0 (https://sunpowerlink.in)",
 };
 
 function calcAreaM2(latlngs: LatLng[]): number {
@@ -894,7 +894,7 @@ const MapPage = () => {
         panelCount,
       };
 
-      sessionStorage.setItem("urja-results", JSON.stringify(fullResult));
+      sessionStorage.setItem("sunpower-results", JSON.stringify(fullResult));
       setCalculating(false);
       navigate("/results");
     } catch (error) {
@@ -958,13 +958,13 @@ const MapPage = () => {
       {/* ── Search Bar with Autocomplete ──────────────────── */}
       <div ref={searchContainerRef} className="absolute top-4 sm:top-6 left-16 sm:left-1/2 right-4 sm:right-auto sm:-translate-x-1/2 sm:w-[560px] z-[1000]">
         <div
-          className={`flex items-center bg-urja-bg-card rounded-pill shadow-float overflow-hidden transition-all duration-300 ${
-            guideStep === 1 ? "ring-2 ring-urja-accent ring-offset-2 ring-offset-transparent" : ""
+          className={`flex items-center bg-sunpower-bg-card rounded-pill shadow-float overflow-hidden transition-all duration-300 ${
+            guideStep === 1 ? "ring-2 ring-sunpower-accent ring-offset-2 ring-offset-transparent" : ""
           } ${searchError ? "ring-2 ring-destructive" : ""} ${showSuggestions && suggestions.length > 0 ? "rounded-b-none" : ""}`}
           role="search"
           aria-label="Location search"
         >
-          <div className="pl-4 text-urja-text-muted" aria-hidden="true">
+          <div className="pl-4 text-sunpower-text-muted" aria-hidden="true">
             <Search className="w-4 h-4" />
           </div>
           <input
@@ -975,7 +975,7 @@ const MapPage = () => {
             onKeyDown={handleSearchKeyDown}
             onFocus={() => { if (suggestions.length > 0 && query.length >= 2) setShowSuggestions(true); }}
             placeholder="Search any address, city, or landmark..."
-            className="flex-1 bg-transparent border-none outline-none px-3 py-3 text-[15px] text-urja-text-primary placeholder:text-urja-text-muted font-body"
+            className="flex-1 bg-transparent border-none outline-none px-3 py-3 text-[15px] text-sunpower-text-primary placeholder:text-sunpower-text-muted font-body"
             aria-label="Search for a location"
             autoComplete="off"
             role="combobox"
@@ -986,7 +986,7 @@ const MapPage = () => {
           <button
             onClick={handleSearch}
             disabled={searching}
-            className="bg-urja-accent hover:bg-urja-accent-hover text-urja-accent-text px-5 py-3 text-[15px] font-medium transition-colors disabled:opacity-70 flex items-center gap-2"
+            className="bg-sunpower-accent hover:bg-sunpower-accent-hover text-sunpower-accent-text px-5 py-3 text-[15px] font-medium transition-colors disabled:opacity-70 flex items-center gap-2"
             aria-label="Search"
           >
             {searching ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : "Search"}
@@ -997,7 +997,7 @@ const MapPage = () => {
         {showSuggestions && suggestions.length > 0 && (
           <div
             id="search-suggestions"
-            className="bg-urja-bg-card border-t border-foreground/[0.06] rounded-b-xl shadow-float overflow-hidden"
+            className="bg-sunpower-bg-card border-t border-foreground/[0.06] rounded-b-xl shadow-float overflow-hidden"
             role="listbox"
             aria-label="Location suggestions"
           >
@@ -1010,15 +1010,15 @@ const MapPage = () => {
                   role="option"
                   aria-selected={i === activeSuggestion}
                   className={`w-full text-left px-4 py-3 flex items-start gap-3 transition-colors cursor-pointer ${
-                    i === activeSuggestion ? "bg-urja-accent/10" : "hover:bg-foreground/[0.03]"
+                    i === activeSuggestion ? "bg-sunpower-accent/10" : "hover:bg-foreground/[0.03]"
                   } ${i < suggestions.length - 1 ? "border-b border-foreground/[0.04]" : ""}`}
                   onClick={() => handleSuggestionClick(s)}
                 >
-                  <MapPin className="w-4 h-4 text-urja-text-muted mt-0.5 shrink-0" />
+                  <MapPin className="w-4 h-4 text-sunpower-text-muted mt-0.5 shrink-0" />
                   <div className="min-w-0">
-                    <div className="text-sm font-medium text-urja-text-primary truncate">{main}</div>
+                    <div className="text-sm font-medium text-sunpower-text-primary truncate">{main}</div>
                     {secondary && (
-                      <div className="text-xs text-urja-text-muted truncate mt-0.5">{secondary}</div>
+                      <div className="text-xs text-sunpower-text-muted truncate mt-0.5">{secondary}</div>
                     )}
                   </div>
                 </button>
@@ -1028,7 +1028,7 @@ const MapPage = () => {
         )}
 
         {searchError && (
-          <div className="mt-2 text-sm text-destructive bg-urja-bg-card rounded-md px-3 py-2 shadow-card flex items-center gap-2" role="alert">
+          <div className="mt-2 text-sm text-destructive bg-sunpower-bg-card rounded-md px-3 py-2 shadow-card flex items-center gap-2" role="alert">
             <AlertTriangle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
             {searchError}
           </div>
@@ -1041,60 +1041,60 @@ const MapPage = () => {
       </div>
 
       <div className="absolute bottom-32 sm:bottom-8 right-4 z-[1000] flex flex-col gap-1" role="group" aria-label="Map zoom controls">
-        <button onClick={handleZoomIn} className="w-10 h-10 bg-urja-bg-card shadow-card rounded-lg flex items-center justify-center hover:bg-secondary transition-colors" aria-label="Zoom in">
-          <Plus className="w-4 h-4 text-urja-text-primary" />
+        <button onClick={handleZoomIn} className="w-10 h-10 bg-sunpower-bg-card shadow-card rounded-lg flex items-center justify-center hover:bg-secondary transition-colors" aria-label="Zoom in">
+          <Plus className="w-4 h-4 text-sunpower-text-primary" />
         </button>
-        <button onClick={handleZoomOut} className="w-10 h-10 bg-urja-bg-card shadow-card rounded-lg flex items-center justify-center hover:bg-secondary transition-colors" aria-label="Zoom out">
-          <Minus className="w-4 h-4 text-urja-text-primary" />
+        <button onClick={handleZoomOut} className="w-10 h-10 bg-sunpower-bg-card shadow-card rounded-lg flex items-center justify-center hover:bg-secondary transition-colors" aria-label="Zoom out">
+          <Minus className="w-4 h-4 text-sunpower-text-primary" />
         </button>
       </div>
 
       {/* ── Drawing Toolbar ─────────────────────────────── */}
       {drawState === "DRAWING" && (
         <div className="absolute top-20 sm:top-6 right-4 flex gap-2 z-[1000] animate-fade-slide-up" role="toolbar" aria-label="Drawing controls">
-          <Button variant="ghost" size="sm" className="bg-urja-bg-card shadow-card" onClick={() => finishPolygon()} disabled={vertexCount < 3} aria-label="Finish drawing polygon">
-            <span className="border-l-2 border-urja-success pl-2">{vertexCount >= 3 ? "Finish" : `${3 - vertexCount} more`}</span>
+          <Button variant="ghost" size="sm" className="bg-sunpower-bg-card shadow-card" onClick={() => finishPolygon()} disabled={vertexCount < 3} aria-label="Finish drawing polygon">
+            <span className="border-l-2 border-sunpower-success pl-2">{vertexCount >= 3 ? "Finish" : `${3 - vertexCount} more`}</span>
           </Button>
-          <Button variant="ghost" size="sm" className="bg-urja-bg-card shadow-card" onClick={handleDeleteLast} aria-label="Undo last point">Undo</Button>
-          <Button variant="ghost" size="sm" className="bg-urja-bg-card shadow-card" onClick={clearDrawing} aria-label="Cancel drawing">Cancel</Button>
+          <Button variant="ghost" size="sm" className="bg-sunpower-bg-card shadow-card" onClick={handleDeleteLast} aria-label="Undo last point">Undo</Button>
+          <Button variant="ghost" size="sm" className="bg-sunpower-bg-card shadow-card" onClick={clearDrawing} aria-label="Cancel drawing">Cancel</Button>
         </div>
       )}
 
       {/* ── Progressive Step Guide ──────────────────────── */}
       {drawState !== "COMPLETE" && (
         <div className="absolute bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 z-[1000] w-[calc(100vw-32px)] sm:w-[480px]">
-          <div className="bg-urja-bg-card/95 backdrop-blur-md rounded-2xl shadow-float overflow-hidden">
+          <div className="bg-sunpower-bg-card/95 backdrop-blur-md rounded-2xl shadow-float overflow-hidden">
             <div className="h-1 bg-muted">
-              <div className="h-full bg-gradient-to-r from-urja-accent to-urja-accent transition-all duration-700 ease-out" style={{ width: `${(guideStep / 4) * 100}%` }} />
+              <div className="h-full bg-gradient-to-r from-sunpower-accent to-sunpower-accent transition-all duration-700 ease-out" style={{ width: `${(guideStep / 4) * 100}%` }} />
             </div>
             <div className="px-5 py-4">
               <div className="flex items-center gap-1.5 mb-2.5">
                 {[1, 2, 3, 4].map((s) => (
-                  <div key={s} className={`flex items-center gap-1 sm:gap-1.5 text-xs font-medium transition-all duration-300 ${guideStep === s ? "text-urja-accent" : guideStep > s ? "text-urja-success" : "text-urja-text-muted/40"}`}>
-                    <div className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-semibold transition-all duration-300 ${guideStep === s ? "bg-urja-accent text-white scale-110" : guideStep > s ? "bg-urja-success text-white" : "bg-muted text-urja-text-muted"}`}>
+                  <div key={s} className={`flex items-center gap-1 sm:gap-1.5 text-xs font-medium transition-all duration-300 ${guideStep === s ? "text-sunpower-accent" : guideStep > s ? "text-sunpower-success" : "text-sunpower-text-muted/40"}`}>
+                    <div className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-semibold transition-all duration-300 ${guideStep === s ? "bg-sunpower-accent text-white scale-110" : guideStep > s ? "bg-sunpower-success text-white" : "bg-muted text-sunpower-text-muted"}`}>
                       {guideStep > s ? "✓" : s}
                     </div>
-                    {s < 4 && <div className={`w-4 sm:w-8 h-px transition-colors duration-300 ${guideStep > s ? "bg-urja-success" : "bg-muted"}`} />}
+                    {s < 4 && <div className={`w-4 sm:w-8 h-px transition-colors duration-300 ${guideStep > s ? "bg-sunpower-success" : "bg-muted"}`} />}
                   </div>
                 ))}
               </div>
               <div className="flex items-start gap-3">
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors duration-300 ${
-                  guideStep === 1 ? "bg-urja-accent/10 text-urja-accent" :
-                  guideStep === 2 ? "bg-urja-info-light text-urja-info" :
-                  "bg-urja-accent/10 text-urja-accent"
+                  guideStep === 1 ? "bg-sunpower-accent/10 text-sunpower-accent" :
+                  guideStep === 2 ? "bg-sunpower-info-light text-sunpower-info" :
+                  "bg-sunpower-accent/10 text-sunpower-accent"
                 }`}>
                   {guideStep === 1 && <Search className="w-4 h-4" />}
                   {guideStep === 2 && <MapPin className="w-4 h-4" />}
                   {guideStep === 3 && <MousePointerClick className="w-4 h-4" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[13px] sm:text-sm font-medium text-urja-text-primary leading-snug">
+                  <div className="text-[13px] sm:text-sm font-medium text-sunpower-text-primary leading-snug">
                     {guideStep === 1 && "Search your location"}
                     {guideStep === 2 && "Click on your rooftop to start drawing"}
                     {guideStep === 3 && (vertexCount < 3 ? `Trace your rooftop edges · ${vertexCount} of 3 minimum` : "Click the green start point to complete the shape")}
                   </div>
-                  <div className="text-[11px] sm:text-xs text-urja-text-muted mt-0.5 leading-tight sm:leading-relaxed">
+                  <div className="text-[11px] sm:text-xs text-sunpower-text-muted mt-0.5 leading-tight sm:leading-relaxed">
                     {guideStep === 1 && "Type your city, area, or full address — suggestions will appear as you type"}
                     {guideStep === 2 && "The map is zoomed in — click the corners of your rooftop one by one"}
                     {guideStep === 3 && (vertexCount < 3 ? "Click on each corner of your roof to create the outline" : "Or double-click anywhere, or press the Finish button above")}
@@ -1109,18 +1109,18 @@ const MapPage = () => {
       {/* ── Area Card + Panels + Calculate ───────────────── */}
       {drawState === "COMPLETE" && area !== null && (
         <div className="absolute bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 w-[calc(100vw-32px)] sm:w-[420px] z-[1000] animate-fade-slide-up">
-          <div className="bg-urja-bg-card rounded-xl shadow-float p-6">
+          <div className="bg-sunpower-bg-card rounded-xl shadow-float p-6">
             <div className="text-center mb-4">
-              <div className="text-sm text-urja-text-muted mb-1">Rooftop Area</div>
-              <div className={`font-mono text-[32px] font-semibold ${areaWarning ? "text-destructive" : "text-urja-accent"}`} aria-label={`Rooftop area: ${area} square meters`}>
+              <div className="text-sm text-sunpower-text-muted mb-1">Rooftop Area</div>
+              <div className={`font-mono text-[32px] font-semibold ${areaWarning ? "text-destructive" : "text-sunpower-accent"}`} aria-label={`Rooftop area: ${area} square meters`}>
                 {area} m²
               </div>
-              <div className="flex items-center justify-center gap-3 text-xs text-urja-text-muted mt-1">
+              <div className="flex items-center justify-center gap-3 text-xs text-sunpower-text-muted mt-1">
                 <span>Usable: {Math.round(area * USABLE_AREA_FACTOR * 10) / 10} m²</span>
                 {panelCount > 0 && (
                   <>
                     <span>·</span>
-                    <span className="text-urja-info font-medium">{panelCount} panels fit</span>
+                    <span className="text-sunpower-info font-medium">{panelCount} panels fit</span>
                   </>
                 )}
               </div>
@@ -1134,17 +1134,17 @@ const MapPage = () => {
             )}
 
             <div className="border-t border-foreground/[0.06] pt-3 mb-4">
-              <button className="w-full flex items-center justify-between text-sm text-urja-text-secondary hover:text-urja-text-primary transition-colors" onClick={() => setShowRateInput(!showRateInput)} aria-expanded={showRateInput}>
+              <button className="w-full flex items-center justify-between text-sm text-sunpower-text-secondary hover:text-sunpower-text-primary transition-colors" onClick={() => setShowRateInput(!showRateInput)} aria-expanded={showRateInput}>
                 <span>Electricity Rate: ₹{electricityRate}/kWh</span>
-                <span className="text-xs text-urja-accent underline underline-offset-2">{showRateInput ? "Hide" : "Change"}</span>
+                <span className="text-xs text-sunpower-accent underline underline-offset-2">{showRateInput ? "Hide" : "Change"}</span>
               </button>
               {showRateInput && (
                 <div className="mt-3 flex items-center gap-3">
-                  <span className="text-sm text-urja-text-muted">₹</span>
-                  <input type="range" min={MIN_ELECTRICITY_RATE} max={MAX_ELECTRICITY_RATE} step={0.5} value={electricityRate} onChange={(e) => setElectricityRate(parseFloat(e.target.value))} className="flex-1 accent-urja-accent h-1.5 rounded-full" aria-label="Electricity rate" />
+                  <span className="text-sm text-sunpower-text-muted">₹</span>
+                  <input type="range" min={MIN_ELECTRICITY_RATE} max={MAX_ELECTRICITY_RATE} step={0.5} value={electricityRate} onChange={(e) => setElectricityRate(parseFloat(e.target.value))} className="flex-1 accent-sunpower-accent h-1.5 rounded-full" aria-label="Electricity rate" />
                   <div className="flex items-center gap-1 bg-secondary rounded-md px-2 py-1">
-                    <input type="number" min={MIN_ELECTRICITY_RATE} max={MAX_ELECTRICITY_RATE} step={0.5} value={electricityRate} onChange={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v) && v >= MIN_ELECTRICITY_RATE && v <= MAX_ELECTRICITY_RATE) setElectricityRate(v); }} className="w-12 bg-transparent text-center text-sm font-mono text-urja-text-primary border-none outline-none" aria-label="Rate input" />
-                    <span className="text-xs text-urja-text-muted">/kWh</span>
+                    <input type="number" min={MIN_ELECTRICITY_RATE} max={MAX_ELECTRICITY_RATE} step={0.5} value={electricityRate} onChange={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v) && v >= MIN_ELECTRICITY_RATE && v <= MAX_ELECTRICITY_RATE) setElectricityRate(v); }} className="w-12 bg-transparent text-center text-sm font-mono text-sunpower-text-primary border-none outline-none" aria-label="Rate input" />
+                    <span className="text-xs text-sunpower-text-muted">/kWh</span>
                   </div>
                 </div>
               )}
@@ -1170,13 +1170,13 @@ const MapPage = () => {
       {/* ── Loading overlay ─────────────────────────────── */}
       {calculating && (
         <div className="absolute inset-0 z-[2000] bg-foreground/50 backdrop-blur-sm flex items-center justify-center" role="progressbar" aria-label="Analyzing solar potential">
-          <div className="bg-urja-bg-card rounded-xl shadow-float p-8 text-center animate-fade-slide-up max-w-xs">
-            <Loader2 className="w-10 h-10 text-urja-accent animate-spin mx-auto mb-4" aria-hidden="true" />
-            <div className="text-lg font-medium text-urja-text-primary">Analyzing Solar Potential</div>
-            <div className="text-sm text-urja-text-secondary mt-1">Fetching irradiance data from NASA...</div>
+          <div className="bg-sunpower-bg-card rounded-xl shadow-float p-8 text-center animate-fade-slide-up max-w-xs">
+            <Loader2 className="w-10 h-10 text-sunpower-accent animate-spin mx-auto mb-4" aria-hidden="true" />
+            <div className="text-lg font-medium text-sunpower-text-primary">Analyzing Solar Potential</div>
+            <div className="text-sm text-sunpower-text-secondary mt-1">Fetching irradiance data from NASA...</div>
             <div className="flex gap-1 justify-center mt-4">
               {[0, 1, 2].map((i) => (
-                <div key={i} className="w-2 h-2 rounded-full bg-urja-accent" style={{ animation: `urjaPulse 1.2s ease-in-out ${i * 0.2}s infinite`, opacity: 0.3 }} />
+                <div key={i} className="w-2 h-2 rounded-full bg-sunpower-accent" style={{ animation: `sunpowerPulse 1.2s ease-in-out ${i * 0.2}s infinite`, opacity: 0.3 }} />
               ))}
             </div>
           </div>
@@ -1184,7 +1184,7 @@ const MapPage = () => {
       )}
 
       <style>{`
-        @keyframes urjaPulse {
+        @keyframes sunpowerPulse {
           0%, 100% { opacity: 0.3; transform: scale(1); }
           50% { opacity: 1; transform: scale(1.3); }
         }

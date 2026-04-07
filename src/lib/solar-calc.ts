@@ -115,7 +115,7 @@ export interface SolarAnalysis {
 
 function generateAnalysisId(): string {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-  let id = "urja_";
+  let id = "sunpower_";
   for (let i = 0; i < 8; i++) {
     id += chars.charAt(Math.floor(Math.random() * chars.length));
   }

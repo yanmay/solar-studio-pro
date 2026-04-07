@@ -11,7 +11,7 @@ const FeatureCard = ({ icon, title, description }: FeatureCardProps) => {
       role="article"
       aria-label={`${title}: ${description}`}
     >
-      <div className="flex justify-center mb-3 text-urja-accent transition-transform duration-300 group-hover:scale-110" aria-hidden="true">
+      <div className="flex justify-center mb-3 text-sunpower-accent transition-transform duration-300 group-hover:scale-110" aria-hidden="true">
         {icon}
       </div>
       <h3 className="text-lg font-medium text-white mb-1 font-body">{title}</h3>

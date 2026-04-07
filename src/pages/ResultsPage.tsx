@@ -91,10 +91,10 @@ function SavingsComparison({ annualBill, annualSavings, annualWithSolar }: {
   const animatedPercent = useCountUp(savingsPercent, 1000, 600);
 
   return (
-    <div className="bg-urja-bg-card rounded-lg shadow-card p-6 sm:p-8 mb-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="Before and after savings comparison">
+    <div className="bg-sunpower-bg-card rounded-lg shadow-card p-6 sm:p-8 mb-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="Before and after savings comparison">
       <div className="flex items-center gap-2 mb-6">
-        <TrendingDown className="w-5 h-5 text-urja-success" aria-hidden="true" />
-        <h2 className="text-xl font-medium text-urja-text-primary">Your Savings at a Glance</h2>
+        <TrendingDown className="w-5 h-5 text-sunpower-success" aria-hidden="true" />
+        <h2 className="text-xl font-medium text-sunpower-text-primary">Your Savings at a Glance</h2>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
@@ -104,42 +104,42 @@ function SavingsComparison({ annualBill, annualSavings, annualWithSolar }: {
           <div className="font-mono text-2xl sm:text-3xl font-semibold text-destructive">
             ₹{animatedBill.toLocaleString()}
           </div>
-          <div className="text-xs text-urja-text-muted mt-1">per year</div>
+          <div className="text-xs text-sunpower-text-muted mt-1">per year</div>
         </div>
 
         {/* Arrow + savings pill */}
         <div className="flex flex-col items-center gap-2 py-2">
-          <div className="w-10 h-10 rounded-full bg-urja-success/10 flex items-center justify-center">
-            <ArrowRight className="w-5 h-5 text-urja-success" />
+          <div className="w-10 h-10 rounded-full bg-sunpower-success/10 flex items-center justify-center">
+            <ArrowRight className="w-5 h-5 text-sunpower-success" />
           </div>
-          <div className="bg-urja-success text-white text-sm font-semibold px-4 py-1.5 rounded-full shadow-sm">
+          <div className="bg-sunpower-success text-white text-sm font-semibold px-4 py-1.5 rounded-full shadow-sm">
             Save {animatedPercent}%
           </div>
-          <div className="text-xs text-urja-text-muted">
+          <div className="text-xs text-sunpower-text-muted">
             ₹{annualSavings.toLocaleString()}/year saved
           </div>
         </div>
 
         {/* With Solar */}
-        <div className="bg-urja-success/[0.06] rounded-xl p-5 text-center">
-          <div className="text-xs font-medium text-urja-success/70 uppercase tracking-wider mb-2">With Solar</div>
-          <div className="font-mono text-2xl sm:text-3xl font-semibold text-urja-success">
+        <div className="bg-sunpower-success/[0.06] rounded-xl p-5 text-center">
+          <div className="text-xs font-medium text-sunpower-success/70 uppercase tracking-wider mb-2">With Solar</div>
+          <div className="font-mono text-2xl sm:text-3xl font-semibold text-sunpower-success">
             ₹{animatedWithSolar.toLocaleString()}
           </div>
-          <div className="text-xs text-urja-text-muted mt-1">per year</div>
+          <div className="text-xs text-sunpower-text-muted mt-1">per year</div>
         </div>
       </div>
 
       {/* Visual comparison bar */}
       <div className="mt-6 space-y-2">
         <div className="flex items-center gap-3">
-          <span className="text-xs text-urja-text-muted w-20 text-right shrink-0">Current bill</span>
+          <span className="text-xs text-sunpower-text-muted w-20 text-right shrink-0">Current bill</span>
           <div className="flex-1 bg-muted rounded-full h-3 overflow-hidden">
             <div className="h-full bg-gradient-to-r from-red-400 to-red-500 rounded-full transition-all duration-1000" style={{ width: "100%" }} />
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-urja-text-muted w-20 text-right shrink-0">With solar</span>
+          <span className="text-xs text-sunpower-text-muted w-20 text-right shrink-0">With solar</span>
           <div className="flex-1 bg-muted rounded-full h-3 overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full transition-all duration-1500 ease-out"
@@ -166,7 +166,7 @@ const ResultsPage = () => {
   const [noData, setNoData] = useState(false);
 
   useEffect(() => {
-    const stored = sessionStorage.getItem("urja-results");
+    const stored = sessionStorage.getItem("sunpower-results");
     if (stored) {
       try {
         setData(JSON.parse(stored));
@@ -184,7 +184,7 @@ const ResultsPage = () => {
   const handleBackToMap = () => navigate("/map");
 
   const handleNewAnalysis = () => {
-    sessionStorage.removeItem("urja-results");
+    sessionStorage.removeItem("sunpower-results");
     navigate("/map");
   };
 
@@ -214,11 +214,11 @@ const ResultsPage = () => {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4" role="main">
         <div className="text-center max-w-md">
-          <div className="w-16 h-16 rounded-full bg-urja-accent/10 flex items-center justify-center mx-auto mb-4">
-            <MapPin className="w-8 h-8 text-urja-accent" />
+          <div className="w-16 h-16 rounded-full bg-sunpower-accent/10 flex items-center justify-center mx-auto mb-4">
+            <MapPin className="w-8 h-8 text-sunpower-accent" />
           </div>
-          <h1 className="font-display text-2xl text-urja-text-primary mb-2">No Analysis Found</h1>
-          <p className="text-urja-text-secondary mb-6">Draw your rooftop on the map first to generate a solar potential analysis report.</p>
+          <h1 className="font-display text-2xl text-sunpower-text-primary mb-2">No Analysis Found</h1>
+          <p className="text-sunpower-text-secondary mb-6">Draw your rooftop on the map first to generate a solar potential analysis report.</p>
           <Button variant="cta" onClick={() => navigate("/map")}>Go to Map →</Button>
         </div>
       </div>
@@ -259,23 +259,23 @@ const ResultsPage = () => {
             {data.location?.label && (
               <div className="flex items-center gap-2 mt-1.5" aria-label={`Location: ${data.location.label}`}>
                 <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-urja-success opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-urja-success" />
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sunpower-success opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-sunpower-success" />
                 </span>
-                <span className="text-sm text-urja-text-secondary flex items-center gap-1">
+                <span className="text-sm text-sunpower-text-secondary flex items-center gap-1">
                   <MapPin className="w-3 h-3" aria-hidden="true" />
                   {data.location.label}
                 </span>
               </div>
             )}
             <div className="flex items-center gap-3 mt-1.5">
-              <span className="text-xs text-urja-text-muted">ID: {data.analysisId}</span>
-              <span className="text-xs text-urja-text-muted">•</span>
-              <span className="text-xs text-urja-text-muted">Source: {data.irradianceSource === "NASA_POWER" ? "NASA POWER Satellite" : "Regional Lookup"}</span>
+              <span className="text-xs text-sunpower-text-muted">ID: {data.analysisId}</span>
+              <span className="text-xs text-sunpower-text-muted">•</span>
+              <span className="text-xs text-sunpower-text-muted">Source: {data.irradianceSource === "NASA_POWER" ? "NASA POWER Satellite" : "Regional Lookup"}</span>
               {data.panelCount && data.panelCount > 0 && (
                 <>
-                  <span className="text-xs text-urja-text-muted">•</span>
-                  <span className="text-xs text-urja-info font-medium">{data.panelCount} panels</span>
+                  <span className="text-xs text-sunpower-text-muted">•</span>
+                  <span className="text-xs text-sunpower-info font-medium">{data.panelCount} panels</span>
                 </>
               )}
             </div>
@@ -306,17 +306,17 @@ const ResultsPage = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8" role="region" aria-label="Key metrics summary">
           {loading ? (
             Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="bg-urja-bg-card rounded-lg shadow-card p-5 animate-pulse" aria-hidden="true">
+              <div key={i} className="bg-sunpower-bg-card rounded-lg shadow-card p-5 animate-pulse" aria-hidden="true">
                 <div className="flex items-center gap-3 mb-3"><div className="w-9 h-9 rounded-md bg-muted" /><div className="h-4 w-20 bg-muted rounded" /></div>
                 <div className="h-8 w-28 bg-muted rounded mb-2" /><div className="h-3 w-24 bg-muted rounded" />
               </div>
             ))
           ) : (
             <>
-              <MetricCard icon={<Square className="w-5 h-5 text-urja-info" />} iconBg="hsl(211 68% 94%)" label="Roof Area" value={`${data.rooftop.drawnAreaM2} m²`} subLabel={`Usable: ${data.rooftop.usableAreaM2} m² (75%)`} valueColor="hsl(211 79% 42%)" delay={0} />
+              <MetricCard icon={<Square className="w-5 h-5 text-sunpower-info" />} iconBg="hsl(211 68% 94%)" label="Roof Area" value={`${data.rooftop.drawnAreaM2} m²`} subLabel={`Usable: ${data.rooftop.usableAreaM2} m² (75%)`} valueColor="hsl(211 79% 42%)" delay={0} />
               <MetricCard icon={<Zap className="w-5 h-5" style={{ color: "#E65100" }} />} iconBg="#FFF3E0" label="Installed Capacity" value={`${data.energy.installedCapacityKw} kWp`} subLabel={`Annual: ${data.energy.annualKwh.toLocaleString()} kWh`} valueColor="#E65100" delay={80} />
-              <MetricCard icon={<IndianRupee className="w-5 h-5 text-urja-success" />} iconBg="hsl(88 44% 91%)" label="Yearly Savings" value={`₹${data.financials.annualSavingsInr.toLocaleString()}`} subLabel={`@ ₹${data.financials.electricityRateInr}/kWh rate`} valueColor="hsl(122 46% 33%)" delay={160} />
-              <MetricCard icon={<Leaf className="w-5 h-5 text-urja-success" />} iconBg="hsl(88 44% 91%)" label="CO₂ Saved" value={`${data.environmental.co2AnnualKg.toLocaleString()} kg`} subLabel="Environmental impact / year" valueColor="hsl(122 46% 33%)" delay={240} />
+              <MetricCard icon={<IndianRupee className="w-5 h-5 text-sunpower-success" />} iconBg="hsl(88 44% 91%)" label="Yearly Savings" value={`₹${data.financials.annualSavingsInr.toLocaleString()}`} subLabel={`@ ₹${data.financials.electricityRateInr}/kWh rate`} valueColor="hsl(122 46% 33%)" delay={160} />
+              <MetricCard icon={<Leaf className="w-5 h-5 text-sunpower-success" />} iconBg="hsl(88 44% 91%)" label="CO₂ Saved" value={`${data.environmental.co2AnnualKg.toLocaleString()} kg`} subLabel="Environmental impact / year" valueColor="hsl(122 46% 33%)" delay={240} />
             </>
           )}
         </div>
@@ -331,13 +331,13 @@ const ResultsPage = () => {
         )}
 
         {/* System Details Panel */}
-        <div className="bg-urja-bg-card rounded-lg shadow-card p-6 sm:p-8 mb-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="System details">
-          <h2 className="text-xl font-medium text-urja-text-primary mb-6">System Details</h2>
+        <div className="bg-sunpower-bg-card rounded-lg shadow-card p-6 sm:p-8 mb-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="System details">
+          <h2 className="text-xl font-medium text-sunpower-text-primary mb-6">System Details</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <Zap className="w-5 h-5 text-urja-accent" aria-hidden="true" />
-                <span className="text-[15px] font-medium text-urja-text-primary">Energy Production</span>
+                <Zap className="w-5 h-5 text-sunpower-accent" aria-hidden="true" />
+                <span className="text-[15px] font-medium text-sunpower-text-primary">Energy Production</span>
               </div>
               {[
                 { label: "Peak Sun Hours", value: `${data.energy.peakSunHoursDaily} hrs/day` },
@@ -346,15 +346,15 @@ const ResultsPage = () => {
                 { label: "Annual Total", value: `${data.energy.annualKwh.toLocaleString()} kWh` },
               ].map((row, i, arr) => (
                 <div key={row.label} className={`flex justify-between items-center py-3 ${i < arr.length - 1 ? "border-b border-dashed border-foreground/[0.08]" : ""}`}>
-                  <span className="text-sm text-urja-text-secondary">{row.label}</span>
-                  <span className="font-mono font-medium text-urja-text-primary">{row.value}</span>
+                  <span className="text-sm text-sunpower-text-secondary">{row.label}</span>
+                  <span className="font-mono font-medium text-sunpower-text-primary">{row.value}</span>
                 </div>
               ))}
             </div>
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <IndianRupee className="w-5 h-5 text-urja-success" aria-hidden="true" />
-                <span className="text-[15px] font-medium text-urja-text-primary">Financial Impact</span>
+                <IndianRupee className="w-5 h-5 text-sunpower-success" aria-hidden="true" />
+                <span className="text-[15px] font-medium text-sunpower-text-primary">Financial Impact</span>
               </div>
               {[
                 { label: "Electricity Rate", value: `₹${data.financials.electricityRateInr}/kWh` },
@@ -362,9 +362,9 @@ const ResultsPage = () => {
                 { label: "Annual Savings", value: `₹${data.financials.annualSavingsInr.toLocaleString()}` },
                 { label: "25-Year Savings", value: `₹${data.financials.savings25yrInr.toLocaleString()}`, highlight: true },
               ].map((row, i, arr) => (
-                <div key={row.label} className={`flex justify-between items-center py-3 ${row.highlight ? "bg-urja-success-light rounded-md px-3 -mx-3 mt-1" : i < arr.length - 1 ? "border-b border-dashed border-foreground/[0.08]" : ""}`}>
-                  <span className={`text-sm ${row.highlight ? "font-medium text-urja-success" : "text-urja-text-secondary"}`}>{row.label}</span>
-                  <span className={`font-mono font-medium ${row.highlight ? "text-urja-success text-lg" : "text-urja-success"}`}>{row.value}</span>
+                <div key={row.label} className={`flex justify-between items-center py-3 ${row.highlight ? "bg-sunpower-success-light rounded-md px-3 -mx-3 mt-1" : i < arr.length - 1 ? "border-b border-dashed border-foreground/[0.08]" : ""}`}>
+                  <span className={`text-sm ${row.highlight ? "font-medium text-sunpower-success" : "text-sunpower-text-secondary"}`}>{row.label}</span>
+                  <span className={`font-mono font-medium ${row.highlight ? "text-sunpower-success text-lg" : "text-sunpower-success"}`}>{row.value}</span>
                 </div>
               ))}
             </div>
@@ -373,14 +373,14 @@ const ResultsPage = () => {
 
         {/* Monthly Generation Chart */}
         {monthlyChartData && (
-          <div className="bg-urja-bg-card rounded-lg shadow-card p-6 sm:p-8 mb-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="Monthly energy generation chart">
+          <div className="bg-sunpower-bg-card rounded-lg shadow-card p-6 sm:p-8 mb-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="Monthly energy generation chart">
             <div className="flex items-center justify-between mb-1">
-              <h2 className="text-xl font-medium text-urja-text-primary">Monthly Generation Estimate</h2>
-              <div className="text-sm font-mono text-urja-accent font-semibold">
+              <h2 className="text-xl font-medium text-sunpower-text-primary">Monthly Generation Estimate</h2>
+              <div className="text-sm font-mono text-sunpower-accent font-semibold">
                 {data.energy.annualKwh.toLocaleString()} kWh/yr
               </div>
             </div>
-            <p className="text-sm text-urja-text-muted mb-4">Estimated monthly energy output based on NASA satellite irradiance data</p>
+            <p className="text-sm text-sunpower-text-muted mb-4">Estimated monthly energy output based on NASA satellite irradiance data</p>
             <div style={{ width: "100%", height: 280 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
@@ -406,12 +406,12 @@ const ResultsPage = () => {
                   />
                   <XAxis
                     dataKey="label"
-                    tick={{ fill: "var(--urja-text-muted, #94a3b8)", fontSize: 11, fontWeight: 500 }}
+                    tick={{ fill: "var(--sunpower-text-muted, #94a3b8)", fontSize: 11, fontWeight: 500 }}
                     tickLine={false}
                     axisLine={{ stroke: "var(--foreground)", strokeOpacity: 0.08 }}
                   />
                   <YAxis
-                    tick={{ fill: "var(--urja-text-muted, #94a3b8)", fontSize: 10 }}
+                    tick={{ fill: "var(--sunpower-text-muted, #94a3b8)", fontSize: 10 }}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`}
@@ -422,10 +422,10 @@ const ResultsPage = () => {
                       if (!active || !payload?.length) return null;
                       const d = payload[0].payload;
                       return (
-                        <div className="bg-urja-bg-card border border-foreground/10 rounded-lg shadow-float px-4 py-3 min-w-[140px]">
-                          <div className="text-xs text-urja-text-muted font-medium mb-1">{d.label}</div>
-                          <div className="text-lg font-mono font-semibold text-urja-accent">{d.kwh.toLocaleString()} kWh</div>
-                          <div className="text-[10px] text-urja-text-muted mt-1">Peak Sun: {d.psh.toFixed(2)} hrs/day</div>
+                        <div className="bg-sunpower-bg-card border border-foreground/10 rounded-lg shadow-float px-4 py-3 min-w-[140px]">
+                          <div className="text-xs text-sunpower-text-muted font-medium mb-1">{d.label}</div>
+                          <div className="text-lg font-mono font-semibold text-sunpower-accent">{d.kwh.toLocaleString()} kWh</div>
+                          <div className="text-[10px] text-sunpower-text-muted mt-1">Peak Sun: {d.psh.toFixed(2)} hrs/day</div>
                         </div>
                       );
                     }}
@@ -441,7 +441,7 @@ const ResultsPage = () => {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="flex items-center justify-center gap-4 mt-3 text-xs text-urja-text-muted">
+            <div className="flex items-center justify-center gap-4 mt-3 text-xs text-sunpower-text-muted">
               <span className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-sm" style={{ background: "hsl(38, 92%, 55%)" }} />
                 kWh / month
@@ -453,44 +453,44 @@ const ResultsPage = () => {
         )}
 
         {/* Environmental Impact Card */}
-        <div className="bg-urja-success-light border border-urja-success/20 rounded-lg p-6 sm:p-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="Environmental impact">
+        <div className="bg-sunpower-success-light border border-sunpower-success/20 rounded-lg p-6 sm:p-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="Environmental impact">
           <div className="flex items-center gap-2 mb-3">
-            <Leaf className="w-5 h-5 text-urja-success" aria-hidden="true" />
-            <h2 className="text-xl font-medium text-urja-text-primary">Environmental Impact</h2>
+            <Leaf className="w-5 h-5 text-sunpower-success" aria-hidden="true" />
+            <h2 className="text-xl font-medium text-sunpower-text-primary">Environmental Impact</h2>
           </div>
-          <p className="text-[15px] text-urja-text-secondary mb-6">
+          <p className="text-[15px] text-sunpower-text-secondary mb-6">
             Your solar installation will offset approximately{" "}
-            <span className="font-semibold text-urja-success">{data.environmental.co2AnnualKg.toLocaleString()} kg</span>{" "}
+            <span className="font-semibold text-sunpower-success">{data.environmental.co2AnnualKg.toLocaleString()} kg</span>{" "}
             of CO₂ per year, equivalent to planting{" "}
-            <span className="font-semibold text-urja-success">{data.environmental.treesEquivalent}</span> trees over 25 years.
+            <span className="font-semibold text-sunpower-success">{data.environmental.treesEquivalent}</span> trees over 25 years.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <div className="text-center sm:text-left">
-              <div className="text-sm text-urja-text-secondary mb-1">Annual CO₂ Reduction</div>
-              <div className="font-mono text-2xl font-semibold text-urja-success">{data.environmental.co2AnnualKg.toLocaleString()} kg</div>
+              <div className="text-sm text-sunpower-text-secondary mb-1">Annual CO₂ Reduction</div>
+              <div className="font-mono text-2xl font-semibold text-sunpower-success">{data.environmental.co2AnnualKg.toLocaleString()} kg</div>
             </div>
             <div className="text-center sm:text-left">
-              <div className="text-sm text-urja-text-secondary mb-1">25-Year CO₂ Reduction</div>
-              <div className="font-mono text-2xl font-semibold text-urja-success">{data.environmental.co2_25yrKg.toLocaleString()} kg</div>
+              <div className="text-sm text-sunpower-text-secondary mb-1">25-Year CO₂ Reduction</div>
+              <div className="font-mono text-2xl font-semibold text-sunpower-success">{data.environmental.co2_25yrKg.toLocaleString()} kg</div>
             </div>
             <div className="text-center sm:text-left">
-              <div className="text-sm text-urja-text-secondary mb-1 flex items-center gap-1 justify-center sm:justify-start">
+              <div className="text-sm text-sunpower-text-secondary mb-1 flex items-center gap-1 justify-center sm:justify-start">
                 <TreeDeciduous className="w-3.5 h-3.5" aria-hidden="true" /> Equivalent Trees
               </div>
-              <div className="font-mono text-2xl font-semibold text-urja-success">{data.environmental.treesEquivalent} trees</div>
+              <div className="font-mono text-2xl font-semibold text-sunpower-success">{data.environmental.treesEquivalent} trees</div>
             </div>
           </div>
         </div>
 
         {/* Source note */}
-        <div className="mt-6 text-center text-xs text-urja-text-muted">
+        <div className="mt-6 text-center text-xs text-sunpower-text-muted">
           Data source: {data.irradianceSource === "NASA_POWER" ? "NASA POWER API (satellite-derived irradiance)" : "Regional PSH lookup table (MNRE)"}{" "}
           · System losses: 14% · Usable area: 75% of drawn area
         </div>
 
         {/* Analyze Another Roof */}
         <div className="mt-8 text-center border-t border-foreground/[0.06] pt-8 pb-4">
-          <Button variant="ghost" className="text-urja-accent hover:text-urja-accent-hover" onClick={handleNewAnalysis} aria-label="Analyze another rooftop">
+          <Button variant="ghost" className="text-sunpower-accent hover:text-sunpower-accent-hover" onClick={handleNewAnalysis} aria-label="Analyze another rooftop">
             <RefreshCw className="w-4 h-4 mr-2" aria-hidden="true" />
             Analyze Another Roof
           </Button>

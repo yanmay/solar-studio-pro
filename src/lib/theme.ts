@@ -3,7 +3,7 @@
  * Persists choice to localStorage; defaults to system preference.
  */
 
-const STORAGE_KEY = "urja-theme";
+const STORAGE_KEY = "sunpower-theme";
 
 export type Theme = "light" | "dark" | "system";
 

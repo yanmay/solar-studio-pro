@@ -15,7 +15,7 @@ const MetricCard = ({ icon, iconBg, label, value, subLabel, valueColor, classNam
   return (
     <div
       className={cn(
-        "bg-urja-bg-card rounded-lg shadow-card p-5 animate-fade-slide-up",
+        "bg-sunpower-bg-card rounded-lg shadow-card p-5 animate-fade-slide-up",
         "transition-all duration-200 hover:shadow-float hover:-translate-y-1",
         className
       )}
@@ -31,12 +31,12 @@ const MetricCard = ({ icon, iconBg, label, value, subLabel, valueColor, classNam
         >
           {icon}
         </div>
-        <span className="text-sm text-urja-text-secondary">{label}</span>
+        <span className="text-sm text-sunpower-text-secondary">{label}</span>
       </div>
       <div className="font-mono text-[32px] font-semibold leading-tight" style={{ color: valueColor }}>
         {value}
       </div>
-      <div className="text-[13px] text-urja-text-muted mt-1">{subLabel}</div>
+      <div className="text-[13px] text-sunpower-text-muted mt-1">{subLabel}</div>
     </div>
   );
 };

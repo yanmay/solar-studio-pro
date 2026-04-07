@@ -4,7 +4,7 @@ import './index.css'
 
 // Apply stored theme immediately to prevent flash
 try {
-  const stored = localStorage.getItem('urja-theme');
+  const stored = localStorage.getItem('sunpower-theme');
   if (stored === 'dark') {
     document.documentElement.classList.add('dark');
   } else {
