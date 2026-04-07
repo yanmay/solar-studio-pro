@@ -50,7 +50,7 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        urja: {
+        sunpower: {
           accent: "hsl(var(--color-accent))",
           "accent-hover": "hsl(var(--color-accent-hover))",
           "accent-text": "hsl(var(--color-accent-text))",
