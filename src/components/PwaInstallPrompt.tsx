@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Download, X } from "lucide-react";
+import { track } from "@/lib/analytics";
 
 // Browser BeforeInstallPromptEvent typing (not in lib.dom.d.ts)
 interface BIPEvent extends Event {
@@ -24,7 +25,7 @@ const PwaInstallPrompt = () => {
       e.preventDefault();
       setEvt(e as BIPEvent);
       // Delay surfacing so it doesn't fire during initial page load
-      setTimeout(() => setOpen(true), 6000);
+      setTimeout(() => { setOpen(true); track("PWA Install Shown"); }, 6000);
     };
     window.addEventListener("beforeinstallprompt", onBeforeInstall);
     return () => window.removeEventListener("beforeinstallprompt", onBeforeInstall);
@@ -39,7 +40,8 @@ const PwaInstallPrompt = () => {
   const install = async () => {
     if (!evt) return;
     await evt.prompt();
-    await evt.userChoice;
+    const choice = await evt.userChoice;
+    if (choice.outcome === "accepted") track("PWA Install Accepted");
     setOpen(false);
     setEvt(null);
   };

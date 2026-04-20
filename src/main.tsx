@@ -1,6 +1,30 @@
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
+import { initSentry, SentryErrorBoundary } from './lib/sentry'
+import './i18n'
+
+initSentry();
+
+function FallbackScreen() {
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem", fontFamily: "system-ui", textAlign: "center" }}>
+      <div>
+        <div style={{ fontSize: "48px", marginBottom: "16px" }}>☀️</div>
+        <h1 style={{ fontSize: "20px", margin: "0 0 8px" }}>Something went wrong</h1>
+        <p style={{ color: "#888", margin: "0 0 20px", maxWidth: "360px" }}>
+          Our team has been notified. Refresh to try again.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          style={{ background: "#F59E0B", color: "white", border: 0, padding: "10px 20px", borderRadius: 8, fontSize: 14, cursor: "pointer" }}
+        >
+          Reload
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // Apply stored theme immediately to prevent flash
 try {
@@ -12,4 +36,8 @@ try {
   }
 } catch {}
 
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <SentryErrorBoundary fallback={<FallbackScreen />} showDialog={false}>
+    <App />
+  </SentryErrorBoundary>
+);

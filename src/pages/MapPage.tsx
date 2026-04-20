@@ -7,6 +7,8 @@ import turfArea from "@turf/area";
 import { Search, Loader2, Minus, Plus, RotateCcw, AlertTriangle, MapPin, MousePointerClick, LocateFixed, Sparkles, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ThemeToggle from "@/components/ThemeToggle";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { useTranslation } from "react-i18next";
 import { useToast } from "@/hooks/use-toast";
 import { fetchSolarIrradiance } from "@/lib/nasa-power";
 import { runFullCalculation, type SolarAnalysis, SolarCalcError } from "@/lib/solar-calc";
@@ -22,6 +24,8 @@ import {
 import { calcTiltAzimuthFactor, type Azimuth, AZIMUTH_LABELS } from "@/lib/tilt-azimuth";
 import { detectDiscom, type DiscomInfo } from "@/lib/discom-rates";
 import { detectBuildingAt, nearbyBuildings } from "@/lib/osm-buildings";
+import { recommendBattery, type BackupMode } from "@/lib/battery-calc";
+import { track } from "@/lib/analytics";
 
 type LatLng = { lat: number; lng: number };
 type DrawState = "IDLE" | "DRAWING" | "COMPLETE";
@@ -512,12 +516,69 @@ function formatSuggestion(s: NominatimSuggestion): { main: string; secondary: st
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Calculation Progress — stepped skeleton with live stage text
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const CALC_STAGES = [
+  { at: 0,    label: "Analyzing rooftop geometry…" },
+  { at: 900,  label: "Fetching NASA POWER irradiance data…" },
+  { at: 3200, label: "Computing panel layout & yield…" },
+  { at: 5200, label: "Estimating subsidy & payback…" },
+  { at: 6800, label: "Preparing your report…" },
+];
+const CalculationProgress = () => {
+  const [stageIdx, setStageIdx] = useState(0);
+  useEffect(() => {
+    const timers = CALC_STAGES.map((s, i) => setTimeout(() => setStageIdx(i), s.at));
+    return () => timers.forEach(clearTimeout);
+  }, []);
+  const pct = Math.min(95, ((stageIdx + 1) / CALC_STAGES.length) * 100);
+  return (
+    <div className="absolute inset-0 z-[2000] bg-foreground/50 backdrop-blur-sm flex items-center justify-center px-4" role="progressbar" aria-label="Analyzing solar potential" aria-valuenow={Math.round(pct)}>
+      <div className="bg-sunpower-bg-card rounded-2xl shadow-float p-6 sm:p-8 w-full max-w-sm animate-fade-in">
+        <div className="flex items-center gap-3 mb-4">
+          <Loader2 className="w-6 h-6 text-sunpower-accent animate-spin shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-[15px] font-medium text-sunpower-text-primary">Analyzing Solar Potential</div>
+            <div className="text-xs text-sunpower-text-muted mt-0.5 truncate">{CALC_STAGES[stageIdx].label}</div>
+          </div>
+        </div>
+        {/* Progress bar */}
+        <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-5">
+          <div
+            className="h-full bg-gradient-to-r from-sunpower-accent to-orange-500 transition-all duration-700 ease-out"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        {/* Stage checklist */}
+        <div className="space-y-2">
+          {CALC_STAGES.map((s, i) => (
+            <div key={i} className="flex items-center gap-2 text-xs">
+              <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${
+                i < stageIdx ? "bg-sunpower-success text-white" :
+                i === stageIdx ? "bg-sunpower-accent text-white animate-pulse" :
+                "bg-muted text-sunpower-text-muted"
+              }`}>
+                {i < stageIdx ? "✓" : <span className="text-[9px] font-semibold">{i + 1}</span>}
+              </div>
+              <span className={i <= stageIdx ? "text-sunpower-text-primary" : "text-sunpower-text-muted/60"}>
+                {s.label.replace("…", "")}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // MapPage Component
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const MapPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
@@ -552,6 +613,8 @@ const MapPage = () => {
   const [discom, setDiscom] = useState<DiscomInfo | null>(null);
   // Multi-roof comparison — additional sections beyond the primary polygon
   const [extraSections, setExtraSections] = useState<{ id: string; areaM2: number; panelCount: number }[]>([]);
+  // Backup/battery mode
+  const [backupMode, setBackupMode] = useState<BackupMode>("none");
 
   // ── Globe state (binary: visible or hidden) ─────────────────
   const [globeVisible, setGlobeVisible] = useState(true);
@@ -912,6 +975,7 @@ const MapPage = () => {
     try {
       const bounds = mapRef.current?.getBounds();
       const { lat, lng, label } = await geocodeAddress(query, bounds);
+      track("Search Submitted", { query: query.slice(0, 50) });
       flyToLocation(lat, lng, label);
     } catch (error) {
       const msg = (error as Error).message || "Location not found. Try again.";
@@ -961,6 +1025,7 @@ const MapPage = () => {
     }
     setCalculating(true);
     setCalcError(null);
+    track("Calculate Click", { areaM2: area, sections: 1 + extraSections.length });
 
     try {
       const centroid = calcCentroid(verticesRef.current);
@@ -980,6 +1045,9 @@ const MapPage = () => {
         monthlyIrradiance: irradiance.monthlyValues,
       });
 
+      // Battery recommendation (sized against daily generation)
+      const battery = recommendBattery(analysis.energy.dailyKwh, backupMode);
+
       const fullResult = {
         ...analysis,
         location: {
@@ -996,6 +1064,7 @@ const MapPage = () => {
           totalAreaM2: totalArea,
         },
         discom: discom ? { name: discom.discom, autoDetectedRate: discom.rate } : undefined,
+        battery,
       };
 
       sessionStorage.setItem("sunpower-results", JSON.stringify(fullResult));
@@ -1066,6 +1135,7 @@ const MapPage = () => {
           }
         })
         .catch(() => { /* non-blocking */ });
+      track("Auto-Detect Roof", { vertices: ring.length });
       toast({
         title: "Roof detected",
         description: `${ring.length}-vertex outline from OpenStreetMap.`,
@@ -1094,6 +1164,7 @@ const MapPage = () => {
         const { latitude: lat, longitude: lng } = pos.coords;
         let label = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
         try { label = await reverseGeocode(lat, lng); } catch { /* keep coords */ }
+        track("Location Found");
         flyToLocation(lat, lng, label);
         toast({ title: "Location found", description: label });
         setLocating(false);
@@ -1178,7 +1249,7 @@ const MapPage = () => {
             onChange={(e) => { setQuery(e.target.value); setSearchError(""); }}
             onKeyDown={handleSearchKeyDown}
             onFocus={() => { if (suggestions.length > 0 && query.length >= 2) setShowSuggestions(true); }}
-            placeholder="Search address or city..."
+            placeholder={t("map.searchPlaceholder")}
             className="flex-1 bg-transparent border-none outline-none px-3 py-3 text-[15px] text-sunpower-text-primary placeholder:text-sunpower-text-muted font-body"
             aria-label="Search for a location"
             autoComplete="off"
@@ -1198,7 +1269,7 @@ const MapPage = () => {
             ) : (
               <>
                 <Search className="w-4 h-4 sm:hidden" aria-hidden="true" />
-                <span className="hidden sm:inline">Search</span>
+                <span className="hidden sm:inline">{t("map.search")}</span>
               </>
             )}
           </button>
@@ -1247,8 +1318,9 @@ const MapPage = () => {
       </div>
 
       {/* ── Theme Toggle + Zoom ──────────────────────────── */}
-      <div className="absolute top-[max(1rem,env(safe-area-inset-top))] sm:top-6 left-3 sm:left-4 z-[1000] scale-90 sm:scale-100 origin-top-left">
+      <div className="absolute top-[max(1rem,env(safe-area-inset-top))] sm:top-6 left-3 sm:left-4 z-[1000] scale-90 sm:scale-100 origin-top-left flex flex-col gap-2">
         <ThemeToggle />
+        <LanguageSwitcher />
       </div>
 
       <div className="absolute bottom-44 sm:bottom-8 right-3 sm:right-4 z-[1000] flex flex-col gap-1.5" role="group" aria-label="Map controls">
@@ -1332,8 +1404,8 @@ const MapPage = () => {
                   className="mt-3 w-full flex items-center justify-center gap-2 bg-gradient-to-r from-sunpower-accent to-orange-500 text-white font-medium text-sm py-2.5 rounded-lg hover:opacity-95 active:scale-[0.99] transition-all disabled:opacity-60 shadow-md"
                 >
                   {autoDetecting
-                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Detecting building…</>
-                    : <><Sparkles className="w-4 h-4" /> Auto-detect this roof</>}
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("map.detecting")}</>
+                    : <><Sparkles className="w-4 h-4" /> {t("map.autoDetect")}</>}
                 </button>
               )}
             </div>
@@ -1469,6 +1541,31 @@ const MapPage = () => {
               )}
             </div>
 
+            {/* Backup / battery mode */}
+            <div className="border-t border-foreground/[0.06] pt-3 mb-3">
+              <div className="text-sm text-sunpower-text-secondary mb-2">Backup power?</div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {([
+                  { v: "none", label: "Grid-tied", sub: "No battery" },
+                  { v: "evening", label: "Evening", sub: "4 hr backup" },
+                  { v: "offgrid", label: "Off-grid", sub: "Full day" },
+                ] as { v: BackupMode; label: string; sub: string }[]).map((o) => (
+                  <button
+                    key={o.v}
+                    onClick={() => setBackupMode(o.v)}
+                    className={`px-2 py-2 rounded-lg text-[11px] font-medium transition-all ${
+                      backupMode === o.v
+                        ? "bg-sunpower-accent text-white shadow"
+                        : "bg-foreground/[0.04] text-sunpower-text-secondary hover:bg-foreground/[0.08]"
+                    }`}
+                  >
+                    <div>{o.label}</div>
+                    <div className="text-[9px] opacity-80">{o.sub}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="border-t border-foreground/[0.06] pt-3 mb-4">
               <button className="w-full flex items-center justify-between text-sm text-sunpower-text-secondary hover:text-sunpower-text-primary transition-colors" onClick={() => setShowRateInput(!showRateInput)} aria-expanded={showRateInput}>
                 <span>Electricity Rate: ₹{electricityRate}/kWh</span>
@@ -1496,28 +1593,15 @@ const MapPage = () => {
             <div className="flex gap-2">
               <Button variant="ghost" size="sm" className="shrink-0" onClick={clearDrawing} aria-label="Redraw polygon"><RotateCcw className="w-4 h-4" /></Button>
               <Button variant="cta" className="flex-1" onClick={handleCalculate} loading={calculating} disabled={!!areaWarning} aria-label={calcError ? "Retry" : "Calculate solar potential"}>
-                {calculating ? "Analyzing..." : calcError ? "Retry Calculation" : "Calculate Solar Potential"}
+                {calculating ? t("map.analyzing") : calcError ? "Retry" : t("map.calculate")}
               </Button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Loading overlay ─────────────────────────────── */}
-      {calculating && (
-        <div className="absolute inset-0 z-[2000] bg-foreground/50 backdrop-blur-sm flex items-center justify-center" role="progressbar" aria-label="Analyzing solar potential">
-          <div className="bg-sunpower-bg-card rounded-xl shadow-float p-8 text-center animate-fade-slide-up max-w-xs">
-            <Loader2 className="w-10 h-10 text-sunpower-accent animate-spin mx-auto mb-4" aria-hidden="true" />
-            <div className="text-lg font-medium text-sunpower-text-primary">Analyzing Solar Potential</div>
-            <div className="text-sm text-sunpower-text-secondary mt-1">Fetching irradiance data from NASA...</div>
-            <div className="flex gap-1 justify-center mt-4">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="w-2 h-2 rounded-full bg-sunpower-accent" style={{ animation: `sunpowerPulse 1.2s ease-in-out ${i * 0.2}s infinite`, opacity: 0.3 }} />
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── Calculation overlay with progressive skeleton ── */}
+      {calculating && <CalculationProgress />}
 
       <style>{`
         @keyframes sunpowerPulse {

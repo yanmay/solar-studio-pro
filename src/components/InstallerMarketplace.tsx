@@ -1,4 +1,5 @@
 import { ExternalLink, Star, MapPin, ShieldCheck } from "lucide-react";
+import { track } from "@/lib/analytics";
 
 // Curated affiliate partners — replace `affiliate` URLs with real tracking links
 // once partner agreements are signed. `tag` query param lets you attribute leads.
@@ -91,6 +92,7 @@ const InstallerMarketplace = ({ installedKw, city }: InstallerMarketplaceProps) 
             </div>
             <a
               href={p.affiliate(installedKw, city)}
+              onClick={() => track("Installer Quote Click", { partner: p.name, kw: installedKw })}
               target="_blank"
               rel="noopener noreferrer sponsored"
               className="shrink-0 inline-flex items-center justify-center gap-1.5 bg-sunpower-accent hover:bg-sunpower-accent-hover text-sunpower-accent-text text-sm font-medium px-4 py-2 rounded-lg active:scale-95 transition-all"

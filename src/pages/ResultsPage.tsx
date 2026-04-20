@@ -18,6 +18,8 @@ import {
   Share2,
   PhoneCall,
   CheckCircle2,
+  Battery,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -28,6 +30,7 @@ import type { SolarAnalysis } from "@/lib/solar-calc";
 import { generatePDFReport } from "@/lib/pdf-generator";
 import LeadCaptureForm from "@/components/LeadCaptureForm";
 import InstallerMarketplace from "@/components/InstallerMarketplace";
+import { track } from "@/lib/analytics";
 import {
   BarChart,
   Bar,
@@ -46,6 +49,14 @@ interface FullResult extends SolarAnalysis {
     label: string;
   };
   panelCount?: number;
+  battery?: {
+    mode: "none" | "evening" | "offgrid";
+    recommendedKwh: number;
+    costInr: number;
+    lifetimeCostInr: number;
+    backupHours: number;
+    description: string;
+  };
 }
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -199,6 +210,7 @@ const ResultsPage = () => {
 
   const handleWhatsAppShare = () => {
     if (!data) return;
+    track("WhatsApp Share", { kw: data.energy.installedCapacityKw });
     const loc = data.location?.label || "my rooftop";
     const text =
       `☀️ My Solar Potential Report — SUNPOWER LINK\n\n` +
@@ -224,7 +236,7 @@ const ResultsPage = () => {
       generatePDFReport(data, {
         locationLabel: data.location?.label || "India",
       });
-
+      track("PDF Download", { kw: data.energy.installedCapacityKw });
       toast({ title: "Report Downloaded", description: "Your solar analysis report has been saved." });
     } catch (error) {
       const msg = (error as Error).message === "REPORT_TIMEOUT"
@@ -424,6 +436,40 @@ const ResultsPage = () => {
                   {data.investment.roi25yrPercent}%
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ━━ Battery recommendation ━━━━━━━━━━━━━━━━━━━━━━━ */}
+        {!loading && data.battery && data.battery.mode !== "none" && (
+          <div className="bg-gradient-to-br from-indigo-500/10 to-purple-500/5 border border-indigo-500/20 rounded-2xl p-5 sm:p-8 mb-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="Battery backup recommendation">
+            <div className="flex items-center gap-2 mb-3">
+              <Battery className="w-5 h-5 text-indigo-500" />
+              <h2 className="text-xl font-medium text-sunpower-text-primary">
+                Battery Backup — {data.battery.mode === "offgrid" ? "Off-grid" : "Evening Backup"}
+              </h2>
+            </div>
+            <p className="text-sm text-sunpower-text-secondary mb-5">{data.battery.description}</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-xl bg-foreground/[0.04] p-3">
+                <div className="text-[11px] text-sunpower-text-muted">Recommended size</div>
+                <div className="font-mono text-xl font-semibold text-indigo-500">{data.battery.recommendedKwh} kWh</div>
+              </div>
+              <div className="rounded-xl bg-foreground/[0.04] p-3">
+                <div className="flex items-center gap-1 text-[11px] text-sunpower-text-muted"><Clock className="w-3 h-3" /> Backup</div>
+                <div className="font-mono text-xl font-semibold text-sunpower-text-primary">{data.battery.backupHours} hrs</div>
+              </div>
+              <div className="rounded-xl bg-foreground/[0.04] p-3">
+                <div className="text-[11px] text-sunpower-text-muted">Upfront cost</div>
+                <div className="font-mono text-xl font-semibold text-sunpower-text-primary">₹{(data.battery.costInr / 100000).toFixed(1)}L</div>
+              </div>
+              <div className="rounded-xl bg-foreground/[0.04] p-3">
+                <div className="text-[11px] text-sunpower-text-muted">25-yr cost</div>
+                <div className="font-mono text-xl font-semibold text-sunpower-text-primary">₹{(data.battery.lifetimeCostInr / 100000).toFixed(1)}L</div>
+              </div>
+            </div>
+            <div className="text-[11px] text-sunpower-text-muted mt-3">
+              LFP Li-ion · 85% depth-of-discharge · ~10 yr cycle life · includes inverter upgrade
             </div>
           </div>
         )}

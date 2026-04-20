@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { track } from "@/lib/analytics";
 
 // ─── Schema ─────────────────────────────────────────────────
 const leadSchema = z.object({
@@ -65,6 +66,7 @@ const LeadCaptureForm = ({ open, onOpenChange, context }: LeadCaptureFormProps) 
     // Simulate network latency — replace with real fetch('/api/leads', ...)
     await new Promise((r) => setTimeout(r, 600));
     persistLead({ ...values, context, ts: new Date().toISOString() });
+    track("Lead Submitted", { kw: context?.kw ?? 0, city: values.city });
     setSubmitted(true);
     toast({
       title: "Request received",

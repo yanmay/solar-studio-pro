@@ -1,3 +1,4 @@
+import { captureApiError } from "./sentry";
 // Auto-detect rooftop polygon from OSM Overpass API
 // Free, no API key, India coverage. Returns the smallest building polygon
 // that contains the tap point — typically the user's actual house.
@@ -119,7 +120,10 @@ export async function detectBuildingAt(
       continue;
     }
   }
-  if (lastErr) throw lastErr;
+  if (lastErr) {
+    captureApiError("overpass", lastErr, { lat, lng, radiusMeters });
+    throw lastErr;
+  }
   return null;
 }
 

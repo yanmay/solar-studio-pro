@@ -1,12 +1,17 @@
 import { Sun, Zap, BarChart3, Leaf } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import FeatureCard from "@/components/FeatureCard";
 import TechCard from "@/components/TechCard";
+import Testimonials from "@/components/Testimonials";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useEffect } from "react";
+import { track } from "@/lib/analytics";
 
 const LandingPage = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   // SEO: Set document title
   useEffect(() => {
@@ -22,6 +27,11 @@ const LandingPage = () => {
 
   return (
     <div className="min-h-screen" role="main">
+      {/* Language switcher top-right */}
+      <div className="absolute top-4 right-4 z-50">
+        <LanguageSwitcher />
+      </div>
+
       {/* Hero Section */}
       <section
         className="hero-gradient min-h-screen flex items-center justify-center px-4"
@@ -32,31 +42,30 @@ const LandingPage = () => {
           <div className="flex items-center gap-3">
             <Sun className="w-12 h-12 text-sunpower-accent" aria-hidden="true" />
             <h1 className="font-display text-[clamp(42px,8vw,64px)] leading-[1.1] text-white tracking-tight">
-              SUNPOWER LINK
+              {t("app.name")}
             </h1>
           </div>
 
           {/* Subheading */}
           <p className="text-xl text-white/90 max-w-lg">
-            Empowering Every Roof with Solar Intelligence
+            {t("app.tagline")}
           </p>
 
           {/* Body copy */}
           <p className="text-[15px] text-white/75 max-w-[520px] leading-relaxed">
-            AI-powered rooftop analysis that instantly estimates your solar energy potential, savings,
-            and environmental impact — all from a satellite view of your roof.
+            {t("landing.subtitle")}
           </p>
 
           <div className="relative group mt-2 w-full sm:w-auto">
             <div className="absolute -inset-0.5 bg-gradient-to-r from-sunpower-accent to-sunpower-success rounded-[999px] blur opacity-40 group-hover:opacity-70 transition duration-500"></div>
             <Button
               variant="hero"
-              onClick={() => navigate("/map")}
+              onClick={() => { track("CTA Analyze Click", { source: "hero" }); navigate("/map"); }}
               className="relative w-full sm:w-auto h-14 text-lg"
               id="hero-cta"
               aria-label="Start analyzing your rooftop solar potential"
             >
-              Analyze Your Rooftop →
+              {t("landing.cta")} →
             </Button>
           </div>
 
@@ -64,22 +73,25 @@ const LandingPage = () => {
           <div className="flex flex-col sm:flex-row gap-4 mt-8 w-full max-w-[760px]">
             <FeatureCard
               icon={<Zap className="w-8 h-8" />}
-              title="Energy Estimation"
-              description="Precise annual kWh generation forecast"
+              title={t("landing.featureEnergyTitle")}
+              description={t("landing.featureEnergyDesc")}
             />
             <FeatureCard
               icon={<BarChart3 className="w-8 h-8" />}
-              title="Financial Savings"
-              description="Monthly and yearly cost savings analysis"
+              title={t("landing.featureSavingsTitle")}
+              description={t("landing.featureSavingsDesc")}
             />
             <FeatureCard
               icon={<Leaf className="w-8 h-8" />}
-              title="Green Impact"
-              description="CO₂ reduction and environmental benefits"
+              title={t("landing.featureGreenTitle")}
+              description={t("landing.featureGreenDesc")}
             />
           </div>
         </div>
       </section>
+
+      {/* Testimonials + stats */}
+      <Testimonials />
 
       {/* SolarNet Technology Section */}
       <section className="py-20 px-4 bg-background" aria-label="SolarNet Technology">
@@ -178,12 +190,12 @@ const LandingPage = () => {
           <div className="mt-16">
             <Button
               variant="cta"
-              onClick={() => navigate("/map")}
+              onClick={() => { track("CTA Analyze Click", { source: "hero" }); navigate("/map"); }}
               className="w-full sm:w-auto"
               id="bottom-cta"
               aria-label="Get started with free rooftop solar analysis"
             >
-              Get Started — It's Free →
+              {t("landing.ctaBottom")} →
             </Button>
           </div>
         </div>

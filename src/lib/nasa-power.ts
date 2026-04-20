@@ -3,6 +3,7 @@
 // with 24-hour caching and regional fallback.
 
 import { getRegionalPSH } from "./india-grid";
+import { captureApiError } from "./sentry";
 
 interface NASAPowerResponse {
   properties: {
@@ -91,6 +92,7 @@ export async function fetchSolarIrradiance(
     return result;
   } catch (error) {
     console.error("[nasa-power] API failed, using regional fallback:", error);
+    captureApiError("nasa-power", error, { lat, lng });
 
     // Fallback to regional lookup
     const { psh, region } = getRegionalPSH(lat, lng);

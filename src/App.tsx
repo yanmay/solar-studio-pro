@@ -1,12 +1,37 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Loader2 } from "lucide-react";
 import LandingPage from "./pages/LandingPage";
 import PwaInstallPrompt from "./components/PwaInstallPrompt";
+import { trackPageView } from "./lib/analytics";
+
+// Load Plausible script once (guarded by env var)
+const PLAUSIBLE_DOMAIN = import.meta.env.VITE_PLAUSIBLE_DOMAIN;
+function loadPlausible() {
+  if (!PLAUSIBLE_DOMAIN || typeof document === "undefined") return;
+  if (document.querySelector("script[data-plausible]")) return;
+  const s = document.createElement("script");
+  s.defer = true;
+  s.setAttribute("data-domain", PLAUSIBLE_DOMAIN);
+  s.setAttribute("data-plausible", "1");
+  s.src = "https://plausible.io/js/script.js";
+  document.head.appendChild(s);
+  // Proxy queue until script loads
+  // @ts-expect-error — stub matches upstream Plausible bootstrap
+  window.plausible = window.plausible || function () { (window.plausible.q = window.plausible.q || []).push(arguments); };
+}
+loadPlausible();
+
+// SPA page-view tracker
+function RouteTracker() {
+  const loc = useLocation();
+  useEffect(() => { trackPageView(loc.pathname); }, [loc.pathname]);
+  return null;
+}
 
 // Code-split the heavy routes — MapPage pulls Three.js + Leaflet (~1.5MB),
 // ResultsPage pulls jsPDF + html2canvas + recharts (~400KB).
@@ -32,6 +57,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <RouteTracker />
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/" element={<LandingPage />} />
