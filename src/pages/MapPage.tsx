@@ -4,7 +4,8 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { polygon as turfPolygon } from "@turf/helpers";
 import turfArea from "@turf/area";
-import { Search, Loader2, Minus, Plus, RotateCcw, AlertTriangle, MapPin, MousePointerClick, LocateFixed, Sparkles, Sun } from "lucide-react";
+import { Search, Loader2, Minus, Plus, RotateCcw, AlertTriangle, MapPin, MousePointerClick, LocateFixed, Sparkles, Sun, Mic, MicOff } from "lucide-react";
+import { useVoiceSearch } from "@/hooks/use-voice-search";
 import { Button } from "@/components/ui/button";
 import ThemeToggle from "@/components/ThemeToggle";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
@@ -26,6 +27,7 @@ import { detectDiscom, type DiscomInfo } from "@/lib/discom-rates";
 import { detectBuildingAt, nearbyBuildings } from "@/lib/osm-buildings";
 import { recommendBattery, type BackupMode } from "@/lib/battery-calc";
 import { track } from "@/lib/analytics";
+import PhotoRoofEstimator from "@/components/PhotoRoofEstimator";
 
 type LatLng = { lat: number; lng: number };
 type DrawState = "IDLE" | "DRAWING" | "COMPLETE";
@@ -578,7 +580,7 @@ const CalculationProgress = () => {
 const MapPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
@@ -605,6 +607,14 @@ const MapPage = () => {
   const [locationLabel, setLocationLabel] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
   const [panelCount, setPanelCount] = useState(0);
+  // Voice search
+  const voice = useVoiceSearch();
+  useEffect(() => {
+    // Push final voice transcript into query; trigger search when user stops speaking
+    if (voice.transcript) {
+      setQuery(voice.transcript);
+    }
+  }, [voice.transcript]);
   // Tilt + azimuth (Tier 2 — yield correction)
   const [tilt, setTilt] = useState(20);             // degrees, 0-45
   const [azimuth, setAzimuth] = useState<Azimuth>("S");
@@ -615,6 +625,8 @@ const MapPage = () => {
   const [extraSections, setExtraSections] = useState<{ id: string; areaM2: number; panelCount: number }[]>([]);
   // Backup/battery mode
   const [backupMode, setBackupMode] = useState<BackupMode>("none");
+  // Photo estimator dialog
+  const [photoEstOpen, setPhotoEstOpen] = useState(false);
 
   // ── Globe state (binary: visible or hidden) ─────────────────
   const [globeVisible, setGlobeVisible] = useState(true);
@@ -1151,6 +1163,34 @@ const MapPage = () => {
     }
   }, [clearDrawing, finishPolygon, toast]);
 
+  // ── Photo estimator → synthetic square polygon at current center ─
+  const handlePhotoAreaAccept = useCallback((areaM2: number) => {
+    const map = mapRef.current;
+    if (!map) return;
+    clearDrawing();
+    const center = map.getCenter();
+    // Build a square polygon with the given area, centered on map view.
+    // At this latitude, 1° latitude ≈ 110.54 km, 1° lng ≈ 111.32 * cos(lat) km.
+    const side = Math.sqrt(areaM2); // meters
+    const halfLat = (side / 2) / 110540;
+    const halfLng = (side / 2) / (111320 * Math.cos(center.lat * Math.PI / 180));
+    const corners: LatLng[] = [
+      { lat: center.lat + halfLat, lng: center.lng - halfLng },
+      { lat: center.lat + halfLat, lng: center.lng + halfLng },
+      { lat: center.lat - halfLat, lng: center.lng + halfLng },
+      { lat: center.lat - halfLat, lng: center.lng - halfLng },
+    ];
+    verticesRef.current = corners;
+    setVertexCount(4);
+    corners.forEach((v, i) => {
+      const marker = L.marker([v.lat, v.lng], { icon: i === 0 ? firstVertexIcon : vertexIcon }).addTo(map);
+      markersRef.current.push(marker);
+    });
+    finishPolygon(map);
+    track("Photo Area Accepted", { areaM2 });
+    toast({ title: "Area imported", description: `${areaM2} m² from your photo.` });
+  }, [clearDrawing, finishPolygon, toast]);
+
   // ── Geolocation: "Find Me" → snap to user GPS ──────────────
   const [locating, setLocating] = useState(false);
   const handleLocateMe = useCallback(() => {
@@ -1258,6 +1298,32 @@ const MapPage = () => {
             aria-controls="search-suggestions"
             aria-activedescendant={activeSuggestion >= 0 ? `suggestion-${activeSuggestion}` : undefined}
           />
+          {voice.supported && (
+            <button
+              onClick={() => {
+                if (voice.listening) voice.stop();
+                else {
+                  // Use Hindi if UI language is Hindi; else Indian English
+                  const lang = i18n.language.startsWith("hi") ? "hi-IN"
+                             : i18n.language.startsWith("mr") ? "mr-IN"
+                             : i18n.language.startsWith("ta") ? "ta-IN"
+                             : i18n.language.startsWith("bn") ? "bn-IN"
+                             : "en-IN";
+                  voice.start(lang);
+                  track("Search Submitted", { mode: "voice", lang });
+                }
+              }}
+              className={`px-2.5 py-3 text-sm shrink-0 transition-colors ${
+                voice.listening
+                  ? "text-red-500 bg-red-500/10 animate-pulse"
+                  : "text-sunpower-text-muted hover:text-sunpower-accent"
+              }`}
+              aria-label={voice.listening ? "Stop voice input" : "Start voice input"}
+              title={voice.listening ? "Listening… tap to stop" : "Voice search"}
+            >
+              {voice.listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </button>
+          )}
           <button
             onClick={handleSearch}
             disabled={searching}
@@ -1313,6 +1379,22 @@ const MapPage = () => {
           <div className="mt-2 text-sm text-destructive bg-sunpower-bg-card rounded-md px-3 py-2 shadow-card flex items-center gap-2" role="alert">
             <AlertTriangle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
             {searchError}
+          </div>
+        )}
+        {voice.listening && (
+          <div className="mt-2 text-xs text-sunpower-text-secondary bg-sunpower-bg-card rounded-md px-3 py-2 shadow-card flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+            </span>
+            <span className="truncate">
+              Listening{voice.interim ? ` · ${voice.interim}` : "…"}
+            </span>
+          </div>
+        )}
+        {voice.error && !voice.listening && (
+          <div className="mt-2 text-xs text-destructive bg-sunpower-bg-card rounded-md px-3 py-2 shadow-card">
+            {voice.error}
           </div>
         )}
       </div>
@@ -1398,15 +1480,23 @@ const MapPage = () => {
                 </div>
               </div>
               {guideStep === 2 && (
-                <button
-                  onClick={handleAutoDetect}
-                  disabled={autoDetecting}
-                  className="mt-3 w-full flex items-center justify-center gap-2 bg-gradient-to-r from-sunpower-accent to-orange-500 text-white font-medium text-sm py-2.5 rounded-lg hover:opacity-95 active:scale-[0.99] transition-all disabled:opacity-60 shadow-md"
-                >
-                  {autoDetecting
-                    ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("map.detecting")}</>
-                    : <><Sparkles className="w-4 h-4" /> {t("map.autoDetect")}</>}
-                </button>
+                <div className="mt-3 space-y-2">
+                  <button
+                    onClick={handleAutoDetect}
+                    disabled={autoDetecting}
+                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-sunpower-accent to-orange-500 text-white font-medium text-sm py-2.5 rounded-lg hover:opacity-95 active:scale-[0.99] transition-all disabled:opacity-60 shadow-md"
+                  >
+                    {autoDetecting
+                      ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("map.detecting")}</>
+                      : <><Sparkles className="w-4 h-4" /> {t("map.autoDetect")}</>}
+                  </button>
+                  <button
+                    onClick={() => setPhotoEstOpen(true)}
+                    className="w-full flex items-center justify-center gap-2 bg-violet-500/10 hover:bg-violet-500/20 text-violet-600 border border-violet-500/20 font-medium text-xs py-2 rounded-lg transition-all"
+                  >
+                    📷 Or estimate from a photo
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -1602,6 +1692,13 @@ const MapPage = () => {
 
       {/* ── Calculation overlay with progressive skeleton ── */}
       {calculating && <CalculationProgress />}
+
+      {/* Photo-based area estimator */}
+      <PhotoRoofEstimator
+        open={photoEstOpen}
+        onOpenChange={setPhotoEstOpen}
+        onAccept={handlePhotoAreaAccept}
+      />
 
       <style>{`
         @keyframes sunpowerPulse {

@@ -30,6 +30,8 @@ import type { SolarAnalysis } from "@/lib/solar-calc";
 import { generatePDFReport } from "@/lib/pdf-generator";
 import LeadCaptureForm from "@/components/LeadCaptureForm";
 import InstallerMarketplace from "@/components/InstallerMarketplace";
+import TimeOfUseCard from "@/components/TimeOfUseCard";
+import RooftopARViewer from "@/components/RooftopARViewer";
 import { track } from "@/lib/analytics";
 import {
   BarChart,
@@ -440,6 +442,15 @@ const ResultsPage = () => {
           </div>
         )}
 
+        {/* ━━ 3D / AR rooftop preview ━━━━━━━━━━━━━━━━━━━━━━ */}
+        {!loading && data.panelCount && data.panelCount > 0 && (
+          <RooftopARViewer
+            installedKw={data.energy.installedCapacityKw}
+            panelCount={data.panelCount}
+            areaM2={data.rooftop.drawnAreaM2}
+          />
+        )}
+
         {/* ━━ Battery recommendation ━━━━━━━━━━━━━━━━━━━━━━━ */}
         {!loading && data.battery && data.battery.mode !== "none" && (
           <div className="bg-gradient-to-br from-indigo-500/10 to-purple-500/5 border border-indigo-500/20 rounded-2xl p-5 sm:p-8 mb-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="Battery backup recommendation">
@@ -472,6 +483,14 @@ const ResultsPage = () => {
               LFP Li-ion · 85% depth-of-discharge · ~10 yr cycle life · includes inverter upgrade
             </div>
           </div>
+        )}
+
+        {/* ━━ Time-of-use scheduling (24-hour generation vs load) ━━ */}
+        {!loading && data.energy.dailyKwh > 0 && (
+          <TimeOfUseCard
+            dailyGenKwh={data.energy.dailyKwh}
+            lat={data.location?.lat}
+          />
         )}
 
         {/* ━━ Before/After Savings Comparison ━━━━━━━━━━━━━━ */}
