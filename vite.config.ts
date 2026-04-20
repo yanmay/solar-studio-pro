@@ -51,6 +51,12 @@ export default defineConfig(({ mode }) => ({
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         globPatterns: ["**/*.{js,css,html,svg,png,jpg,woff2}"],
         navigateFallback: "/index.html",
+        // CRITICAL: take over immediately on new deploy so users see fixes
+        // on next reload — not after all tabs close.
+        skipWaiting: true,
+        clientsClaim: true,
+        // Wipe stale precaches from previous deploys.
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/(mt[0-3]|services)\.(google|arcgisonline)\.com\//,
