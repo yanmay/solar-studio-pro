@@ -12,6 +12,12 @@ import {
   RefreshCw,
   ArrowRight,
   TrendingDown,
+  Wallet,
+  Calendar,
+  BadgePercent,
+  Share2,
+  PhoneCall,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -20,6 +26,8 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type { SolarAnalysis } from "@/lib/solar-calc";
 import { generatePDFReport } from "@/lib/pdf-generator";
+import LeadCaptureForm from "@/components/LeadCaptureForm";
+import InstallerMarketplace from "@/components/InstallerMarketplace";
 import {
   BarChart,
   Bar,
@@ -164,6 +172,7 @@ const ResultsPage = () => {
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [noData, setNoData] = useState(false);
+  const [leadFormOpen, setLeadFormOpen] = useState(false);
 
   useEffect(() => {
     const stored = sessionStorage.getItem("sunpower-results");
@@ -186,6 +195,24 @@ const ResultsPage = () => {
   const handleNewAnalysis = () => {
     sessionStorage.removeItem("sunpower-results");
     navigate("/map");
+  };
+
+  const handleWhatsAppShare = () => {
+    if (!data) return;
+    const loc = data.location?.label || "my rooftop";
+    const text =
+      `☀️ My Solar Potential Report — SUNPOWER LINK\n\n` +
+      `📍 Location: ${loc}\n` +
+      `🏠 Roof area: ${data.rooftop.drawnAreaM2} m²\n` +
+      `⚡ System size: ${data.energy.installedCapacityKw} kWp\n` +
+      `🔋 Annual generation: ${data.energy.annualKwh.toLocaleString()} kWh\n` +
+      `💰 Yearly savings: ₹${data.financials.annualSavingsInr.toLocaleString()}\n` +
+      (data.investment ? `💸 You pay (after PM Surya Ghar subsidy): ₹${data.investment.netCostInr.toLocaleString()}\n` : "") +
+      (data.investment ? `📅 Payback: ${data.investment.paybackYears} years\n` : "") +
+      `🌳 CO₂ saved/yr: ${data.environmental.co2AnnualKg.toLocaleString()} kg\n\n` +
+      `Calculate yours: ${window.location.origin}`;
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   const handleDownload = () => {
@@ -253,7 +280,7 @@ const ResultsPage = () => {
     <div className="min-h-screen bg-background" role="main" aria-label="Solar analysis results">
       <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-8">
         {/* Header */}
-        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mb-8">
           <div>
             <h1 className="font-display text-3xl sm:text-4xl gradient-text leading-tight">Solar Potential Analysis</h1>
             {data.location?.label && (
@@ -268,7 +295,7 @@ const ResultsPage = () => {
                 </span>
               </div>
             )}
-            <div className="flex items-center gap-3 mt-1.5">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
               <span className="text-xs text-sunpower-text-muted">ID: {data.analysisId}</span>
               <span className="text-xs text-sunpower-text-muted">•</span>
               <span className="text-xs text-sunpower-text-muted">Source: {data.irradianceSource === "NASA_POWER" ? "NASA POWER Satellite" : "Regional Lookup"}</span>
@@ -283,11 +310,20 @@ const ResultsPage = () => {
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <ThemeToggle />
             <Button variant="ghost" onClick={handleBackToMap} aria-label="Go back to map" className="flex-1 sm:flex-none justify-center">
-              <ArrowLeft className="w-4 h-4 mr-1 shrink-0" aria-hidden="true" /> 
+              <ArrowLeft className="w-4 h-4 mr-1 shrink-0" aria-hidden="true" />
               <span>Back <span className="hidden sm:inline">to Map</span></span>
             </Button>
+            <Button
+              variant="ghost"
+              onClick={handleWhatsAppShare}
+              aria-label="Share on WhatsApp"
+              className="flex-1 sm:flex-none justify-center bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#25D366]"
+            >
+              <Share2 className="w-4 h-4 mr-1 shrink-0" aria-hidden="true" />
+              <span className="sm:inline">Share</span>
+            </Button>
             <Button variant="cta" onClick={handleDownload} loading={downloading} aria-label="Download PDF report" className="flex-1 sm:flex-none justify-center">
-              <Download className="w-4 h-4 mr-1 shrink-0" aria-hidden="true" /> 
+              <Download className="w-4 h-4 mr-1 shrink-0" aria-hidden="true" />
               <span className="hidden sm:inline">Download Report</span>
               <span className="sm:hidden">Download</span>
             </Button>
@@ -320,6 +356,77 @@ const ResultsPage = () => {
             </>
           )}
         </div>
+
+        {/* ━━ Investment + Subsidy + Payback ━━━━━━━━━━━━━━━━ */}
+        {!loading && data.investment && (
+          <div className="bg-sunpower-bg-card rounded-2xl shadow-card p-5 sm:p-8 mb-8 hover:shadow-float transition-shadow duration-300" role="region" aria-label="Investment & payback">
+            <div className="flex items-center gap-2 mb-5">
+              <Wallet className="w-5 h-5 text-sunpower-accent" aria-hidden="true" />
+              <h2 className="text-xl font-medium text-sunpower-text-primary">Investment & Payback</h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+              {/* System cost */}
+              <div className="rounded-xl bg-foreground/[0.03] border border-foreground/[0.06] p-4">
+                <div className="flex items-center gap-2 text-xs text-sunpower-text-muted mb-1">
+                  <Wallet className="w-3.5 h-3.5" /> System Cost (turn-key)
+                </div>
+                <div className="font-mono text-2xl font-semibold text-sunpower-text-primary">
+                  ₹{data.investment.systemCostInr.toLocaleString()}
+                </div>
+                <div className="text-xs text-sunpower-text-muted mt-1">
+                  ~₹{Math.round(data.investment.systemCostInr / data.energy.installedCapacityKw).toLocaleString()}/kW installed
+                </div>
+              </div>
+
+              {/* Subsidy */}
+              <div className="rounded-xl bg-gradient-to-br from-sunpower-success/10 to-sunpower-success/5 border border-sunpower-success/20 p-4">
+                <div className="flex items-center gap-2 text-xs text-sunpower-success mb-1">
+                  <BadgePercent className="w-3.5 h-3.5" /> PM Surya Ghar Subsidy
+                </div>
+                <div className="font-mono text-2xl font-semibold text-sunpower-success">
+                  −₹{data.investment.subsidyInr.toLocaleString()}
+                </div>
+                <div className="text-xs text-sunpower-text-muted mt-1">
+                  Govt of India direct benefit transfer
+                </div>
+              </div>
+
+              {/* Net cost */}
+              <div className="rounded-xl bg-gradient-to-br from-sunpower-accent/10 to-sunpower-accent/5 border border-sunpower-accent/20 p-4">
+                <div className="flex items-center gap-2 text-xs text-sunpower-accent mb-1">
+                  <IndianRupee className="w-3.5 h-3.5" /> You Pay
+                </div>
+                <div className="font-mono text-2xl font-semibold text-sunpower-accent">
+                  ₹{data.investment.netCostInr.toLocaleString()}
+                </div>
+                <div className="text-xs text-sunpower-text-muted mt-1">
+                  Net of subsidy
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-foreground/[0.06]">
+              <div className="text-center">
+                <div className="flex items-center gap-1.5 justify-center text-xs text-sunpower-text-muted mb-1">
+                  <Calendar className="w-3.5 h-3.5" /> Payback Period
+                </div>
+                <div className="font-mono text-3xl font-semibold text-sunpower-accent">
+                  {data.investment.paybackYears}
+                  <span className="text-base font-normal text-sunpower-text-muted ml-1">years</span>
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="flex items-center gap-1.5 justify-center text-xs text-sunpower-text-muted mb-1">
+                  <TrendingDown className="w-3.5 h-3.5" /> 25-Year ROI
+                </div>
+                <div className="font-mono text-3xl font-semibold text-sunpower-success">
+                  {data.investment.roi25yrPercent}%
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ━━ Before/After Savings Comparison ━━━━━━━━━━━━━━ */}
         {!loading && (
@@ -381,7 +488,7 @@ const ResultsPage = () => {
               </div>
             </div>
             <p className="text-sm text-sunpower-text-muted mb-4">Estimated monthly energy output based on NASA satellite irradiance data</p>
-            <div style={{ width: "100%", height: 280 }}>
+            <div className="w-full h-[220px] sm:h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={monthlyChartData}
@@ -488,6 +595,40 @@ const ResultsPage = () => {
           · System losses: 14% · Usable area: 75% of drawn area
         </div>
 
+        {/* ━━ Lead capture CTA card ━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        {!loading && (
+          <div className="mt-8 bg-gradient-to-br from-sunpower-accent to-orange-600 rounded-2xl p-6 sm:p-8 shadow-float text-center text-white">
+            <div className="max-w-xl mx-auto">
+              <div className="inline-flex items-center gap-2 bg-white/15 px-3 py-1 rounded-full text-xs font-medium mb-3">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Verified MNRE installers
+              </div>
+              <h2 className="font-display text-2xl sm:text-3xl mb-2 leading-tight">
+                Ready to install? Get a free quote.
+              </h2>
+              <p className="text-sm sm:text-base text-white/90 mb-5 max-w-md mx-auto">
+                A solar installer in your city will call you within 24 hours with a
+                tailored quote — including PM Surya Ghar paperwork.
+              </p>
+              <button
+                onClick={() => setLeadFormOpen(true)}
+                className="inline-flex items-center gap-2 bg-white text-sunpower-accent font-semibold px-6 py-3 rounded-full hover:bg-white/95 active:scale-95 transition-all shadow-lg"
+              >
+                <PhoneCall className="w-4 h-4" />
+                Talk to an installer →
+              </button>
+              <div className="text-xs text-white/70 mt-3">No spam · No obligation · Your number stays private</div>
+            </div>
+          </div>
+        )}
+
+        {/* Installer marketplace */}
+        {!loading && (
+          <InstallerMarketplace
+            installedKw={data.energy.installedCapacityKw}
+            city={data.location?.label?.split(",")[0]?.trim()}
+          />
+        )}
+
         {/* Analyze Another Roof */}
         <div className="mt-8 text-center border-t border-foreground/[0.06] pt-8 pb-4">
           <Button variant="ghost" className="text-sunpower-accent hover:text-sunpower-accent-hover" onClick={handleNewAnalysis} aria-label="Analyze another rooftop">
@@ -496,6 +637,17 @@ const ResultsPage = () => {
           </Button>
         </div>
       </div>
+
+      {/* Lead capture modal */}
+      <LeadCaptureForm
+        open={leadFormOpen}
+        onOpenChange={setLeadFormOpen}
+        context={{
+          analysisId: data.analysisId,
+          kw: data.energy.installedCapacityKw,
+          location: data.location?.label,
+        }}
+      />
     </div>
   );
 };

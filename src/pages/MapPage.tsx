@@ -4,7 +4,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { polygon as turfPolygon } from "@turf/helpers";
 import turfArea from "@turf/area";
-import { Search, Loader2, Minus, Plus, RotateCcw, AlertTriangle, MapPin, MousePointerClick } from "lucide-react";
+import { Search, Loader2, Minus, Plus, RotateCcw, AlertTriangle, MapPin, MousePointerClick, LocateFixed, Sparkles, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useToast } from "@/hooks/use-toast";
@@ -19,6 +19,9 @@ import {
   USABLE_AREA_FACTOR,
   MIN_AREA_M2,
 } from "@/lib/solar-defaults";
+import { calcTiltAzimuthFactor, type Azimuth, AZIMUTH_LABELS } from "@/lib/tilt-azimuth";
+import { detectDiscom, type DiscomInfo } from "@/lib/discom-rates";
+import { detectBuildingAt, nearbyBuildings } from "@/lib/osm-buildings";
 
 type LatLng = { lat: number; lng: number };
 type DrawState = "IDLE" | "DRAWING" | "COMPLETE";
@@ -79,6 +82,43 @@ function calcCentroid(latlngs: LatLng[]): LatLng {
   const lat = latlngs.reduce((sum, p) => sum + p.lat, 0) / latlngs.length;
   const lng = latlngs.reduce((sum, p) => sum + p.lng, 0) / latlngs.length;
   return { lat, lng };
+}
+
+// ── Locale hint detection (smart bias) ─────────────────────
+const FOREIGN_TOKENS = [
+  "usa", "u.s.a", "america", "uk", "u.k", "england", "scotland", "wales", "ireland",
+  "london", "manchester", "paris", "france", "berlin", "germany", "munich",
+  "rome", "italy", "milan", "madrid", "spain", "barcelona",
+  "tokyo", "japan", "osaka", "kyoto", "seoul", "korea",
+  "beijing", "shanghai", "china", "hong kong", "taiwan", "taipei",
+  "dubai", "uae", "abu dhabi", "qatar", "doha", "saudi",
+  "singapore", "malaysia", "kuala lumpur", "thailand", "bangkok",
+  "australia", "sydney", "melbourne", "canada", "toronto", "vancouver",
+  "nyc", "new york", "los angeles", "san francisco", "chicago", "boston",
+  "moscow", "russia", "istanbul", "turkey", "cairo", "egypt",
+  "brazil", "rio", "mexico", "argentina",
+];
+
+const INDIA_TOKENS = [
+  "india", "bharat",
+  "mumbai", "delhi", "bangalore", "bengaluru", "kolkata", "chennai", "hyderabad",
+  "pune", "ahmedabad", "jaipur", "lucknow", "kanpur", "nagpur", "indore", "bhopal",
+  "patna", "surat", "vadodara", "thane", "noida", "gurgaon", "gurugram", "ghaziabad",
+  "maharashtra", "karnataka", "tamil nadu", "kerala", "gujarat", "rajasthan",
+  "punjab", "haryana", "telangana", "andhra pradesh", "odisha", "bihar",
+  "uttar pradesh", "madhya pradesh", "west bengal", "assam", "goa",
+];
+
+function detectLocaleHint(query: string): { countryCode?: string; bias: boolean } {
+  const q = query.toLowerCase();
+  for (const tok of FOREIGN_TOKENS) {
+    if (q.includes(tok)) return { bias: false };
+  }
+  for (const tok of INDIA_TOKENS) {
+    if (q.includes(tok)) return { countryCode: "in", bias: true };
+  }
+  // Ambiguous → keep India default (app targets India)
+  return { countryCode: "in", bias: true };
 }
 
 // ── Geocode helpers ────────────────────────────────────────
@@ -157,25 +197,25 @@ function getQueryWords(query: string): string[] {
 }
 
 /** Score how well a result matches the query (0–1+ scale) */
-function scoreResult(result: NominatimSuggestion, queryWords: string[]): number {
+function scoreResult(result: NominatimSuggestion, queryWords: string[], indiaBias = true): number {
   const displayLower = (result.display_name || "").toLowerCase();
   let matched = 0;
   for (const word of queryWords) {
     if (displayLower.includes(word)) matched++;
   }
   const matchRatio = queryWords.length > 0 ? matched / queryWords.length : 0;
-  const indiaBonus = displayLower.includes("india") ? 0.05 : 0;
+  const indiaBonus = indiaBias && displayLower.includes("india") ? 0.05 : 0;
   return matchRatio + indiaBonus;
 }
 
 /** Pick the best result from a list using query-word scoring */
-function pickBestResult(results: NominatimSuggestion[], query: string): { lat: number; lng: number; label: string } {
+function pickBestResult(results: NominatimSuggestion[], query: string, indiaBias = true): { lat: number; lng: number; label: string } {
   const queryWords = getQueryWords(query);
   let bestScore = -1;
   let best = results[0];
 
   for (const r of results) {
-    const score = scoreResult(r, queryWords);
+    const score = scoreResult(r, queryWords, indiaBias);
     if (score > bestScore) {
       bestScore = score;
       best = r;
@@ -203,6 +243,11 @@ async function geocodeAddress(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 12000);
 
+  // Smart bias: India by default, drop country lock for explicit foreign queries
+  const hint = detectLocaleHint(query);
+  const biasIndia = hint.bias;
+  const ccode = hint.countryCode;
+
   // Build viewbox from current map bounds to bias towards visible area
   let viewbox: string | undefined;
   let mapCenter: { lat: number; lng: number } | undefined;
@@ -215,11 +260,13 @@ async function geocodeAddress(
   }
 
   // Phase 1: Run the two best strategies in parallel for speed
-  // Nominatim (India-biased) + Photon (better POI fuzzy matching)
+  // Nominatim + Photon (locale-aware)
   try {
     const [nominatimIndia, photonFallback] = await Promise.allSettled([
-      nominatimSearch(query, { countrycodes: "in", viewbox }, controller.signal),
-      photonSearch(query, { limit: 5, lat: mapCenter?.lat ?? 20.5, lon: mapCenter?.lng ?? 78.9 }, controller.signal),
+      nominatimSearch(query, { countrycodes: ccode, viewbox }, controller.signal),
+      biasIndia
+        ? photonSearch(query, { limit: 5, lat: mapCenter?.lat ?? 20.5, lon: mapCenter?.lng ?? 78.9 }, controller.signal)
+        : photonSearch(query, { limit: 5 }, controller.signal),
     ]);
 
     // Collect & deduplicate all results from parallel strategies
@@ -246,7 +293,7 @@ async function geocodeAddress(
       let bestScore = -1;
       let bestResult = allResults[0];
       for (const r of allResults) {
-        const s = scoreResult(r, queryWords);
+        const s = scoreResult(r, queryWords, biasIndia);
         if (s > bestScore) { bestScore = s; bestResult = r; }
       }
 
@@ -272,8 +319,10 @@ async function geocodeAddress(
           // Geocode the unmatched words as a locality (e.g. "dighi" → Dighi, Pune)
           const localityQuery = unmatchedWords.join(" ");
           const [localNom, localPhoton] = await Promise.allSettled([
-            nominatimSearch(localityQuery, { countrycodes: "in", limit: 2 }, controller.signal),
-            photonSearch(localityQuery, { limit: 2, lat: mapCenter?.lat ?? 20.5, lon: mapCenter?.lng ?? 78.9 }, controller.signal),
+            nominatimSearch(localityQuery, { countrycodes: ccode, limit: 2 }, controller.signal),
+            biasIndia
+              ? photonSearch(localityQuery, { limit: 2, lat: mapCenter?.lat ?? 20.5, lon: mapCenter?.lng ?? 78.9 }, controller.signal)
+              : photonSearch(localityQuery, { limit: 2 }, controller.signal),
           ]);
 
           let localityLat: number | null = null;
@@ -296,9 +345,9 @@ async function geocodeAddress(
 
             // Search for the full query AND just the POI name near the locality
             const [fullNearby, poiNearby] = await Promise.allSettled([
-              nominatimSearch(query, { viewbox: localViewbox, countrycodes: "in" }, controller.signal),
+              nominatimSearch(query, { viewbox: localViewbox, countrycodes: ccode }, controller.signal),
               matchedWords.length > 0
-                ? nominatimSearch(matchedWords.join(" "), { viewbox: localViewbox, countrycodes: "in" }, controller.signal)
+                ? nominatimSearch(matchedWords.join(" "), { viewbox: localViewbox, countrycodes: ccode }, controller.signal)
                 : Promise.resolve([] as NominatimSuggestion[]),
             ]);
 
@@ -308,7 +357,7 @@ async function geocodeAddress(
             for (const settled of [fullNearby, poiNearby]) {
               if (settled.status === "fulfilled") {
                 for (const r of settled.value) {
-                  const s = scoreResult(r, queryWords);
+                  const s = scoreResult(r, queryWords, biasIndia);
                   if (s > bestRefinedScore) {
                     bestRefinedScore = s;
                     bestRefined = r;
@@ -339,17 +388,19 @@ async function geocodeAddress(
     }
 
     // Phase 2: Fallback strategies (only if phase 1 found nothing at all)
-    const fallbackStrategies = [
+    const fallbackStrategies: Array<() => Promise<NominatimSuggestion[]>> = [
       () => nominatimSearch(query, { viewbox }, controller.signal),
-      () => nominatimSearch(`${query}, India`, {}, controller.signal),
     ];
+    if (biasIndia) {
+      fallbackStrategies.push(() => nominatimSearch(`${query}, India`, {}, controller.signal));
+    }
 
     for (const fallback of fallbackStrategies) {
       try {
         const results = await fallback();
         if (results.length > 0) {
           clearTimeout(timeoutId);
-          return pickBestResult(results, query);
+          return pickBestResult(results, query, biasIndia);
         }
       } catch (err) {
         if ((err as Error).name === "AbortError") throw err;
@@ -374,10 +425,16 @@ async function fetchSuggestions(
   signal: AbortSignal,
   mapCenter?: { lat: number; lng: number },
 ): Promise<NominatimSuggestion[]> {
+  const hint = detectLocaleHint(query);
+  const ccode = hint.countryCode;
+  const biasIndia = hint.bias;
+
   // Run both geocoders in parallel — don't wait for one to fail before trying the other
   const [nominatimResults, photonResults] = await Promise.allSettled([
-    nominatimSearch(query, { countrycodes: "in", limit: 4 }, signal),
-    photonSearch(query, { limit: 3, lat: mapCenter?.lat ?? 20.5, lon: mapCenter?.lng ?? 78.9 }, signal),
+    nominatimSearch(query, { countrycodes: ccode, limit: 4 }, signal),
+    biasIndia
+      ? photonSearch(query, { limit: 3, lat: mapCenter?.lat ?? 20.5, lon: mapCenter?.lng ?? 78.9 }, signal)
+      : photonSearch(query, { limit: 3 }, signal),
   ]);
 
   const results: NominatimSuggestion[] = [];
@@ -409,23 +466,37 @@ async function fetchSuggestions(
   return results.slice(0, 6);
 }
 
-async function reverseGeocode(lat: number, lng: number): Promise<string> {
+async function reverseGeocodeFull(
+  lat: number, lng: number,
+): Promise<{ label: string; state?: string; city?: string; country?: string }> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
-    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14`;
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`;
     const res = await fetch(url, { headers: NOMINATIM_HEADERS, signal: controller.signal });
     clearTimeout(timeoutId);
     const data = await res.json();
+    const addr = data?.address || {};
+    const state = addr.state || addr.region;
+    const city = addr.city || addr.town || addr.village || addr.suburb;
+    const country = addr.country;
+    let label: string;
     if (data?.display_name) {
       const parts = data.display_name.split(", ");
-      if (parts.length >= 3) return `${parts[parts.length - 4] || parts[0]}, ${parts[parts.length - 3]}, ${parts[parts.length - 1]}`;
-      return data.display_name;
+      label = parts.length >= 3
+        ? `${parts[parts.length - 4] || parts[0]}, ${parts[parts.length - 3]}, ${parts[parts.length - 1]}`
+        : data.display_name;
+    } else {
+      label = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
     }
-    return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    return { label, state, city, country };
   } catch {
-    return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    return { label: `${lat.toFixed(4)}, ${lng.toFixed(4)}` };
   }
+}
+
+async function reverseGeocode(lat: number, lng: number): Promise<string> {
+  return (await reverseGeocodeFull(lat, lng)).label;
 }
 
 /** Format Nominatim suggestion into main + secondary text */
@@ -473,6 +544,14 @@ const MapPage = () => {
   const [locationLabel, setLocationLabel] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
   const [panelCount, setPanelCount] = useState(0);
+  // Tilt + azimuth (Tier 2 — yield correction)
+  const [tilt, setTilt] = useState(20);             // degrees, 0-45
+  const [azimuth, setAzimuth] = useState<Azimuth>("S");
+  const [showTiltControls, setShowTiltControls] = useState(false);
+  // Discom info (auto-detected on flyToLocation / draw complete)
+  const [discom, setDiscom] = useState<DiscomInfo | null>(null);
+  // Multi-roof comparison — additional sections beyond the primary polygon
+  const [extraSections, setExtraSections] = useState<{ id: string; areaM2: number; panelCount: number }[]>([]);
 
   // ── Globe state (binary: visible or hidden) ─────────────────
   const [globeVisible, setGlobeVisible] = useState(true);
@@ -721,7 +800,15 @@ const MapPage = () => {
     }
 
     const centroid = calcCentroid(verticesRef.current);
-    reverseGeocode(centroid.lat, centroid.lng).then((label) => setLocationLabel(label));
+    reverseGeocodeFull(centroid.lat, centroid.lng).then((info) => {
+      setLocationLabel(info.label);
+      // Auto-detect discom + tariff
+      const dc = detectDiscom({ state: info.state, label: info.label });
+      if (dc) {
+        setDiscom(dc);
+        setElectricityRate(dc.rate);
+      }
+    });
   }, []);
 
   const handleDeleteLast = useCallback(() => {
@@ -878,7 +965,16 @@ const MapPage = () => {
     try {
       const centroid = calcCentroid(verticesRef.current);
       const irradiance = await fetchSolarIrradiance(centroid.lat, centroid.lng);
-      const analysis: SolarAnalysis = runFullCalculation(area, irradiance.peakSunHours, {
+      // Tilt + azimuth correction applied to PSH so all downstream math benefits
+      const tiltFactor = calcTiltAzimuthFactor(tilt, azimuth);
+      const correctedPsh = irradiance.peakSunHours * tiltFactor;
+      // Sum extra roof sections into total area + panels
+      const extraArea = extraSections.reduce((s, r) => s + r.areaM2, 0);
+      const extraPanels = extraSections.reduce((s, r) => s + r.panelCount, 0);
+      const totalArea = Math.round((area + extraArea) * 10) / 10;
+      const totalPanels = panelCount + extraPanels;
+
+      const analysis: SolarAnalysis = runFullCalculation(totalArea, correctedPsh, {
         electricityRate,
         irradianceSource: irradiance.source,
         monthlyIrradiance: irradiance.monthlyValues,
@@ -891,7 +987,15 @@ const MapPage = () => {
           lng: centroid.lng,
           label: locationLabel || `${centroid.lat.toFixed(4)}, ${centroid.lng.toFixed(4)}`,
         },
-        panelCount,
+        panelCount: totalPanels,
+        roof: {
+          tilt,
+          azimuth,
+          tiltFactor,
+          sectionsCount: 1 + extraSections.length,
+          totalAreaM2: totalArea,
+        },
+        discom: discom ? { name: discom.discom, autoDetectedRate: discom.rate } : undefined,
       };
 
       sessionStorage.setItem("sunpower-results", JSON.stringify(fullResult));
@@ -909,6 +1013,103 @@ const MapPage = () => {
 
   const handleZoomIn = () => mapRef.current?.zoomIn();
   const handleZoomOut = () => mapRef.current?.zoomOut();
+
+  // ── Auto-detect rooftop polygon via OSM Overpass ───────────
+  const [autoDetecting, setAutoDetecting] = useState(false);
+  const [shadingNote, setShadingNote] = useState<string | null>(null);
+
+  const handleAutoDetect = useCallback(async () => {
+    const map = mapRef.current;
+    if (!map) return;
+    const center = map.getCenter();
+    setAutoDetecting(true);
+    try {
+      const result = await detectBuildingAt(center.lat, center.lng, 30);
+      if (!result || result.polygon.length < 3) {
+        toast({
+          title: "No building found",
+          description: "Zoom in closer to a roof, then try again — or trace it manually.",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Replace any in-progress drawing
+      clearDrawing();
+      // Fill verticesRef from OSM polygon (excluding closing duplicate if present)
+      const ring = result.polygon[0].lat === result.polygon[result.polygon.length - 1].lat
+                 && result.polygon[0].lng === result.polygon[result.polygon.length - 1].lng
+                 ? result.polygon.slice(0, -1)
+                 : result.polygon;
+      verticesRef.current = ring.map((p) => ({ lat: p.lat, lng: p.lng }));
+      setVertexCount(verticesRef.current.length);
+      // Drop markers for visual confirmation
+      verticesRef.current.forEach((v, i) => {
+        const marker = L.marker([v.lat, v.lng], { icon: i === 0 ? firstVertexIcon : vertexIcon }).addTo(map);
+        markersRef.current.push(marker);
+      });
+      // Finish polygon (computes area + panel layout + reverse-geocodes)
+      finishPolygon(map);
+      // Fire-and-forget shading advisory
+      nearbyBuildings(center.lat, center.lng, 50)
+        .then((others) => {
+          if (others.length === 0) {
+            setShadingNote("Open exposure — no nearby buildings detected.");
+            return;
+          }
+          const tallNeighbors = others.filter((b) => (b.levels ?? 1) >= 3 && b.distanceM < 25);
+          if (tallNeighbors.length >= 2) {
+            setShadingNote(`⚠️ ${tallNeighbors.length} tall buildings within 25 m — expect 10-25% shading loss in mornings/evenings.`);
+          } else if (tallNeighbors.length === 1) {
+            setShadingNote(`Possible shading from a tall neighbor (${tallNeighbors[0].levels}+ floors at ${Math.round(tallNeighbors[0].distanceM)} m).`);
+          } else {
+            setShadingNote(`${others.length} low-rise neighbors — minimal shading expected.`);
+          }
+        })
+        .catch(() => { /* non-blocking */ });
+      toast({
+        title: "Roof detected",
+        description: `${ring.length}-vertex outline from OpenStreetMap.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Auto-detect failed",
+        description: (err as Error).message || "Try zooming closer or tracing manually.",
+        variant: "destructive",
+      });
+    } finally {
+      setAutoDetecting(false);
+    }
+  }, [clearDrawing, finishPolygon, toast]);
+
+  // ── Geolocation: "Find Me" → snap to user GPS ──────────────
+  const [locating, setLocating] = useState(false);
+  const handleLocateMe = useCallback(() => {
+    if (!("geolocation" in navigator)) {
+      toast({ title: "Location not supported", description: "Your browser doesn't support geolocation.", variant: "destructive" });
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        let label = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+        try { label = await reverseGeocode(lat, lng); } catch { /* keep coords */ }
+        flyToLocation(lat, lng, label);
+        toast({ title: "Location found", description: label });
+        setLocating(false);
+      },
+      (err) => {
+        setLocating(false);
+        const msg = err.code === 1
+          ? "Permission denied. Please allow location access in your browser settings."
+          : err.code === 2
+          ? "Location unavailable. Try searching for your address instead."
+          : "Location request timed out.";
+        toast({ title: "Couldn't find you", description: msg, variant: "destructive" });
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    );
+  }, [flyToLocation, toast]);
 
   // ━━ Render ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -956,7 +1157,10 @@ const MapPage = () => {
       )}
 
       {/* ── Search Bar with Autocomplete ──────────────────── */}
-      <div ref={searchContainerRef} className="absolute top-4 sm:top-6 left-16 sm:left-1/2 right-4 sm:right-auto sm:-translate-x-1/2 sm:w-[560px] z-[1000]">
+      <div
+        ref={searchContainerRef}
+        className="absolute top-[max(1rem,env(safe-area-inset-top))] sm:top-6 left-14 sm:left-1/2 right-3 sm:right-auto sm:-translate-x-1/2 sm:w-[560px] z-[1000]"
+      >
         <div
           className={`flex items-center bg-sunpower-bg-card/90 backdrop-blur-xl border border-white/20 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.15)] overflow-hidden transition-all duration-300 ${
             guideStep === 1 ? "ring-2 ring-sunpower-accent ring-offset-2 ring-offset-transparent" : ""
@@ -986,10 +1190,17 @@ const MapPage = () => {
           <button
             onClick={handleSearch}
             disabled={searching}
-            className="bg-sunpower-accent hover:bg-sunpower-accent-hover text-sunpower-accent-text px-5 py-3 text-[15px] font-medium transition-colors disabled:opacity-70 flex items-center gap-2"
+            className="bg-sunpower-accent hover:bg-sunpower-accent-hover text-sunpower-accent-text px-3 sm:px-5 py-3 text-[15px] font-medium transition-colors disabled:opacity-70 flex items-center gap-2 shrink-0"
             aria-label="Search"
           >
-            {searching ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : "Search"}
+            {searching ? (
+              <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <>
+                <Search className="w-4 h-4 sm:hidden" aria-hidden="true" />
+                <span className="hidden sm:inline">Search</span>
+              </>
+            )}
           </button>
         </div>
 
@@ -1036,22 +1247,33 @@ const MapPage = () => {
       </div>
 
       {/* ── Theme Toggle + Zoom ──────────────────────────── */}
-      <div className="absolute top-4 sm:top-6 left-4 z-[1000]">
+      <div className="absolute top-[max(1rem,env(safe-area-inset-top))] sm:top-6 left-3 sm:left-4 z-[1000] scale-90 sm:scale-100 origin-top-left">
         <ThemeToggle />
       </div>
 
-      <div className="absolute bottom-32 sm:bottom-8 right-4 z-[1000] flex flex-col gap-1" role="group" aria-label="Map zoom controls">
-        <button onClick={handleZoomIn} className="w-10 h-10 bg-sunpower-bg-card shadow-card rounded-lg flex items-center justify-center hover:bg-secondary transition-colors" aria-label="Zoom in">
-          <Plus className="w-4 h-4 text-sunpower-text-primary" />
+      <div className="absolute bottom-44 sm:bottom-8 right-3 sm:right-4 z-[1000] flex flex-col gap-1.5" role="group" aria-label="Map controls">
+        <button
+          onClick={handleLocateMe}
+          disabled={locating}
+          className="w-11 h-11 sm:w-10 sm:h-10 bg-sunpower-bg-card shadow-card rounded-lg flex items-center justify-center hover:bg-secondary active:scale-95 transition-all disabled:opacity-60"
+          aria-label="Find my location"
+          title="Find my location"
+        >
+          {locating
+            ? <Loader2 className="w-5 h-5 sm:w-4 sm:h-4 text-sunpower-accent animate-spin" />
+            : <LocateFixed className="w-5 h-5 sm:w-4 sm:h-4 text-sunpower-accent" />}
         </button>
-        <button onClick={handleZoomOut} className="w-10 h-10 bg-sunpower-bg-card shadow-card rounded-lg flex items-center justify-center hover:bg-secondary transition-colors" aria-label="Zoom out">
-          <Minus className="w-4 h-4 text-sunpower-text-primary" />
+        <button onClick={handleZoomIn} className="w-11 h-11 sm:w-10 sm:h-10 bg-sunpower-bg-card shadow-card rounded-lg flex items-center justify-center hover:bg-secondary active:scale-95 transition-all" aria-label="Zoom in">
+          <Plus className="w-5 h-5 sm:w-4 sm:h-4 text-sunpower-text-primary" />
+        </button>
+        <button onClick={handleZoomOut} className="w-11 h-11 sm:w-10 sm:h-10 bg-sunpower-bg-card shadow-card rounded-lg flex items-center justify-center hover:bg-secondary active:scale-95 transition-all" aria-label="Zoom out">
+          <Minus className="w-5 h-5 sm:w-4 sm:h-4 text-sunpower-text-primary" />
         </button>
       </div>
 
       {/* ── Drawing Toolbar ─────────────────────────────── */}
       {drawState === "DRAWING" && (
-        <div className="absolute top-20 sm:top-6 right-4 flex gap-2 z-[1000] animate-fade-slide-up" role="toolbar" aria-label="Drawing controls">
+        <div className="absolute top-[calc(max(1rem,env(safe-area-inset-top))+56px)] sm:top-6 right-3 sm:right-4 flex gap-1.5 sm:gap-2 z-[1000] animate-fade-in" role="toolbar" aria-label="Drawing controls">
           <Button variant="ghost" size="sm" className="bg-sunpower-bg-card shadow-card" onClick={() => finishPolygon()} disabled={vertexCount < 3} aria-label="Finish drawing polygon">
             <span className="border-l-2 border-sunpower-success pl-2">{vertexCount >= 3 ? "Finish" : `${3 - vertexCount} more`}</span>
           </Button>
@@ -1062,7 +1284,9 @@ const MapPage = () => {
 
       {/* ── Progressive Step Guide ──────────────────────── */}
       {drawState !== "COMPLETE" && (
-        <div className="absolute bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 z-[1000] w-[calc(100vw-24px)] sm:w-[480px]">
+        <div
+          className="absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] sm:bottom-8 inset-x-3 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 sm:w-[480px] z-[1000] mx-auto max-w-[480px]"
+        >
           <div className="bg-sunpower-bg-card/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.15)] overflow-hidden">
             <div className="h-1 bg-muted">
               <div className="h-full bg-gradient-to-r from-sunpower-accent to-sunpower-accent transition-all duration-700 ease-out" style={{ width: `${(guideStep / 4) * 100}%` }} />
@@ -1091,16 +1315,27 @@ const MapPage = () => {
                 <div className="flex-1 min-w-0">
                   <div className="text-[13px] sm:text-sm font-medium text-sunpower-text-primary leading-snug">
                     {guideStep === 1 && "Search your location"}
-                    {guideStep === 2 && "Click on your rooftop to start drawing"}
+                    {guideStep === 2 && "Auto-detect or trace your rooftop"}
                     {guideStep === 3 && (vertexCount < 3 ? `Trace your rooftop edges · ${vertexCount} of 3 minimum` : "Click the green start point to complete the shape")}
                   </div>
                   <div className="text-[11px] sm:text-xs text-sunpower-text-muted mt-0.5 leading-tight sm:leading-relaxed">
                     {guideStep === 1 && "Type your city, area, or full address — suggestions will appear as you type"}
-                    {guideStep === 2 && "The map is zoomed in — click the corners of your rooftop one by one"}
+                    {guideStep === 2 && "Tap the magic button below to fetch your roof from OpenStreetMap, or click corners to trace manually"}
                     {guideStep === 3 && (vertexCount < 3 ? "Click on each corner of your roof to create the outline" : "Or double-click anywhere, or press the Finish button above")}
                   </div>
                 </div>
               </div>
+              {guideStep === 2 && (
+                <button
+                  onClick={handleAutoDetect}
+                  disabled={autoDetecting}
+                  className="mt-3 w-full flex items-center justify-center gap-2 bg-gradient-to-r from-sunpower-accent to-orange-500 text-white font-medium text-sm py-2.5 rounded-lg hover:opacity-95 active:scale-[0.99] transition-all disabled:opacity-60 shadow-md"
+                >
+                  {autoDetecting
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Detecting building…</>
+                    : <><Sparkles className="w-4 h-4" /> Auto-detect this roof</>}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1108,7 +1343,9 @@ const MapPage = () => {
 
       {/* ── Area Card + Panels + Calculate ───────────────── */}
       {drawState === "COMPLETE" && area !== null && (
-        <div className="absolute bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 w-[calc(100vw-24px)] sm:w-[420px] z-[1000] animate-fade-slide-up">
+        <div
+          className="absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] sm:bottom-8 inset-x-3 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 sm:w-[420px] z-[1000] mx-auto max-w-[420px] animate-fade-in"
+        >
           <div className="bg-sunpower-bg-card/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.15)] p-4 sm:p-6">
             <div className="text-center mb-4">
               <div className="text-sm text-sunpower-text-muted mb-1">Rooftop Area</div>
@@ -1132,6 +1369,105 @@ const MapPage = () => {
                 {areaWarning}
               </div>
             )}
+
+            {/* Multi-roof: extra sections summary */}
+            {extraSections.length > 0 && (
+              <div className="mb-3 p-2.5 bg-sunpower-info-light/40 border border-sunpower-info/20 rounded-lg text-xs text-sunpower-text-primary">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">{1 + extraSections.length} sections combined</span>
+                  <button
+                    className="text-sunpower-info underline underline-offset-2"
+                    onClick={() => setExtraSections([])}
+                    aria-label="Clear extra sections"
+                  >
+                    Reset
+                  </button>
+                </div>
+                <div className="mt-1 text-sunpower-text-muted">
+                  Primary: {area} m² · {extraSections.map((s, i) => `+${s.areaM2} m²`).join(" ")}
+                </div>
+              </div>
+            )}
+
+            {/* Add another section CTA */}
+            <button
+              onClick={() => {
+                if (area === null || verticesRef.current.length < 3) return;
+                setExtraSections((prev) => [...prev, { id: `roof_${Date.now()}`, areaM2: area, panelCount }]);
+                clearDrawing();
+                toast({ title: "Section saved", description: "Draw the next roof section" });
+              }}
+              className="w-full mb-3 text-xs text-sunpower-info border border-dashed border-sunpower-info/40 rounded-lg py-2 hover:bg-sunpower-info-light/40 transition-colors"
+            >
+              + Add another roof section
+            </button>
+
+            {/* Shading advisory (from OSM nearby buildings) */}
+            {shadingNote && (
+              <div className="mb-3 p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[11px] text-amber-700 dark:text-amber-300 flex items-start gap-2">
+                <Sun className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span className="leading-tight">{shadingNote}</span>
+              </div>
+            )}
+
+            {/* Discom badge */}
+            {discom && (
+              <div className="mb-3 px-2.5 py-1.5 bg-foreground/[0.03] rounded-md text-[11px] text-sunpower-text-muted flex items-center justify-between">
+                <span className="truncate">⚡ {discom.discom}</span>
+                <span className="font-mono shrink-0">auto · ₹{discom.rate}/kWh</span>
+              </div>
+            )}
+
+            {/* Tilt + Azimuth — collapsible */}
+            <div className="border-t border-foreground/[0.06] pt-3 mb-3">
+              <button
+                className="w-full flex items-center justify-between text-sm text-sunpower-text-secondary hover:text-sunpower-text-primary transition-colors"
+                onClick={() => setShowTiltControls(!showTiltControls)}
+                aria-expanded={showTiltControls}
+              >
+                <span>Roof tilt: {tilt}° · {AZIMUTH_LABELS[azimuth]}-facing</span>
+                <span className="text-xs text-sunpower-accent underline underline-offset-2">{showTiltControls ? "Hide" : "Change"}</span>
+              </button>
+              {showTiltControls && (
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <div className="flex justify-between text-xs text-sunpower-text-muted mb-1">
+                      <span>Tilt angle</span>
+                      <span className="font-mono">{tilt}°</span>
+                    </div>
+                    <input
+                      type="range" min={0} max={45} step={1} value={tilt}
+                      onChange={(e) => setTilt(parseInt(e.target.value))}
+                      className="w-full accent-sunpower-accent h-1.5 rounded-full"
+                      aria-label="Roof tilt angle"
+                    />
+                    <div className="flex justify-between text-[10px] text-sunpower-text-muted mt-0.5">
+                      <span>0° flat</span>
+                      <span>20° optimal</span>
+                      <span>45° steep</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-sunpower-text-muted mb-1.5">Roof faces</div>
+                    <div className="grid grid-cols-4 gap-1">
+                      {(["N","NE","E","SE","S","SW","W","NW"] as Azimuth[]).map((a) => (
+                        <button
+                          key={a}
+                          onClick={() => setAzimuth(a)}
+                          className={`px-1 py-1.5 text-[11px] rounded-md font-medium transition-colors ${
+                            azimuth === a
+                              ? "bg-sunpower-accent text-white"
+                              : "bg-foreground/[0.04] text-sunpower-text-secondary hover:bg-foreground/[0.08]"
+                          }`}
+                        >
+                          {a}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="border-t border-foreground/[0.06] pt-3 mb-4">
               <button className="w-full flex items-center justify-between text-sm text-sunpower-text-secondary hover:text-sunpower-text-primary transition-colors" onClick={() => setShowRateInput(!showRateInput)} aria-expanded={showRateInput}>
