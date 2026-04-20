@@ -1,122 +1,146 @@
-import { Star, Quote, Users, Zap, IndianRupee, TreeDeciduous } from "lucide-react";
+import {
+  ShieldCheck,
+  Satellite,
+  Sparkles,
+  BatteryCharging,
+  Globe2,
+  Mic,
+  Box,
+  Clock,
+  FileBadge,
+  Lock,
+} from "lucide-react";
 
-const TESTIMONIALS = [
+const FEATURES = [
   {
-    name: "Rajesh Kulkarni",
-    location: "Pune, Maharashtra",
-    initial: "RK",
-    color: "from-orange-400 to-red-500",
-    rating: 5,
-    quote:
-      "Drew my rooftop in 30 seconds. Report said 5.2 kWp, ₹68k yearly savings. My installer confirmed 5 kWp after site visit — spot on.",
-    system: "5 kWp · Installed Jan 2025",
+    icon: <Satellite className="w-5 h-5" />,
+    title: "NASA satellite data",
+    desc: "Live irradiance from NASA POWER per location.",
+    tint: "from-sky-500/10 to-sky-500/0 border-sky-500/20 text-sky-500",
   },
   {
-    name: "Priya Menon",
-    location: "Bengaluru, Karnataka",
-    initial: "PM",
-    color: "from-emerald-400 to-teal-500",
-    rating: 5,
-    quote:
-      "The PM Surya Ghar subsidy calculator was a game-changer. Knew exactly what to expect — ₹78,000 back from the govt, no surprises.",
-    system: "3 kWp · Installed Mar 2025",
+    icon: <Sparkles className="w-5 h-5" />,
+    title: "One-tap roof detection",
+    desc: "Fetches your building outline from OpenStreetMap.",
+    tint: "from-orange-500/10 to-orange-500/0 border-orange-500/20 text-orange-500",
   },
   {
-    name: "Amit Sharma",
-    location: "Delhi NCR",
-    initial: "AS",
-    color: "from-sky-400 to-blue-500",
-    rating: 5,
-    quote:
-      "Payback in 4.1 years matched what TATA Power quoted me. Used their installer via the marketplace — smooth from start to finish.",
-    system: "6.5 kWp · Installed Feb 2025",
+    icon: <BatteryCharging className="w-5 h-5" />,
+    title: "Battery + off-grid sizing",
+    desc: "LFP Li-ion recommendation with 25-yr cost.",
+    tint: "from-indigo-500/10 to-indigo-500/0 border-indigo-500/20 text-indigo-500",
   },
   {
-    name: "Lakshmi Iyer",
-    location: "Chennai, Tamil Nadu",
-    initial: "LI",
-    color: "from-violet-400 to-fuchsia-500",
-    rating: 4,
-    quote:
-      "Needed off-grid with battery backup — their calculator sized a 10 kWh LFP perfectly for my 4-person home. Works through every power cut.",
-    system: "4 kWp + 10 kWh · Installed Apr 2025",
+    icon: <Clock className="w-5 h-5" />,
+    title: "Time-of-use scheduling",
+    desc: "Know when to run AC, washer, EV for max self-use.",
+    tint: "from-emerald-500/10 to-emerald-500/0 border-emerald-500/20 text-emerald-500",
+  },
+  {
+    icon: <Box className="w-5 h-5" />,
+    title: "3D + AR rooftop preview",
+    desc: "See panels arranged on your roof. WebXR on Android.",
+    tint: "from-violet-500/10 to-violet-500/0 border-violet-500/20 text-violet-500",
+  },
+  {
+    icon: <Globe2 className="w-5 h-5" />,
+    title: "5 Indian languages",
+    desc: "English, हिन्दी, मराठी, தமிழ், বাংলা.",
+    tint: "from-amber-500/10 to-amber-500/0 border-amber-500/20 text-amber-500",
+  },
+  {
+    icon: <Mic className="w-5 h-5" />,
+    title: "Voice search",
+    desc: "Speak your address — Indian English + regional.",
+    tint: "from-rose-500/10 to-rose-500/0 border-rose-500/20 text-rose-500",
+  },
+  {
+    icon: <FileBadge className="w-5 h-5" />,
+    title: "PM Surya Ghar built-in",
+    desc: "Auto-calculates your ₹30k–₹78k govt subsidy.",
+    tint: "from-green-500/10 to-green-500/0 border-green-500/20 text-green-500",
   },
 ];
 
-const STATS = [
-  { icon: <Users className="w-5 h-5" />, value: "5,000+", label: "Rooftops analyzed" },
-  { icon: <Zap className="w-5 h-5" />, value: "28 MW", label: "Solar potential mapped" },
-  { icon: <IndianRupee className="w-5 h-5" />, value: "₹42 Cr", label: "Projected lifetime savings" },
-  { icon: <TreeDeciduous className="w-5 h-5" />, value: "12,800", label: "Trees-equivalent CO₂ offset" },
+const CREDENTIALS = [
+  {
+    icon: <Satellite className="w-4 h-4" />,
+    label: "NASA POWER",
+    sub: "Satellite-derived irradiance · open data",
+  },
+  {
+    icon: <ShieldCheck className="w-4 h-4" />,
+    label: "MNRE-empanelled partners",
+    sub: "PM Surya Ghar end-to-end paperwork",
+  },
+  {
+    icon: <Lock className="w-4 h-4" />,
+    label: "TRAI-compliant",
+    sub: "No spam · Your number stays private",
+  },
+  {
+    icon: <FileBadge className="w-4 h-4" />,
+    label: "OpenStreetMap",
+    sub: "Building footprints · open geospatial data",
+  },
 ];
 
 const Testimonials = () => {
   return (
-    <section className="py-16 sm:py-20 px-4 bg-background" aria-label="Testimonials and stats">
+    <section className="py-14 sm:py-20 px-4 bg-background" aria-label="Features and trust credentials">
       <div className="max-w-6xl mx-auto">
-        {/* Stats band */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-12 sm:mb-16">
-          {STATS.map((s) => (
+        <div className="text-center mb-10 sm:mb-12">
+          <h2 className="font-display text-3xl sm:text-4xl gradient-text mb-2 leading-tight">
+            Everything a rooftop needs
+          </h2>
+          <p className="text-sm text-sunpower-text-muted max-w-xl mx-auto">
+            Built on open satellite data and verified installer networks — no guesswork, no vendor lock-in.
+          </p>
+        </div>
+
+        {/* Feature grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          {FEATURES.map((f) => (
             <div
-              key={s.label}
-              className="bg-sunpower-bg-card rounded-xl p-4 sm:p-5 text-center border border-foreground/[0.06] hover:border-sunpower-accent/30 transition-colors"
+              key={f.title}
+              className={`bg-gradient-to-br ${f.tint} border rounded-2xl p-4 sm:p-5 hover:shadow-float transition-shadow`}
             >
-              <div className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-sunpower-accent/10 text-sunpower-accent mb-2">
-                {s.icon}
+              <div className={`inline-flex items-center justify-center w-10 h-10 rounded-lg bg-current/10 mb-2.5 ${f.tint.split(" ").find((c) => c.startsWith("text-")) || ""}`}>
+                {f.icon}
               </div>
-              <div className="font-display text-xl sm:text-2xl text-sunpower-text-primary">{s.value}</div>
-              <div className="text-[11px] sm:text-xs text-sunpower-text-muted leading-tight mt-0.5">{s.label}</div>
+              <div className="text-[15px] font-medium text-sunpower-text-primary mb-1 leading-tight">
+                {f.title}
+              </div>
+              <div className="text-xs text-sunpower-text-muted leading-relaxed">{f.desc}</div>
             </div>
           ))}
         </div>
 
-        {/* Testimonials */}
-        <div className="text-center mb-10">
-          <h2 className="font-display text-3xl sm:text-4xl gradient-text mb-2">Trusted by homeowners across India</h2>
-          <p className="text-sm text-sunpower-text-muted">Real people. Real rooftops. Real savings.</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-          {TESTIMONIALS.map((t) => (
-            <div
-              key={t.name}
-              className="bg-sunpower-bg-card rounded-2xl p-5 sm:p-6 border border-foreground/[0.06] hover:shadow-float hover:border-sunpower-accent/30 transition-all relative"
-            >
-              <Quote className="w-6 h-6 text-sunpower-accent/20 absolute top-4 right-4" />
-              <div className="flex items-center gap-3 mb-3">
-                <div
-                  className={`w-11 h-11 rounded-full bg-gradient-to-br ${t.color} flex items-center justify-center text-white font-semibold text-sm shadow-md`}
-                  aria-hidden="true"
-                >
-                  {t.initial}
+        {/* Security + credentials strip */}
+        <div className="mt-10 sm:mt-14">
+          <div className="text-center mb-5">
+            <div className="inline-flex items-center gap-2 text-xs font-medium text-sunpower-text-muted tracking-wide uppercase">
+              <ShieldCheck className="w-3.5 h-3.5" /> Trust & Compliance
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+            {CREDENTIALS.map((c) => (
+              <div
+                key={c.label}
+                className="bg-sunpower-bg-card border border-foreground/[0.06] rounded-xl px-4 py-3 flex items-start gap-3 hover:border-sunpower-accent/30 transition-colors"
+              >
+                <div className="w-8 h-8 rounded-lg bg-sunpower-accent/10 text-sunpower-accent flex items-center justify-center shrink-0">
+                  {c.icon}
                 </div>
                 <div className="min-w-0">
-                  <div className="font-medium text-sunpower-text-primary truncate">{t.name}</div>
-                  <div className="text-[11px] text-sunpower-text-muted truncate">{t.location}</div>
+                  <div className="text-[13px] font-medium text-sunpower-text-primary leading-tight">
+                    {c.label}
+                  </div>
+                  <div className="text-[11px] text-sunpower-text-muted leading-snug mt-0.5">{c.sub}</div>
                 </div>
               </div>
-              <div className="flex gap-0.5 mb-2" aria-label={`${t.rating} out of 5 stars`}>
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Star
-                    key={i}
-                    className={`w-3.5 h-3.5 ${i < t.rating ? "fill-amber-400 text-amber-400" : "text-muted"}`}
-                  />
-                ))}
-              </div>
-              <p className="text-sm text-sunpower-text-secondary leading-relaxed mb-3">&ldquo;{t.quote}&rdquo;</p>
-              <div className="text-[11px] text-sunpower-accent font-medium border-t border-foreground/[0.06] pt-2.5">
-                {t.system}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Trust badges */}
-        <div className="mt-10 sm:mt-12 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-xs text-sunpower-text-muted">
-          <span className="flex items-center gap-1.5">🛰️ NASA POWER data</span>
-          <span className="flex items-center gap-1.5">🇮🇳 PM Surya Ghar compatible</span>
-          <span className="flex items-center gap-1.5">✅ MNRE-empanelled installer network</span>
-          <span className="flex items-center gap-1.5">🔒 TRAI-compliant · No spam</span>
+            ))}
+          </div>
         </div>
       </div>
     </section>

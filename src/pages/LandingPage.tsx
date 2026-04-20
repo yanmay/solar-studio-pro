@@ -28,40 +28,49 @@ const LandingPage = () => {
   return (
     <div className="min-h-screen" role="main">
       {/* Language switcher top-right */}
-      <div className="absolute top-4 right-4 z-50">
+      <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-50">
         <LanguageSwitcher />
       </div>
 
       {/* Hero Section */}
       <section
-        className="hero-gradient min-h-screen flex items-center justify-center px-4"
+        className="hero-gradient min-h-screen flex items-center justify-center px-4 pt-[max(4.5rem,env(safe-area-inset-top))] pb-12 sm:py-0"
         aria-label="Hero — Analyze your rooftop solar potential"
       >
-        <div className="text-center max-w-3xl mx-auto flex flex-col items-center gap-6">
+        <div className="text-center max-w-3xl mx-auto flex flex-col items-center gap-4 sm:gap-6 w-full">
           {/* Logo */}
-          <div className="flex items-center gap-3">
-            <Sun className="w-12 h-12 text-sunpower-accent" aria-hidden="true" />
-            <h1 className="font-display text-[clamp(42px,8vw,64px)] leading-[1.1] text-white tracking-tight">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Sun className="w-9 h-9 sm:w-12 sm:h-12 text-sunpower-accent drop-shadow-lg" aria-hidden="true" />
+            <h1 className="font-display text-[clamp(34px,9vw,64px)] leading-[1.05] text-white tracking-tight drop-shadow-md">
               {t("app.name")}
             </h1>
           </div>
 
           {/* Subheading */}
-          <p className="text-xl text-white/90 max-w-lg">
+          <p className="text-base sm:text-xl text-white/95 max-w-lg font-medium px-2">
             {t("app.tagline")}
           </p>
 
-          {/* Body copy */}
-          <p className="text-[15px] text-white/75 max-w-[520px] leading-relaxed">
+          {/* Body copy — shorter on mobile */}
+          <p className="text-[13px] sm:text-[15px] text-white/80 max-w-[520px] leading-relaxed px-4 sm:px-0">
             {t("landing.subtitle")}
           </p>
 
-          <div className="relative group mt-2 w-full sm:w-auto">
+          {/* Trust micro-row — above CTA so users see credibility before commit */}
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] sm:text-[11px] text-white/75 font-medium tracking-wide uppercase">
+            <span className="flex items-center gap-1">🛰️ NASA POWER</span>
+            <span className="opacity-50">·</span>
+            <span className="flex items-center gap-1">🇮🇳 PM Surya Ghar</span>
+            <span className="opacity-50">·</span>
+            <span className="flex items-center gap-1">✅ MNRE partners</span>
+          </div>
+
+          <div className="relative group mt-1 sm:mt-2 w-full sm:w-auto px-4 sm:px-0">
             <div className="absolute -inset-0.5 bg-gradient-to-r from-sunpower-accent to-sunpower-success rounded-[999px] blur opacity-40 group-hover:opacity-70 transition duration-500"></div>
             <Button
               variant="hero"
               onClick={() => { track("CTA Analyze Click", { source: "hero" }); navigate("/map"); }}
-              className="relative w-full sm:w-auto h-14 text-lg"
+              className="relative w-full sm:w-auto h-12 sm:h-14 text-base sm:text-lg"
               id="hero-cta"
               aria-label="Start analyzing your rooftop solar potential"
             >
@@ -69,20 +78,20 @@ const LandingPage = () => {
             </Button>
           </div>
 
-          {/* Feature Cards */}
-          <div className="flex flex-col sm:flex-row gap-4 mt-8 w-full max-w-[760px]">
+          {/* Feature Cards — 3-col on phone too, compact */}
+          <div className="grid grid-cols-3 sm:flex sm:flex-row gap-2 sm:gap-4 mt-4 sm:mt-8 w-full max-w-[760px]">
             <FeatureCard
-              icon={<Zap className="w-8 h-8" />}
+              icon={<Zap className="w-6 h-6 sm:w-8 sm:h-8" />}
               title={t("landing.featureEnergyTitle")}
               description={t("landing.featureEnergyDesc")}
             />
             <FeatureCard
-              icon={<BarChart3 className="w-8 h-8" />}
+              icon={<BarChart3 className="w-6 h-6 sm:w-8 sm:h-8" />}
               title={t("landing.featureSavingsTitle")}
               description={t("landing.featureSavingsDesc")}
             />
             <FeatureCard
-              icon={<Leaf className="w-8 h-8" />}
+              icon={<Leaf className="w-6 h-6 sm:w-8 sm:h-8" />}
               title={t("landing.featureGreenTitle")}
               description={t("landing.featureGreenDesc")}
             />
@@ -90,7 +99,7 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* Testimonials + stats */}
+      {/* Features + Trust credentials */}
       <Testimonials />
 
       {/* SolarNet Technology Section */}

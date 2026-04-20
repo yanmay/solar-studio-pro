@@ -4,7 +4,10 @@ import { useState, useRef, useEffect } from "react";
 import { SUPPORTED_LANGS } from "@/i18n";
 import { track } from "@/lib/analytics";
 
-const LanguageSwitcher = ({ className = "" }: { className?: string }) => {
+const LanguageSwitcher = ({
+  className = "",
+  align = "right",
+}: { className?: string; align?: "left" | "right" }) => {
   const { i18n } = useTranslation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -37,7 +40,7 @@ const LanguageSwitcher = ({ className = "" }: { className?: string }) => {
       {open && (
         <div
           role="listbox"
-          className="absolute right-0 mt-2 w-44 bg-sunpower-bg-card border border-foreground/[0.08] rounded-xl shadow-float overflow-hidden z-[2000] animate-fade-in"
+          className={`absolute ${align === "left" ? "left-0" : "right-0"} mt-2 w-44 bg-sunpower-bg-card border border-foreground/[0.08] rounded-xl shadow-float overflow-hidden z-[2000] animate-fade-in`}
         >
           {SUPPORTED_LANGS.map((l) => (
             <button

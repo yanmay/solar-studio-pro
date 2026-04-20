@@ -1402,7 +1402,7 @@ const MapPage = () => {
       {/* ── Theme Toggle + Zoom ──────────────────────────── */}
       <div className="absolute top-[max(1rem,env(safe-area-inset-top))] sm:top-6 left-3 sm:left-4 z-[1000] scale-90 sm:scale-100 origin-top-left flex flex-col gap-2">
         <ThemeToggle />
-        <LanguageSwitcher />
+        <LanguageSwitcher align="left" />
       </div>
 
       <div className="absolute bottom-44 sm:bottom-8 right-3 sm:right-4 z-[1000] flex flex-col gap-1.5" role="group" aria-label="Map controls">
