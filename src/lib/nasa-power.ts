@@ -1,6 +1,9 @@
 // NASA POWER API client for solar irradiance data
 // Fetches solar data from the server-side API proxy.
 
+import { getRegionalPSH } from "./india-grid";
+import { captureApiError } from "./sentry";
+
 export interface NASAPowerResponse {
   properties: {
     parameter: {
@@ -21,6 +24,14 @@ export interface MonthlyGHIResult {
   lat: number;
   lng: number;
   year: number;
+}
+
+// In-memory cache: key → { data, timestamp }
+const cache = new Map<string, { data: IrradianceResult; timestamp: number }>();
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function cacheKey(lat: number, lng: number): string {
+  return `${lat.toFixed(2)}_${lng.toFixed(2)}`;
 }
 
 /**
@@ -57,14 +68,22 @@ const MONTH_KEYS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP
  * monthly GHI array into the IrradianceResult shape consumed by MapPage.
  */
 export async function fetchSolarIrradiance(lat: number, lng: number): Promise<IrradianceResult> {
+  const key = cacheKey(lat, lng);
+
+  // Check cache
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
   try {
     const data = await fetchSolarData(lat, lng);
     const monthlyGhi = data.monthly_ghi;
 
     // Convert flat array [Jan..Dec] to keyed record
     const monthlyValues: Record<string, number> = {};
-    MONTH_KEYS.forEach((key, i) => {
-      monthlyValues[key] = monthlyGhi[i] ?? 0;
+    MONTH_KEYS.forEach((k, i) => {
+      monthlyValues[k] = monthlyGhi[i] ?? 0;
     });
 
     // Annual average = mean of the 12 monthly values
@@ -74,17 +93,27 @@ export async function fetchSolarIrradiance(lat: number, lng: number): Promise<Ir
         ? validValues.reduce((sum, v) => sum + v, 0) / validValues.length
         : 4.5; // regional fallback
 
-    return {
+    const result: IrradianceResult = {
       peakSunHours: Math.round(peakSunHours * 100) / 100,
       source: "NASA_POWER",
       monthlyValues,
     };
-  } catch {
-    // Graceful fallback if the Edge proxy is unavailable (local dev without vercel dev)
-    return {
-      peakSunHours: 4.5,
+
+    cache.set(key, { data: result, timestamp: Date.now() });
+    return result;
+  } catch (error) {
+    console.error("[nasa-power] API failed, using regional fallback:", error);
+    captureApiError("nasa-power", error, { lat, lng });
+
+    // Fallback to regional lookup
+    const { psh, region } = getRegionalPSH(lat, lng);
+    const result: IrradianceResult = {
+      peakSunHours: psh,
       source: "REGIONAL_FALLBACK",
-      region: "India average",
+      region,
     };
+
+    cache.set(key, { data: result, timestamp: Date.now() });
+    return result;
   }
 }

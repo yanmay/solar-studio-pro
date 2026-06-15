@@ -9,6 +9,8 @@ import {
   EMISSION_FACTOR_KG,
   CO2_PER_TREE_KG_YR,
   SYSTEM_LIFETIME_YRS,
+  SYSTEM_COST_PER_KW_INR_TIERS,
+  calcSubsidyInr,
   MIN_AREA_M2,
   MAX_AREA_M2,
   MIN_PSH,
@@ -74,6 +76,32 @@ export function calcFinancials(
   };
 }
 
+/** Step 5b: System cost (turn-key, INR) — uses tiered ₹/kW pricing */
+export function calcSystemCost(installedKw: number): number {
+  for (const tier of SYSTEM_COST_PER_KW_INR_TIERS) {
+    if (installedKw <= tier.maxKw) return Math.round(installedKw * tier.cost);
+  }
+  return Math.round(installedKw * 50000);
+}
+
+/** Step 5c: Investment summary — subsidy, net cost, payback period */
+export function calcInvestment(
+  installedKw: number,
+  annualSavingsInr: number,
+): { systemCostInr: number; subsidyInr: number; netCostInr: number; paybackYears: number; roi25yrPercent: number } {
+  const systemCostInr = calcSystemCost(installedKw);
+  const subsidyInr = calcSubsidyInr(installedKw);
+  const netCostInr = Math.max(0, systemCostInr - subsidyInr);
+  const paybackYears = annualSavingsInr > 0
+    ? Math.round((netCostInr / annualSavingsInr) * 10) / 10
+    : 0;
+  const lifetimeSavings = annualSavingsInr * SYSTEM_LIFETIME_YRS;
+  const roi25yrPercent = netCostInr > 0
+    ? Math.round(((lifetimeSavings - netCostInr) / netCostInr) * 100)
+    : 0;
+  return { systemCostInr, subsidyInr, netCostInr, paybackYears, roi25yrPercent };
+}
+
 /** Step 6: CO₂ impact */
 export function calcCO2Impact(annualKwh: number): { annualKg: number; yr25Kg: number; trees: number } {
   const annualKg = Math.round(annualKwh * EMISSION_FACTOR_KG * 10) / 10;
@@ -102,6 +130,13 @@ export interface SolarAnalysis {
     monthlySavingsInr: number;
     annualSavingsInr: number;
     savings25yrInr: number;
+  };
+  investment: {
+    systemCostInr: number;
+    subsidyInr: number;
+    netCostInr: number;
+    paybackYears: number;
+    roi25yrPercent: number;
   };
   environmental: {
     co2AnnualKg: number;
@@ -177,6 +212,9 @@ export function runFullCalculation(
   // Step 5
   const financials = calcFinancials(annualKwh, electricityRate);
 
+  // Step 5b/c
+  const investment = calcInvestment(installedKw, financials.annual);
+
   // Step 6
   const co2 = calcCO2Impact(annualKwh);
 
@@ -199,6 +237,7 @@ export function runFullCalculation(
       annualSavingsInr: financials.annual,
       savings25yrInr: financials.yr25,
     },
+    investment,
     environmental: {
       co2AnnualKg: co2.annualKg,
       co2_25yrKg: co2.yr25Kg,

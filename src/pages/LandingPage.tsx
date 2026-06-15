@@ -25,6 +25,7 @@ import {
   FileIcon,
 } from "@/components/ui/animated-state-icons";
 import { CTASection } from "@/components/ui/cta-with-glow";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 const LandingPage = () => {
   const navigate = useNavigate();
@@ -284,7 +285,8 @@ const LandingPage = () => {
             ))}
           </div>
 
-          <div className="hidden md:flex items-center space-x-3">
+          <div className="hidden md:flex items-center space-x-4">
+            <LanguageSwitcher />
             <button
               onClick={() => navigate("/map")}
               className="btn-primary px-5 h-10 text-sm font-bold rounded-xl active:scale-[0.98] transition-all border-none cursor-pointer bg-[#FF6600] text-black hover:bg-orange-500 shadow-lg shadow-[#FF6600]/20 hover:shadow-[#FF6600]/40"
@@ -293,7 +295,8 @@ const LandingPage = () => {
             </button>
           </div>
 
-          <div className="md:hidden">
+          <div className="md:hidden flex items-center space-x-2">
+            <LanguageSwitcher />
             <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2 active:scale-90 transition-transform text-white">
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>

@@ -55,3 +55,6 @@ step_*_full.txt
 # Nested duplicate repository and temporary directories
 solar-studio-pro/
 stitch_solar_intelligence_report_executive_summary (1)/
+
+# Claude Code local config
+.claude/

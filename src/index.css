@@ -304,6 +304,45 @@
   }
 }
 
+/* Opacity-only fade (safe to use with transform-based positioning like -translate-x-1/2) */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fadeIn 0.35s ease-out both;
+}
+
+/* Glassmorphism card */
+.glass-card {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.25);
+  backdrop-filter: blur(12px);
+}
+
+.dark .glass-card {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.12);
+}
+
+/* Count-up animation for numbers */
+@keyframes countUpFade {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-count-up {
+  animation: countUpFade 0.6s ease-out both;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 .animate-flow-dash {
   stroke-dasharray: 6, 4;
   animation: flowDash 0.8s linear infinite;

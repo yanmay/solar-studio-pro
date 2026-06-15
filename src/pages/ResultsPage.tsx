@@ -11,6 +11,18 @@ import {
   Satellite,
   MapPin,
   AlertTriangle,
+  Battery,
+  Clock,
+  PhoneCall,
+  Share2,
+  Square,
+  Zap,
+  IndianRupee,
+  Leaf,
+  TreeDeciduous,
+  Wallet,
+  Calendar,
+  BadgePercent
 } from "lucide-react";
 import { AnimatedThemeToggleButton } from "@/components/ui/animated-theme-toggle-button";
 import { SnappySlider } from "@/components/ui/snappy-slider";
@@ -42,6 +54,7 @@ import {
   trackResultsViewed,
   trackPaywallShown,
   trackPaymentInitiated,
+  track
 } from "@/lib/analytics";
 import {
   Dialog,
@@ -54,6 +67,13 @@ import { cn } from "@/lib/utils";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+
+// Remote i18n & widget additions
+import LeadCaptureForm from "@/components/LeadCaptureForm";
+import InstallerMarketplace from "@/components/InstallerMarketplace";
+import TimeOfUseCard from "@/components/TimeOfUseCard";
+import RooftopARViewer from "@/components/RooftopARViewer";
+import { recommendBattery, type BackupMode } from "@/lib/battery-calc";
 
 // ─── Color tokens from code.html ─────────────────────────────
 const C = {
@@ -85,6 +105,14 @@ interface FullResult extends SolarAnalysis {
   suitabilityScore?: number;
   horizonShadingLoss?: number;
   skyViewFactor?: number;
+  battery?: {
+    mode: "none" | "evening" | "offgrid";
+    recommendedKwh: number;
+    costInr: number;
+    lifetimeCostInr: number;
+    backupHours: number;
+    description: string;
+  };
 }
 
 const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -182,7 +210,7 @@ function InstallerLeadForm({ data }: { data: FullResult }) {
     </div>
   );
   return (
-    <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4">
+    <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 rounded-xl">
       <h3 style={{ color: C.onSurface, borderBottom: `1px solid ${C.outlineVariant}`, paddingBottom: "8px", marginBottom: "12px" }}
         className="text-xs font-bold uppercase tracking-wider font-mono">Request Partner Quotes</h3>
       <p className="text-xs mb-4" style={{ color: C.mutedSand }}>Get direct quotes from MNRE-certified partners near you.</p>
@@ -201,7 +229,7 @@ function InstallerLeadForm({ data }: { data: FullResult }) {
         ))}
         <button type="submit" disabled={submitting}
           style={{ background: C.secondary, color: C.onSecondary }}
-          className="w-full py-2.5 text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
+          className="w-full py-2.5 text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer font-mono">
           {submitting ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Submitting...</> : "Submit Request"}
         </button>
       </form>
@@ -227,7 +255,7 @@ function DataList({ rows }: { rows: { label: string; value: string }[] }) {
 // ─── Sidebar card shell ──────────────────────────────────────
 function SideCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 sp-card">
+    <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 sp-card rounded-xl">
       <h3 className="text-xs font-bold uppercase tracking-wider mb-3 font-mono"
         style={{ color: C.onSurface, borderBottom: `1px solid ${C.outlineVariant}`, paddingBottom: "8px" }}>{title}</h3>
       {children}
@@ -250,7 +278,7 @@ function RoofLayoutDiagram({
 
   if (!polygons || polygons.length === 0 || (polygons[0]?.coordinates[0]?.length ?? 0) === 0) {
     return (
-      <div style={{ background: `${C.surfaceVariant}30`, border: `1px solid ${C.outlineVariant}`, height: 96 }} className="flex items-center justify-center">
+      <div style={{ background: `${C.surfaceVariant}30`, border: `1px solid ${C.outlineVariant}`, height: 96 }} className="flex items-center justify-center rounded-lg">
         <span className="text-xs font-mono" style={{ color: C.mutedSand }}>No roof data available</span>
       </div>
     );
@@ -291,7 +319,6 @@ function RoofLayoutDiagram({
       setbackM: panelConfig?.setbackM ?? 0.5,
     });
     result.panels.forEach((panel) => {
-      // corners are [lat, lng] pairs
       allPanelSVG.push(panel.corners.map(([lat, lng]) => project(lng, lat)));
     });
   });
@@ -299,17 +326,15 @@ function RoofLayoutDiagram({
   const panelCount = allPanelSVG.length;
 
   return (
-    <div style={{ border: `1px solid ${C.outlineVariant}`, overflow: "hidden", borderRadius: 2 }}>
+    <div style={{ border: `1px solid ${C.outlineVariant}`, overflow: "hidden" }} className="rounded-lg">
       <svg width={W} height={H} style={{ display: "block", background: "#0c1018" }}>
         <defs>
           <pattern id="rld-grid" width="12" height="12" patternUnits="userSpaceOnUse">
             <path d="M 12 0 L 0 0 0 12" fill="none" stroke="#1a2233" strokeWidth="0.4" />
           </pattern>
         </defs>
-        {/* Satellite-style background */}
         <rect width={W} height={H} fill="url(#rld-grid)" />
 
-        {/* Roof polygon fills */}
         {polygons.map((poly, pi) => {
           const coords = (poly.coordinates[0] ?? []).map(([lng, lat]) => project(lng, lat));
           return (
@@ -323,7 +348,6 @@ function RoofLayoutDiagram({
           );
         })}
 
-        {/* Solar panels */}
         {allPanelSVG.map((corners, i) => (
           <polygon
             key={`panel-${i}`}
@@ -334,7 +358,6 @@ function RoofLayoutDiagram({
           />
         ))}
 
-        {/* Panel count badge */}
         <rect x={W - 52} y={H - 18} width={48} height={14} fill="#00000080" rx="1" />
         <text x={W - 28} y={H - 7} textAnchor="middle" fill={C.secondary} fontSize="7" fontFamily="monospace">
           {panelCount} panels
@@ -357,6 +380,7 @@ const ResultsPage = () => {
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [noData, setNoData] = useState(false);
+  const [leadFormOpen, setLeadFormOpen] = useState(false);
 
   const hasTrackedViewed  = useRef(false);
   const hasTrackedPaywall = useRef(false);
@@ -371,7 +395,6 @@ const ResultsPage = () => {
   const [batteryStorage, setBatteryStorage] = useState(false);
   const [shading,        setShading]        = useState<"none" | "partial" | "heavy">("none");
   const [activeTab,      setActiveTab]      = useState<"roi"|"yield"|"monthly">("roi");
-  const [inflationRate,  setInflationRate]  = useState(5);
 
   const handleShadingChange = (newShading: "none" | "partial" | "heavy") => {
     setShading(newShading);
@@ -406,147 +429,92 @@ const ResultsPage = () => {
   useEffect(() => { document.body.style.overflow = "unset"; document.body.style.pointerEvents = "unset"; }, []);
   useEffect(() => { if (!checkoutOpen || unlocked) { document.body.style.overflow = "unset"; document.body.style.pointerEvents = "unset"; } }, [checkoutOpen, unlocked]);
 
-  // Re-fetch report when payment succeeds to load full gated metrics
+  // Re-fetch/hydrate scan results on mount
   useEffect(() => {
-    if (store.isPaid && data && !data.unlocked) {
-      const enc = searchParams.get("scan");
-      if (enc) {
+    // 1. Check scan URL query parameter
+    const enc = searchParams.get("scan");
+    if (enc) {
+      try {
         const decoded = decodeScanFromUrl(enc);
         if (decoded) {
-          const { scanInput } = decoded;
-          const siteId = `sunpower_${Math.abs(Math.round(scanInput.lat * 100000))}_${Math.abs(Math.round(scanInput.lng * 100000))}`;
-          (async () => {
-            try {
-              const res = await fetch(`/api/report?siteId=${siteId}&scan=${encodeURIComponent(enc)}`);
-              if (res.ok) {
-                const resData = await res.json();
-                const fr = {
-                  ...resData,
-                  location: {
-                    lat: scanInput.lat,
-                    lng: scanInput.lng,
-                    label: scanInput.address || `${scanInput.lat.toFixed(4)}, ${scanInput.lng.toFixed(4)}`
-                  },
-                  panelCount: decoded.panelConfig.panelCount
-                };
-                setData(fr);
-                store.setFullAnalysis(fr);
-              }
-            } catch (err) {
-              console.error("Failed to re-fetch report on payment success:", err);
+          const areaVal = decoded.scanInput.roofAreaM2;
+          const pWatt = decoded.panelConfig.panelWattage ?? 450;
+          const pCountVal = decoded.panelConfig.panelCount ?? 15;
+          const customCapacityKw = Math.round((pCountVal * pWatt / 1000) * 100) / 100;
+          
+          setTariff(decoded.tariff.tariffPerKwh);
+          setPType(pWatt === 550 ? "premium" : "compact");
+          setPCount(pCountVal);
+          setShading(decoded.panelConfig.shading || "none");
+          maxPanelsRef.current = pCountVal;
+
+          const centroid = calcCentroid(decoded.scanInput.roofPolygon?.[0]?.coordinates?.[0]?.map(c => ({ lat: c[1], lng: c[0] })) ?? []);
+
+          fetchSolarIrradiance(centroid.lat, centroid.lng).then((irradiance) => {
+            const analysis = runFullCalculation(areaVal, irradiance.peakSunHours, {
+              electricityRate: decoded.tariff.tariffPerKwh,
+              irradianceSource: irradiance.source,
+              monthlyIrradiance: irradiance.monthlyValues,
+              customCapacityKw,
+              panelCount: pCountVal,
+              panelType: pWatt === 550 ? "premium" : "compact",
+              shading: decoded.panelConfig.shading || "none",
+            });
+
+            const fullResult = {
+              ...analysis,
+              location: {
+                lat: centroid.lat,
+                lng: centroid.lng,
+                label: decoded.scanInput.address || "Rooftop Structure",
+              },
+              panelCount: pCountVal,
+              unlocked: decoded.scanInput.unlocked
+            };
+
+            store.setScanInput(decoded.scanInput);
+            store.setPanelConfig(decoded.panelConfig);
+            store.setTariff(decoded.tariff);
+            store.setFullAnalysis(fullResult);
+
+            if (decoded.scanInput.unlocked !== false) {
+              store.setIsPaid(true, `pay_mock_${Date.now()}`);
+            } else {
+              store.setIsPaid(false);
             }
-          })();
-        }
-      }
-    }
-  }, [store.isPaid, searchParams]);
 
-  // Coordinate all initial loading states to prevent race conditions and flickering
-  useEffect(() => {
-    const enc = searchParams.get("scan");
-
-    // 1. If scan query parameter is in URL, fetch it from backend.
-    if (enc) {
-      const decoded = decodeScanFromUrl(enc);
-      if (!decoded) {
-        setNoData(true);
-        setLoading(false);
-        return;
-      }
-      
-      setLoading(true);
-      setNoData(false);
-
-      let active = true;
-      (async () => {
-        try {
-          const { scanInput, panelConfig } = decoded;
-          const siteId = `sunpower_${Math.abs(Math.round(scanInput.lat * 100000))}_${Math.abs(Math.round(scanInput.lng * 100000))}`;
-
-          const res = await fetch(`/api/report?siteId=${siteId}&scan=${encodeURIComponent(enc)}`);
-          if (!res.ok) {
-            throw new Error("Failed to fetch report from server");
-          }
-          const resData = await res.json();
-          if (!active) return;
-
-          const fr = {
-            ...resData,
-            location: {
-              lat: scanInput.lat,
-              lng: scanInput.lng,
-              label: scanInput.address || `${scanInput.lat.toFixed(4)}, ${scanInput.lng.toFixed(4)}`
-            },
-            panelCount: panelConfig.panelCount
-          };
-
-          const s = useScanStore.getState();
-          s.setScanInput(scanInput);
-          s.setPanelConfig(panelConfig);
-          s.setTariff({ tariffPerKwh: resData.financials.electricityRateInr });
-          s.setFullAnalysis(fr);
-          if (resData.unlocked) {
-            s.setIsPaid(true, `pay_backend`);
-          }
-
-          setData(fr);
-          setTariff(resData.financials.electricityRateInr);
-          setPType(resData.panelType ?? "compact");
-          setPCount(resData.panelCount ?? 15);
-          setShading(panelConfig.shading || "none");
-          maxPanelsRef.current = resData.panelCount ?? 15;
-
-          if (!hasTrackedViewed.current) {
-            trackResultsViewed(fr.energy.installedCapacityKw);
-            hasTrackedViewed.current = true;
-          }
-          setNoData(false);
-        } catch (error) {
-          if (!active) return;
-          console.error("URL Load failed:", error);
-          toast({
-            title: "Load Failed",
-            description: "Could not load the shared solar report.",
-            variant: "destructive"
-          });
-          setNoData(true);
-        } finally {
-          if (active) {
+            setData(fullResult);
             setLoading(false);
-          }
+          }).catch(() => {
+            setLoading(false);
+            setNoData(true);
+          });
+          return;
         }
-      })();
-
-      return () => {
-        active = false;
-      };
+      } catch (e) {
+        console.error("Geode decode scan parameter error:", e);
+      }
     }
 
-    // 2. If no scan query param, check store.fullAnalysis
-    const s = useScanStore.getState();
-    const fa = s.fullAnalysis;
-    if (fa) {
-      setData(fa);
-      setTariff(fa.financials.electricityRateInr);
-      setPType(fa.panelType ?? "compact");
-      setPCount(fa.panelCount ?? 15);
+    // 2. Check scan store
+    const s = store;
+    if (s.fullAnalysis) {
+      setData(s.fullAnalysis);
+      setTariff(s.tariff?.tariffPerKwh ?? 7.5);
+      setPType(s.panelConfig?.panelWattage === 550 ? "premium" : "compact");
+      setPCount(s.panelConfig?.panelCount ?? 15);
       setShading(s.panelConfig?.shading || "none");
-      maxPanelsRef.current = fa.panelCount ?? 15;
-      if (!hasTrackedViewed.current) {
-        trackResultsViewed(fa.energy.installedCapacityKw);
-        hasTrackedViewed.current = true;
-      }
-      setNoData(false);
+      maxPanelsRef.current = s.panelConfig?.panelCount ?? 15;
       setLoading(false);
       return;
     }
 
-    // 3. Fallback to sessionStorage
+    // 3. Check sessionStorage fallback
     const stored = sessionStorage.getItem("sunpower-results");
     if (stored) {
       try {
         const p = JSON.parse(stored);
-        if (p?.energy && p?.financials) {
+        if (p) {
           setData(p);
           setTariff(p.financials.electricityRateInr);
           setPType(p.panelType ?? "compact");
@@ -588,7 +556,6 @@ const ResultsPage = () => {
       }
     }
 
-    // 4. No data exists
     setNoData(true);
     setLoading(false);
   }, [searchParams, toast]);
@@ -623,14 +590,13 @@ const ResultsPage = () => {
     }, 1500);
   };
 
-  // ── Derived chart/display values ──────────────────────────
   if (noData) return (
     <div style={{ background: C.background }} className="min-h-screen flex items-center justify-center px-4">
-      <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="text-center max-w-md p-8 sp-fade-up">
+      <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="text-center max-w-md p-8 rounded-3xl sp-fade-up">
         <MapPin className="w-12 h-12 mx-auto mb-4" style={{ color: C.primary }} />
         <h1 style={{ fontFamily: "Sora, sans-serif", color: C.onSurface }} className="text-2xl font-semibold mb-2">No Analysis Found</h1>
         <p style={{ color: C.mutedSand }} className="text-sm mb-6">Draw your rooftop on the map first to generate a solar potential analysis report.</p>
-        <button onClick={() => navigate("/map")} style={{ background: C.primaryContainer, color: C.onPrimary }} className="px-6 py-2 text-xs font-bold uppercase tracking-wider">Go to Map →</button>
+        <button onClick={() => navigate("/map")} style={{ background: C.primaryContainer, color: C.onPrimary }} className="px-6 py-2.5 text-xs font-bold uppercase tracking-wider rounded-xl cursor-pointer">Go to Map →</button>
       </div>
     </div>
   );
@@ -661,9 +627,12 @@ const ResultsPage = () => {
   const roofObst    = Math.min(30, 100 - roofUsable - 10);
   const roofAccess  = 100 - roofUsable - roofObst;
 
+  // Hydrate BESS dynamic recommendations based on reactive slider models
+  const activeBattery = data.battery || (batteryStorage ? recommendBattery(model.baseAnnualKwh / 365, "evening") : null);
+
   return (
     <>
-      {/* ── Global styles + animations ────────────────────────── */}
+      {/* ── Global styles ────────────────────────── */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600&family=Inter:wght@400;500;600&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
@@ -671,7 +640,6 @@ const ResultsPage = () => {
         .sp-page * { box-sizing: border-box; }
         .sp-page { font-family: 'Inter', sans-serif; }
 
-        /* ── Keyframes ── */
         @keyframes sp-fade-up   { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:none; } }
         @keyframes sp-fade-in   { from { opacity:0; } to { opacity:1; } }
         @keyframes sp-spin      { to { transform:rotate(360deg); } }
@@ -683,7 +651,6 @@ const ResultsPage = () => {
         @keyframes sp-shimmer   { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
         @keyframes sp-count-in  { from{opacity:0;transform:scale(.85)} to{opacity:1;transform:scale(1)} }
 
-        /* ── Animation classes ── */
         .sp-fade-up   { animation: sp-fade-up .65s cubic-bezier(.16,1,.3,1) both; }
         .sp-fade-up-1 { animation: sp-fade-up .65s cubic-bezier(.16,1,.3,1) .05s both; }
         .sp-fade-up-2 { animation: sp-fade-up .65s cubic-bezier(.16,1,.3,1) .15s both; }
@@ -697,21 +664,18 @@ const ResultsPage = () => {
         .sp-border-glow { animation: sp-border-glow 3s ease-in-out infinite; }
         .sp-count-in  { animation: sp-count-in .5s cubic-bezier(.16,1,.3,1) .3s both; }
 
-        /* SVG gauge */
         .sp-gauge-ring { animation: sp-gauge-draw 1.5s cubic-bezier(.16,1,.3,1) .5s both; }
         @keyframes sp-gauge-draw {
           from { stroke-dashoffset: ${circumference}; }
           to   { stroke-dashoffset: ${dashOffset}; }
         }
 
-        /* Bar chart bars */
         .sp-lbar-1 { height:20%; animation: sp-bar-grow .7s ease .4s both; }
         .sp-lbar-2 { height:40%; animation: sp-bar-grow .7s ease .55s both; }
         .sp-lbar-3 { height:70%; animation: sp-bar-grow .7s ease .7s both; }
         .sp-lbar-4 { height:90%; animation: sp-bar-grow .7s ease .85s both; }
         .sp-lbar-5 { height:100%; animation: sp-bar-grow .7s ease 1s both; }
 
-        /* Terminal scan line */
         .sp-terminal { position:relative; overflow:hidden; }
         .sp-terminal::before {
           content:''; position:absolute; left:0; right:0; height:2px;
@@ -719,31 +683,23 @@ const ResultsPage = () => {
           animation: sp-scan-line 2.5s ease-in-out infinite;
         }
 
-        /* Cards */
         .sp-card { transition: border-color .2s, transform .2s; }
         .sp-card:hover { border-color: ${C.outline} !important; transform: translateY(-1px); }
         .sp-row:hover td { background: ${C.charcoal} !important; }
-
-        /* Sticky nav glass */
         .sp-nav { background: ${C.background}f0; backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); }
 
-        /* Toggle buttons */
-        .sp-toggle { border:1px solid ${C.outlineVariant}; background:transparent; color:${C.mutedSand}; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; padding:6px 12px; cursor:pointer; transition:all .15s; font-family:Inter,monospace; }
+        .sp-toggle { border:1px solid ${C.outlineVariant}; background:transparent; color:${C.mutedSand}; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; padding:6px 12px; cursor:pointer; transition:all .15s; font-family:Inter,monospace; border-radius: 8px; }
         .sp-toggle.on { background:${C.primaryContainer}20; border-color:${C.primaryContainer}; color:${C.primary}; }
         .sp-toggle:hover:not(.on) { background:${C.surfaceVariant}30; border-color:${C.outline}; color:${C.onSurface}; }
 
-        /* Chart tabs */
         .sp-tab { background:transparent; border:none; color:${C.mutedSand}; font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; padding:4px 12px; cursor:pointer; transition:all .15s; font-family:Inter,monospace; }
         .sp-tab.on { background:${C.primaryContainer}; color:${C.onPrimary}; }
         .sp-tab:hover:not(.on) { color:${C.onSurface}; }
 
-        /* Tooltip custom */
         .sp-tip { background:${C.surfaceContainerHigh}; border:1px solid ${C.outlineVariant}; padding:8px 12px; font-family:Inter,monospace; font-size:10px; }
 
         .tabular-nums { font-variant-numeric:tabular-nums; }
         .material-symbols-outlined { font-family:'Material Symbols Outlined'; font-style:normal; line-height:1; text-transform:none; white-space:nowrap; word-wrap:normal; direction:ltr; -webkit-font-smoothing:antialiased; }
-
-        /* Break-even bar fill transition */
         .sp-breakeven-fill { transition: width 1.2s cubic-bezier(.16,1,.3,1); }
       `}</style>
 
@@ -765,14 +721,16 @@ const ResultsPage = () => {
               <button onClick={() => navigate("/map")}
                 aria-label="Go back to map"
                 style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity">
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-lg">
                 <ArrowLeft className="w-3 h-3" /> Back
               </button>
-              <button onClick={handleDownload} disabled={downloading}
-                style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                className="hidden md:flex items-center gap-1.5 px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity disabled:opacity-40">
-                <Download className="w-3 h-3" /> {downloading ? "Generating..." : "Download PDF"}
-              </button>
+              {unlocked && (
+                <button onClick={handleDownload} disabled={downloading}
+                  style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+                  className="hidden md:flex items-center gap-1.5 px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity disabled:opacity-40 cursor-pointer rounded-lg">
+                  <Download className="w-3 h-3" /> {downloading ? "Generating..." : "Download PDF"}
+                </button>
+              )}
             </div>
           </div>
         </header>
@@ -806,7 +764,7 @@ const ResultsPage = () => {
               </p>
             </div>
             <div className="flex flex-wrap gap-2 shrink-0">
-              <div style={{ background: `${C.secondary}15`, border: `1px solid ${C.secondary}`, color: C.secondary }} className="flex items-center gap-2 px-4 py-2 sp-glow-pulse">
+              <div style={{ background: `${C.secondary}15`, border: `1px solid ${C.secondary}`, color: C.secondary }} className="flex items-center gap-2 px-4 py-2 sp-glow-pulse rounded-lg">
                 <CheckCircle2 className="w-4 h-4" />
                 <span className="text-[10px] font-bold uppercase tracking-wider">Investment Grade: A+</span>
               </div>
@@ -815,7 +773,7 @@ const ResultsPage = () => {
                   background: data.highWindWarning ? `${C.error}15` : `${C.secondary}15`, 
                   border: `1px solid ${data.highWindWarning ? C.error : C.secondary}`, 
                   color: data.highWindWarning ? C.error : C.secondary 
-                }} className="flex items-center gap-2 px-4 py-2">
+                }} className="flex items-center gap-2 px-4 py-2 rounded-lg">
                   <span className="material-symbols-outlined text-[14px]">windpower</span>
                   <span className="text-[10px] font-bold uppercase tracking-wider">Wind: {data.windZoneLabel}</span>
                 </div>
@@ -825,11 +783,11 @@ const ResultsPage = () => {
 
           {unlocked ? (
             /* ================================================================
-               UNLOCKED STATE — exact code.html layout
+               UNLOCKED STATE
             ================================================================ */
             <>
               {/* Executive Highlights Bar */}
-              <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="sp-fade-up-1">
+              <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="sp-fade-up-1 rounded-2xl overflow-hidden">
                 <div className="py-4 px-6 grid grid-cols-2 md:grid-cols-5 gap-4" style={{ borderBottom: `1px solid ${C.outlineVariant}` }}>
                   {[
                     { label: "IRR",             value: `${model.irr.toFixed(1)}%`,              color: C.onSurface },
@@ -863,9 +821,9 @@ const ResultsPage = () => {
               {/* Suitability & Roof Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sp-fade-up-2">
                 {/* Suitability Score Gauge */}
-                <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 flex flex-col items-center justify-center relative sp-card">
+                <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 flex flex-col items-center justify-center relative sp-card rounded-2xl">
                   <div className="absolute top-4 left-4 text-[10px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>Suitability Score</div>
-                  <div className="relative w-40 h-40 flex items-center justify-center">
+                  <div className="relative w-40 h-40 flex items-center justify-center mt-4">
                     <svg className="w-full h-full" style={{ transform: "rotate(-90deg)" }} viewBox="0 0 100 100">
                       <circle cx="50" cy="50" r="45" fill="none" stroke={C.surfaceVariant} strokeWidth="4" />
                       <circle cx="50" cy="50" r="45" fill="none" stroke={C.secondary} strokeWidth="4"
@@ -883,7 +841,7 @@ const ResultsPage = () => {
                 </section>
 
                 {/* Factor Breakdown */}
-                <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 flex flex-col sp-card">
+                <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 flex flex-col sp-card rounded-2xl">
                   <div className="text-[10px] font-bold uppercase tracking-wider mb-4 font-mono" style={{ color: C.mutedSand }}>Factor Breakdown</div>
                   <div className="flex flex-col gap-3 flex-1 justify-center">
                     {[
@@ -893,7 +851,7 @@ const ResultsPage = () => {
                       { label: "Structural",         pct: 96 },
                     ].map((f) => (
                       <div key={f.label} className="flex items-center gap-3">
-                        <span className="text-xs font-mono shrink-0" style={{ color: C.mutedSand, width: 110 }}>{f.label}</span>
+                        <span className="text-xs font-mono shrink-0 text-left" style={{ color: C.mutedSand, width: 110 }}>{f.label}</span>
                         <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: C.surfaceVariant }}>
                           <div style={{ width: `${f.pct}%`, background: C.secondary, height: "100%", borderRadius: "9999px", transition: "width 1.2s cubic-bezier(.16,1,.3,1)" }} />
                         </div>
@@ -904,27 +862,82 @@ const ResultsPage = () => {
                 </section>
 
                 {/* Roof Utilization */}
-                <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 flex flex-col sp-card">
+                <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 flex flex-col sp-card rounded-2xl">
                   <div className="text-[10px] font-bold uppercase tracking-wider mb-4 font-mono" style={{ color: C.mutedSand }}>Roof Utilization</div>
                   <div className="flex flex-col gap-4 mt-auto">
-                    <div className="w-full h-8 flex overflow-hidden" style={{ borderRadius: "2px" }}>
+                    <div className="w-full h-8 flex overflow-hidden rounded-lg">
                       <div style={{ background: C.secondary,       width: `${roofUsable}%`,  transition: "width 1.2s ease" }} />
                       <div style={{ background: C.surfaceVariant,  width: `${roofObst}%`,    transition: "width 1.2s ease .1s" }} />
                       <div style={{ background: C.primaryContainer,width: `${roofAccess}%`,  transition: "width 1.2s ease .2s" }} />
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs font-mono" style={{ color: C.mutedSand }}>
-                      <div className="flex items-center gap-1.5"><div style={{ background: C.secondary,       width: 8, height: 8 }} /> {roofUsable}% Usable</div>
-                      <div className="flex items-center gap-1.5"><div style={{ background: C.surfaceVariant,  width: 8, height: 8 }} /> {roofObst}% Obstr.</div>
-                      <div className="flex items-center gap-1.5"><div style={{ background: C.primaryContainer,width: 8, height: 8 }} /> {roofAccess}% Access</div>
+                      <div className="flex items-center gap-1.5"><div style={{ background: C.secondary,       width: 8, height: 8 }} className="rounded-sm" /> {roofUsable}% Usable</div>
+                      <div className="flex items-center gap-1.5"><div style={{ background: C.surfaceVariant,  width: 8, height: 8 }} className="rounded-sm" /> {roofObst}% Obstr.</div>
+                      <div className="flex items-center gap-1.5"><div style={{ background: C.primaryContainer,width: 8, height: 8 }} className="rounded-sm" /> {roofAccess}% Access</div>
                     </div>
                   </div>
                 </section>
               </div>
 
+              {/* 3D AR Viewer */}
+              {pCount > 0 && (
+                <div className="sp-fade-up-2.5">
+                  <RooftopARViewer
+                    installedKw={model.installedKw}
+                    panelCount={pCount}
+                    areaM2={data.rooftop.drawnAreaM2}
+                  />
+                </div>
+              )}
+
+              {/* Battery backup recommendation */}
+              {activeBattery && activeBattery.mode !== "none" && (
+                <div className="bg-gradient-to-br from-indigo-500/10 to-purple-500/5 border border-indigo-500/20 rounded-2xl p-5 sm:p-8 mb-4 hover:shadow-float transition-shadow duration-300 sp-fade-up-2.5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Battery className="w-5 h-5 text-indigo-400 animate-pulse" />
+                    <h2 className="text-xl font-medium text-foreground">
+                      Battery Backup — {activeBattery.mode === "offgrid" ? "Off-grid" : "Evening Backup"}
+                    </h2>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-5">{activeBattery.description}</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="rounded-xl bg-foreground/[0.04] p-3">
+                      <div className="text-[11px] text-muted-foreground">Recommended size</div>
+                      <div className="font-mono text-xl font-semibold text-indigo-400">{activeBattery.recommendedKwh} kWh</div>
+                    </div>
+                    <div className="rounded-xl bg-foreground/[0.04] p-3">
+                      <div className="flex items-center gap-1 text-[11px] text-muted-foreground"><Clock className="w-3 h-3" /> Backup</div>
+                      <div className="font-mono text-xl font-semibold text-foreground">{activeBattery.backupHours} hrs</div>
+                    </div>
+                    <div className="rounded-xl bg-foreground/[0.04] p-3">
+                      <div className="text-[11px] text-muted-foreground">Upfront cost</div>
+                      <div className="font-mono text-xl font-semibold text-foreground">₹{(activeBattery.costInr / 100000).toFixed(1)}L</div>
+                    </div>
+                    <div className="rounded-xl bg-foreground/[0.04] p-3">
+                      <div className="text-[11px] text-muted-foreground">25-yr cost</div>
+                      <div className="font-mono text-xl font-semibold text-foreground">₹{(activeBattery.lifetimeCostInr / 100000).toFixed(1)}L</div>
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-3">
+                    LFP Li-ion · 85% depth-of-discharge · ~10 yr cycle life · includes inverter upgrade
+                  </div>
+                </div>
+              )}
+
+              {/* Time of Use Card */}
+              {model.baseAnnualKwh > 0 && (
+                <div className="sp-fade-up-2.5">
+                  <TimeOfUseCard
+                    dailyGenKwh={model.baseAnnualKwh / 365}
+                    lat={data.location?.lat}
+                  />
+                </div>
+              )}
+
               {/* Main 9/3 grid */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 sp-fade-up-3">
 
-                {/* ── Left: main content ── */}
+                {/* Left side content */}
                 <div className="lg:col-span-9 flex flex-col gap-8">
 
                   {/* ROI Tuning Console */}
@@ -933,7 +946,7 @@ const ResultsPage = () => {
                       <h2 style={{ fontFamily: "Sora, sans-serif", color: C.onSurface, fontSize: "18px", fontWeight: 500 }}>ROI Tuning Console</h2>
                       <span className="text-[10px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>Live Recalculation</span>
                     </div>
-                    <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6">
+                    <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 rounded-2xl">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-2">
                         <SnappySlider values={[3,5,7.5,10,12,15]} defaultValue={7.5} value={tariff} min={3} max={15} step={0.5} onChange={setTariff} label="Electricity Tariff" prefix="₹" suffix=" / kWh" />
                         <SnappySlider values={[1,5,10,15,maxPanelsRef.current]} defaultValue={15} value={pCount} min={1} max={maxPanelsRef.current} step={1} onChange={setPCount} label="Active Panels" suffix={` / ${maxPanelsRef.current}`} />
@@ -944,13 +957,13 @@ const ResultsPage = () => {
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-wider mb-1.5 font-mono" style={{ color: C.mutedSand }}>Module Grade</div>
                             <div className="flex gap-1.5">
-                              <button onClick={() => setPType("compact")} className={cn("sp-toggle flex-1", pType === "compact" && "on")}>450W Compact</button>
-                              <button onClick={() => setPType("premium")} className={cn("sp-toggle flex-1", pType === "premium" && "on")}>550W Premium</button>
+                              <button onClick={() => setPType("compact")} className={cn("sp-toggle flex-1 cursor-pointer", pType === "compact" && "on")}>450W Compact</button>
+                              <button onClick={() => setPType("premium")} className={cn("sp-toggle flex-1 cursor-pointer", pType === "premium" && "on")}>550W Premium</button>
                             </div>
                           </div>
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-wider mb-1.5 font-mono" style={{ color: C.mutedSand }}>BESS Storage</div>
-                            <button onClick={() => setBatteryStorage(!batteryStorage)} className={cn("sp-toggle w-full flex items-center justify-between px-3", batteryStorage && "on")}>
+                            <button onClick={() => setBatteryStorage(!batteryStorage)} className={cn("sp-toggle w-full flex items-center justify-between px-3 cursor-pointer", batteryStorage && "on")}>
                               <span>Hybrid Battery (+₹85k CapEx)</span>
                               <span style={{ width: 10, height: 10, borderRadius: "50%", border: `2px solid ${batteryStorage ? C.primaryContainer : C.outlineVariant}`, background: batteryStorage ? C.primaryContainer : "transparent", display: "inline-block", transition: "all .15s" }} />
                             </button>
@@ -961,7 +974,7 @@ const ResultsPage = () => {
                               value={shading}
                               onChange={(e) => handleShadingChange(e.target.value as "none" | "partial" | "heavy")}
                               style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                              className="w-full px-3 py-2 text-xs focus:outline-none font-mono cursor-pointer rounded-none"
+                              className="w-full px-3 py-2 text-xs focus:outline-none font-mono cursor-pointer rounded-lg"
                             >
                               <option value="none" className="bg-[#171210]">None</option>
                               <option value="partial" className="bg-[#171210]">Partial</option>
@@ -973,18 +986,18 @@ const ResultsPage = () => {
                     </div>
                   </section>
 
-                  {/* Financial Forecasts */}
+                  {/* Financial Forecasts charts */}
                   <section>
                     <div style={{ borderBottom: `1px solid ${C.outlineVariant}` }} className="flex justify-between items-baseline pb-2 mb-4">
                       <h2 style={{ fontFamily: "Sora, sans-serif", color: C.onSurface, fontSize: "18px", fontWeight: 500 }}>Financial Forecasts</h2>
-                      <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="flex">
+                      <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="flex rounded-lg overflow-hidden">
                         {[{ k: "roi", l: "Cumulative ROI" }, { k: "yield", l: "Degradation" }, { k: "monthly", l: "Climatology" }].map(t => (
                           <button key={t.k} onClick={() => setActiveTab(t.k as any)} className={cn("sp-tab", activeTab === t.k && "on")}>{t.l}</button>
                         ))}
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="h-64 p-4">
+                      <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="h-64 p-4 rounded-2xl">
                         <ResponsiveContainer width="100%" height="100%">
                           {activeTab === "roi" ? (
                             <AreaChart data={roiData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -1000,7 +1013,7 @@ const ResultsPage = () => {
                               <Tooltip content={({ active, payload }) => {
                                 if (!active || !payload?.length) return null;
                                 const val = payload[0].value as number;
-                                return <div className="sp-tip"><div style={{ color: C.mutedSand }}>Year {payload[0].payload.year}</div><div style={{ color: val >= 0 ? C.secondary : C.error, fontWeight: 700, fontSize: 13 }}>{val >= 0 ? "+" : "-"}₹{Math.abs(val).toLocaleString()}</div></div>;
+                                return <div className="sp-tip rounded-lg"><div style={{ color: C.mutedSand }}>Year {payload[0].payload.year}</div><div style={{ color: val >= 0 ? C.secondary : C.error, fontWeight: 700, fontSize: 13 }}>{val >= 0 ? "+" : "-"}₹{Math.abs(val).toLocaleString()}</div></div>;
                               }} />
                               <ReferenceLine y={0} stroke={C.outlineVariant} strokeDasharray="3 3" />
                               {model.breakEvenFound && <ReferenceLine x={model.breakEvenYr} stroke={C.secondary} strokeOpacity={0.4} strokeDasharray="3 3" label={{ value: `Break-even Yr ${model.breakEvenYr}`, fill: C.secondary, fontSize: 8, position: "insideTopLeft" }} />}
@@ -1013,7 +1026,7 @@ const ResultsPage = () => {
                               <YAxis yAxisId="l" tick={{ fill: C.mutedSand, fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={v=>`${(v/1000).toFixed(0)}k`} />
                               <YAxis yAxisId="r" orientation="right" domain={[80,100]} tick={{ fill: C.mutedSand, fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={v=>`${v}%`} />
                               <Tooltip content={({ active, payload }) => !active||!payload?.length?null:(
-                                <div className="sp-tip"><div style={{ color: C.onSurface, fontWeight:700 }}>{payload[0]?.payload.year}</div><div style={{ color: C.secondary }}>Production: {(payload[0]?.value as number)?.toLocaleString()} kWh</div><div style={{ color: C.primary }}>Efficiency: {payload[1]?.value}%</div></div>
+                                <div className="sp-tip rounded-lg"><div style={{ color: C.onSurface, fontWeight:700 }}>{payload[0]?.payload.year}</div><div style={{ color: C.secondary }}>Production: {(payload[0]?.value as number)?.toLocaleString()} kWh</div><div style={{ color: C.primary }}>Efficiency: {payload[1]?.value}%</div></div>
                               )} />
                               <Bar yAxisId="l" dataKey="production" fill={C.secondary} opacity={0.55} radius={[2,2,0,0]} />
                               <Line yAxisId="r" type="monotone" dataKey="efficiency" stroke={C.primary} strokeWidth={2} dot={false} />
@@ -1031,7 +1044,7 @@ const ResultsPage = () => {
                               <YAxis yAxisId="l" tick={{ fill: C.mutedSand, fontSize: 9 }} tickLine={false} axisLine={false} />
                               <YAxis yAxisId="r" orientation="right" domain={[0,8]} tick={{ fill: C.mutedSand, fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={v=>`${v}h`} />
                               <Tooltip content={({ active, payload }) => !active||!payload?.length?null:(
-                                <div className="sp-tip"><div style={{ color: C.onSurface, fontWeight:700 }}>{payload[0]?.payload.label} Solar Stats</div><div style={{ color: C.secondary }}>Yield: {(payload[0]?.value as number)?.toLocaleString()} kWh</div><div style={{ color: C.primary }}>Peak Sun: {payload[1]?.value} hrs</div></div>
+                                <div className="sp-tip rounded-lg"><div style={{ color: C.onSurface, fontWeight:700 }}>{payload[0]?.payload.label} Solar Stats</div><div style={{ color: C.secondary }}>Yield: {(payload[0]?.value as number)?.toLocaleString()} kWh</div><div style={{ color: C.primary }}>Peak Sun: {payload[1]?.value} hrs</div></div>
                               )} />
                               <Bar yAxisId="l" dataKey="generation" fill={C.secondary} opacity={0.6} radius={[2,2,0,0]} />
                               <Area yAxisId="r" type="monotone" dataKey="psh" stroke={C.primary} fill="url(#pGrad)" strokeWidth={1.5} />
@@ -1039,14 +1052,13 @@ const ResultsPage = () => {
                           )}
                         </ResponsiveContainer>
                       </div>
-                      {/* Cashflow Waterfall — infographic redesign */}
+                      {/* Cashflow Waterfall SVG infographic */}
                       {(() => {
-                        const YEARS = 13; // Yr 0 → Yr 12
+                        const YEARS = 13;
                         const bars = model.cashFlows.slice(0, YEARS);
                         const cum  = model.cumulativeCashFlow.slice(0, YEARS);
                         const maxAbs = Math.max(...bars.map(Math.abs), ...cum.map(Math.abs)) || 1;
 
-                        // Generous canvas — tall enough that text is never squished
                         const W = 780, H = 320;
                         const PAD_L = 72, PAD_R = 24, PAD_T = 50, PAD_B = 52;
                         const chartW = W - PAD_L - PAD_R;
@@ -1059,7 +1071,6 @@ const ResultsPage = () => {
                         const valToY = (v: number) => zeroY - (v / maxAbs) * (chartH / 2);
                         const barX   = (i: number) => PAD_L + i * barW + BAR_PAD / 2;
 
-                        // Cumulative line
                         const cumPts = cum.map((v, i) => `${barX(i) + bw / 2},${valToY(v)}`).join(" L ");
                         const cumPath = `M ${cumPts}`;
 
@@ -1073,55 +1084,47 @@ const ResultsPage = () => {
                         const breakEvenYr = model.breakEvenYr;
 
                         return (
-                          <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-5 flex flex-col sp-card">
-                            {/* Header */}
+                          <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-5 flex flex-col sp-card rounded-2xl">
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-sm font-bold uppercase tracking-widest font-mono" style={{ color: C.onSurface }}>Cashflow Waterfall</span>
                               <span className="text-xs font-mono" style={{ color: C.mutedSand }}>Yr 0 – Yr 12 · Net annual + cumulative</span>
                             </div>
 
-                            {/* HTML legend — never scales down */}
-                            <div className="flex items-center gap-5 mb-3">
-                              <div className="flex items-center gap-2">
-                                <span style={{ width: 14, height: 14, background: C.secondary, borderRadius: 2, display: "inline-block" }} />
-                                <span className="text-xs font-mono font-semibold" style={{ color: C.secondary }}>Annual Savings</span>
+                            <div className="flex items-center gap-4 flex-wrap mb-3">
+                              <div className="flex items-center gap-1.5">
+                                <span style={{ width: 10, height: 10, background: C.secondary }} className="rounded-sm inline-block" />
+                                <span className="text-[10px] font-mono font-semibold" style={{ color: C.secondary }}>Annual Savings</span>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span style={{ width: 14, height: 14, background: C.error, borderRadius: 2, display: "inline-block" }} />
-                                <span className="text-xs font-mono font-semibold" style={{ color: C.error }}>CapEx / Outflow</span>
+                              <div className="flex items-center gap-1.5">
+                                <span style={{ width: 10, height: 10, background: C.error }} className="rounded-sm inline-block" />
+                                <span className="text-[10px] font-mono font-semibold" style={{ color: C.error }}>CapEx / Outflow</span>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span style={{ width: 28, height: 2.5, background: C.primary, borderRadius: 2, display: "inline-block" }} />
-                                <span className="text-xs font-mono font-semibold" style={{ color: C.primary }}>Cumulative</span>
+                              <div className="flex items-center gap-1.5">
+                                <span style={{ width: 20, height: 2, background: C.primary }} className="rounded-sm inline-block" />
+                                <span className="text-[10px] font-mono font-semibold" style={{ color: C.primary }}>Cumulative</span>
                               </div>
                               {model.breakEvenFound && (
-                                <div className="flex items-center gap-2 ml-auto">
-                                  <span style={{ width: 2.5, height: 14, background: C.primary, display: "inline-block" }} />
-                                  <span className="text-xs font-mono font-semibold" style={{ color: C.primary }}>
-                                    Break-even @ Yr {model.breakEvenYr} ({model.paybackPeriod.toFixed(1)} yrs)
+                                <div className="flex items-center gap-1.5 ml-auto">
+                                  <span style={{ width: 2, height: 10, background: C.primary }} className="inline-block" />
+                                  <span className="text-[10px] font-mono font-semibold" style={{ color: C.primary }}>
+                                    Break-even Yr {model.breakEvenYr} ({model.paybackPeriod.toFixed(1)} yrs)
                                   </span>
                                 </div>
                               )}
                             </div>
 
-                            {/* SVG chart */}
                             <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
                               <defs>
                                 <linearGradient id="cfGainGrad" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor={C.secondary} stopOpacity="0.95" />
-                                  <stop offset="100%" stopColor={C.secondary} stopOpacity="0.4" />
+                                  <stop offset="0%" stopColor={C.secondary} stopOpacity={0.95} />
+                                  <stop offset="100%" stopColor={C.secondary} stopOpacity={0.4} />
                                 </linearGradient>
                                 <linearGradient id="cfLossGrad" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor={C.error} stopOpacity="0.5" />
-                                  <stop offset="100%" stopColor={C.error} stopOpacity="0.95" />
+                                  <stop offset="0%" stopColor={C.error} stopOpacity={0.5} />
+                                  <stop offset="100%" stopColor={C.error} stopOpacity={0.95} />
                                 </linearGradient>
-                                <filter id="cfGlow" x="-20%" y="-20%" width="140%" height="140%">
-                                  <feGaussianBlur stdDeviation="3" result="blur" />
-                                  <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-                                </filter>
                               </defs>
 
-                              {/* ── Y-axis gridlines & labels ── */}
                               {[-1, -0.5, 0, 0.5, 1].map((frac) => {
                                 const y = valToY(frac * maxAbs);
                                 const val = frac * maxAbs;
@@ -1146,21 +1149,17 @@ const ResultsPage = () => {
                                 );
                               })}
 
-                              {/* ── Bars ── */}
                               {bars.map((cf, i) => {
                                 const x = barX(i);
                                 const isPos = cf >= 0;
                                 const barH = Math.max(4, (Math.abs(cf) / maxAbs) * (chartH / 2));
                                 const y = isPos ? zeroY - barH : zeroY;
                                 const isBreak = i === breakEvenYr;
-                                const cx = x + bw / 2;
 
-                                // Show value label: always on Yr0, always last bar, always at break-even, and every 3rd bar
                                 const showLabel = i === 0 || i === YEARS - 1 || isBreak || i % 3 === 1;
 
                                 return (
                                   <g key={i}>
-                                    {/* Break-even zone overlay */}
                                     {isBreak && (
                                       <rect
                                         x={x - 2} y={PAD_T}
@@ -1169,44 +1168,28 @@ const ResultsPage = () => {
                                       />
                                     )}
 
-                                    {/* Bar */}
                                     <rect
                                       x={x} y={y} width={bw} height={barH}
                                       fill={isPos ? "url(#cfGainGrad)" : "url(#cfLossGrad)"}
-                                      rx="3"
+                                      stroke={isPos ? C.secondary : C.error}
+                                      strokeWidth="0.8"
+                                      rx="2"
                                     />
 
-                                    {/* Tooltip */}
-                                    <title>{`Year ${i}: ${cf >= 0 ? "+" : ""}${fmt(cf)}\nCumulative: ${cum[i] >= 0 ? "+" : ""}${fmt(cum[i])}`}</title>
-
-                                    {/* Value label above/below bar */}
                                     {showLabel && (
                                       <text
-                                        x={cx}
-                                        y={isPos ? y - 6 : y + barH + 16}
-                                        textAnchor="middle" fontSize="12" fontFamily="monospace"
-                                        fill={isPos ? C.secondary : C.error}
-                                        fontWeight="700"
+                                        x={x + bw / 2} y={isPos ? y - 6 : y + barH + 14}
+                                        textAnchor="middle" fontSize="11" fontFamily="monospace"
+                                        fill={isBreak ? C.primary : C.onSurface}
+                                        fontWeight="600"
                                       >
-                                        {cf >= 0 ? "+" : ""}{fmt(cf)}
+                                        {fmt(cf)}
                                       </text>
                                     )}
 
-                                    {/* Break-even vertical line */}
-                                    {isBreak && (
-                                      <line
-                                        x1={cx} x2={cx}
-                                        y1={PAD_T} y2={H - PAD_B}
-                                        stroke={C.primary} strokeWidth="1.5"
-                                        strokeDasharray="5 3"
-                                        opacity="0.8"
-                                      />
-                                    )}
-
-                                    {/* X-axis year label */}
                                     <text
-                                      x={cx} y={H - PAD_B + 18}
-                                      textAnchor="middle" fontSize="13" fontFamily="monospace"
+                                      x={x + bw / 2} y={H - PAD_B + 18}
+                                      textAnchor="middle" fontSize="11" fontFamily="monospace"
                                       fill={isBreak ? C.primary : C.mutedSand}
                                       fontWeight={isBreak ? "700" : "400"}
                                     >
@@ -1216,38 +1199,13 @@ const ResultsPage = () => {
                                 );
                               })}
 
-                              {/* ── Cumulative line ── */}
-                              <path
-                                d={cumPath}
-                                fill="none" stroke={C.primary}
-                                strokeWidth="2.5"
-                                strokeLinejoin="round" strokeLinecap="round"
-                                filter="url(#cfGlow)"
-                              />
-
-                              {/* Cumulative dots */}
-                              {cum.map((v, i) => {
-                                const key = i === 0 || i === breakEvenYr || i === YEARS - 1;
-                                return (
-                                  <circle
-                                    key={i}
-                                    cx={barX(i) + bw / 2} cy={valToY(v)}
-                                    r={key ? 5 : 2.5}
-                                    fill={C.primary}
-                                    stroke={C.charcoal} strokeWidth="1.5"
-                                  />
-                                );
-                              })}
-
-                              {/* Cumulative end-label */}
-                              <text
-                                x={barX(YEARS - 1) + bw / 2}
-                                y={valToY(cum[YEARS - 1]) - 10}
-                                textAnchor="middle" fontSize="13" fontFamily="monospace"
-                                fill={C.primary} fontWeight="700"
-                              >
-                                {cum[YEARS - 1] >= 0 ? "+" : ""}{fmt(cum[YEARS - 1])}
-                              </text>
+                              <path d={cumPath} fill="none" stroke={C.primary} strokeWidth="2.5" />
+                              {cum.map((v, i) => (
+                                <circle
+                                  key={i} cx={barX(i) + bw / 2} cy={valToY(v)} r="3.5"
+                                  fill={C.background} stroke={C.primary} strokeWidth="2"
+                                />
+                              ))}
                             </svg>
                           </div>
                         );
@@ -1255,99 +1213,32 @@ const ResultsPage = () => {
                     </div>
                   </section>
 
-                  {/* Wealth & Break-Even */}
-                  <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 sp-card">
-                      <h3 className="text-[10px] font-bold uppercase tracking-wider mb-4 font-mono" style={{ color: C.mutedSand }}>25-Year Wealth Projection</h3>
-                      <div className="flex justify-between items-center mb-4">
-                        <div className="text-center">
-                          <div className="text-xs mb-1" style={{ color: C.mutedSand }}>Without Solar</div>
-                          <div style={{ fontFamily: "Sora, sans-serif", fontSize: "22px", color: C.error }} className="tabular-nums sp-count-in">₹{Math.round((tariff * model.baseAnnualKwh * 25)/100000)}L</div>
-                          <div className="text-xs" style={{ color: C.mutedSand }}>Utility Spend</div>
-                        </div>
-                        <span className="material-symbols-outlined text-3xl" style={{ color: C.surfaceVariant }}>arrow_forward</span>
-                        <div className="text-center">
-                          <div className="text-xs mb-1" style={{ color: C.mutedSand }}>With Solar</div>
-                          <div style={{ fontFamily: "Sora, sans-serif", fontSize: "22px", color: C.secondary }} className="tabular-nums sp-count-in">₹{savings25L}L</div>
-                          <div className="text-xs" style={{ color: C.secondary }}>Wealth Retained</div>
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 sp-card">
-                      <h3 className="text-[10px] font-bold uppercase tracking-wider mb-4 font-mono" style={{ color: C.mutedSand }}>Break-Even Timeline</h3>
-                      <div className="flex flex-col justify-center h-full pb-4">
-                        <div className="relative w-full h-2 rounded-full" style={{ background: C.surfaceVariant }}>
-                          <div className="absolute left-0 top-0 h-full rounded-full sp-breakeven-fill" style={{ background: C.secondary, width: `${Math.min((model.paybackPeriod / 25) * 100, 100)}%` }} />
-                          <div className="absolute w-3 h-3 bg-white rounded-full top-1/2 -translate-y-1/2" style={{ left: `${Math.min((model.paybackPeriod / 25) * 100, 100)}%` }} />
-                          <div className="absolute text-xs font-mono font-bold" style={{ bottom: "-22px", left: 0, color: C.mutedSand }}>Yr 0</div>
-                          <div className="absolute text-xs font-mono font-bold" style={{ bottom: "-22px", left: `${Math.min((model.paybackPeriod / 25) * 100, 100)}%`, transform: "translateX(-50%)", color: C.secondary }}>{model.paybackPeriod.toFixed(1)} Yrs</div>
-                          <div className="absolute text-xs font-mono" style={{ bottom: "-22px", right: 0, color: C.mutedSand }}>Yr 25</div>
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-
-                  {/* Inflation Simulator & Carbon */}
-                  <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 sp-card">
-                      <h3 className="text-[10px] font-bold uppercase tracking-wider mb-4 font-mono" style={{ color: C.mutedSand }}>Electricity Inflation Simulator</h3>
-                      <div className="grid grid-cols-4 gap-2 mb-4">
-                        {[3,5,7,10].map(r => (
-                          <button key={r} onClick={() => setInflationRate(r)}
-                            style={{ border: `1px solid ${inflationRate === r ? C.primary : C.outlineVariant}`, background: inflationRate === r ? `${C.primary}12` : `${C.surfaceVariant}30`, color: inflationRate === r ? C.primary : C.mutedSand }}
-                            className="p-2 text-center text-xs font-mono cursor-pointer transition-all hover:border-primary">
-                            {r}%
-                          </button>
-                        ))}
-                      </div>
-                      <div className="text-sm" style={{ color: C.mutedSand }}>
-                        At {inflationRate}% annual inflation, utility rates will double in <span style={{ color: C.onSurface, fontWeight: 600 }}>{(Math.log(2)/Math.log(1+inflationRate/100)).toFixed(1)} years</span>.
-                      </div>
-                    </div>
-                    <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 sp-card">
-                      <h3 className="text-[10px] font-bold uppercase tracking-wider mb-4 font-mono" style={{ color: C.mutedSand }}>Carbon Impact Dashboard</h3>
-                      <div className="grid grid-cols-3 gap-4">
-                        {[
-                          { icon: "park",          value: data.environmental.treesEquivalent.toLocaleString(),                              label: "Trees Planted", color: C.secondary },
-                          { icon: "directions_car", value: Math.round(data.environmental.co2AnnualKg * 25 / 4600).toString(),               label: "Cars Removed",  color: C.primary },
-                          { icon: "factory",        value: `${Math.round(data.environmental.co2AnnualKg * 25 / 1000)}t`,                    label: "Coal Avoided",  color: C.mutedSand },
-                        ].map((item, i) => (
-                          <div key={i} className="flex flex-col items-center text-center">
-                            <span className="material-symbols-outlined mb-2" style={{ color: item.color, fontSize: "28px" }}>{item.icon}</span>
-                            <span style={{ fontFamily: "Sora, sans-serif", fontSize: "18px", color: C.onSurface }} className="tabular-nums">{item.value}</span>
-                            <span className="text-xs" style={{ color: C.mutedSand }}>{item.label}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </section>
-
-                  {/* Detailed Cashflow Table */}
-                  <section>
-                    <div style={{ borderBottom: `1px solid ${C.outlineVariant}` }} className="flex justify-between items-baseline pb-2 mb-4">
-                      <h2 style={{ fontFamily: "Sora, sans-serif", color: C.onSurface, fontSize: "18px", fontWeight: 500 }}>Detailed Cashflow & Yield Projection</h2>
-                      <span className="text-[10px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>Years 1–10</span>
-                    </div>
-                    <div style={{ border: `1px solid ${C.outlineVariant}` }} className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse whitespace-nowrap">
+                  {/* Cash Flow Table */}
+                  <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 rounded-2xl">
+                    <h3 style={{ fontFamily: "Sora, sans-serif", color: C.onSurface, fontSize: "16px", fontWeight: 500 }} className="mb-4">25-Year Operational Balance Sheet</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs text-left font-mono">
                         <thead>
-                          <tr style={{ background: C.charcoal, borderBottom: `1px solid ${C.outlineVariant}` }}>
-                            {["Year","Adj. Yield (kWh)","Gross Savings","O&M Costs","Maint. Res.","Tax Benefits","Post-Tax Net","Cum. NPV"].map(h => (
-                              <th key={h} className="text-[10px] font-bold uppercase py-2 px-3 font-mono tracking-wider" style={{ color: C.mutedSand }}>{h}</th>
-                            ))}
+                          <tr style={{ borderBottom: `1.5px solid ${C.outline}` }} className="text-neutral-400">
+                            <th className="py-2 px-3">Year</th>
+                            <th className="py-2 px-3">Yield (kWh)</th>
+                            <th className="py-2 px-3">Savings</th>
+                            <th className="py-2 px-3">O&M Cost</th>
+                            <th className="py-2 px-3">Maint. Res</th>
+                            <th className="py-2 px-3">Tax Benefit</th>
+                            <th className="py-2 px-3">Net Cashflow</th>
+                            <th className="py-2 px-3">Cumulative</th>
                           </tr>
                         </thead>
-                        <tbody style={{ fontFamily: "Inter, monospace", fontSize: "12px" }} className="tabular-nums">
-                          {Array.from({ length: 10 }, (_, i) => {
+                        <tbody>
+                          {Array.from({ length: 25 }, (_, i) => {
                             const yr = i + 1;
-                            const prod = model.baseAnnualKwh * Math.pow(0.995, i);
-                            const currentRate = tariff * Math.pow(1 + escalation/100, i);
-                            const savings = prod * currentRate * (batteryStorage ? 1.15 : 1);
-                            const baseOm = 1500 + Math.max(0, model.installedKw-1)*500;
-                            const om = baseOm * Math.pow(1+omCost/100, i);
-                            const maintRes = om * 0.4;
-                            const taxBenefit = yr <= 5 ? savings * 0.15 : 0;
-                            const net = savings - om - (yr===10?35000:0) + taxBenefit;
+                            const prod = model.baseAnnualKwh * Math.pow(0.995, yr - 1);
+                            const savings = model.yearlySavings[yr - 1];
+                            const om = model.yearlyOm[yr - 1];
+                            const maintRes = yr === 10 ? 35000 : 0;
+                            const taxBenefit = 0; // standard residential
+                            const net = savings - om - maintRes + taxBenefit;
                             const cumNpv = model.cumulativeCashFlow[yr];
                             return (
                               <tr key={yr} className="sp-row" style={{ borderBottom: `1px solid ${C.outlineVariant}50` }}>
@@ -1367,31 +1258,62 @@ const ResultsPage = () => {
                     </div>
                   </section>
 
+                  {/* Remote lead CTA card */}
+                  <div className="bg-gradient-to-br from-primaryContainer to-orange-600 rounded-3xl p-6 sm:p-8 shadow-float text-center text-white sp-fade-up-4">
+                    <div className="max-w-xl mx-auto">
+                      <div className="inline-flex items-center gap-2 bg-white/15 px-3 py-1 rounded-full text-[10px] font-medium mb-3">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-primary" /> Verified MNRE solar installers
+                      </div>
+                      <h2 className="font-display text-2xl sm:text-3xl mb-2 font-bold leading-tight" style={{ fontFamily: "Sora, sans-serif" }}>
+                        Ready to install? Get a free quote.
+                      </h2>
+                      <p className="text-xs sm:text-sm text-white/95 mb-5 max-w-md mx-auto">
+                        An authorized solar installer in your city will contact you within 24 hours with a custom structural quote and PM Surya Ghar paperwork.
+                      </p>
+                      <button
+                        onClick={() => setLeadFormOpen(true)}
+                        className="inline-flex items-center gap-2 bg-white text-primaryContainer font-extrabold px-6 py-3 rounded-full hover:bg-white/95 active:scale-95 transition-all shadow-lg text-xs uppercase cursor-pointer"
+                      >
+                        <PhoneCall className="w-4 h-4" />
+                        Talk to an installer →
+                      </button>
+                      <div className="text-[10px] text-white/70 mt-3">No spam · No obligation · Your number stays private</div>
+                    </div>
+                  </div>
+
+                  {/* Remote Installer marketplace */}
+                  <div className="sp-fade-up-4">
+                    <InstallerMarketplace
+                      installedKw={model.installedKw}
+                      city={data.location?.label?.split(",")[0]?.trim()}
+                    />
+                  </div>
+
                   {/* Closing CTA */}
-                  <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-8 text-center flex flex-col items-center">
+                  <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-8 text-center flex flex-col items-center rounded-2xl">
                     <span className="material-symbols-outlined text-4xl mb-4" style={{ color: C.secondary }}>solar_power</span>
                     <h2 style={{ fontFamily: "Sora, sans-serif", color: C.onSurface, fontSize: "24px", fontWeight: 500, lineHeight: 1.2 }} className="mb-2">Ready to Secure Your Energy Future?</h2>
                     <p style={{ color: C.mutedSand, fontSize: "14px" }} className="max-w-2xl mb-8">Take the next step in realizing your projected ₹{savings25L}L in lifetime savings. Our experts are ready to finalize your system engineering.</p>
                     <div className="flex flex-wrap justify-center gap-4">
-                      <button style={{ background: C.secondary, color: C.onSecondary }} className="flex items-center gap-2 px-6 py-3 text-[10px] font-bold uppercase tracking-wider hover:opacity-90 transition-opacity">
+                      <button onClick={() => setLeadFormOpen(true)} style={{ background: C.secondary, color: C.onSecondary }} className="flex items-center gap-2 px-6 py-3 text-[10px] font-bold uppercase tracking-wider hover:opacity-90 transition-opacity cursor-pointer rounded-lg font-mono">
                         <span className="material-symbols-outlined text-sm">request_quote</span>
                         Request Quotes
                       </button>
-                      <button style={{ background: C.charcoal, border: `1px solid ${C.outline}`, color: C.onSurface }} className="flex items-center gap-2 px-6 py-3 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity">
+                      <button onClick={() => setLeadFormOpen(true)} style={{ background: C.charcoal, border: `1px solid ${C.outline}`, color: C.onSurface }} className="flex items-center gap-2 px-6 py-3 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-lg font-mono">
                         <span className="material-symbols-outlined text-sm">calendar_month</span>
                         Schedule Consultation
                       </button>
-                      <button onClick={handleDownload} disabled={downloading} style={{ background: C.charcoal, border: `1px solid ${C.outline}`, color: C.onSurface }} className="flex items-center gap-2 px-6 py-3 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity disabled:opacity-40">
+                      <button onClick={handleDownload} disabled={downloading} style={{ background: C.charcoal, border: `1px solid ${C.outline}`, color: C.onSurface }} className="flex items-center gap-2 px-6 py-3 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity disabled:opacity-40 cursor-pointer rounded-lg font-mono">
                         <Download className="w-3.5 h-3.5" /> Download PDF
                       </button>
                     </div>
                   </section>
                 </div>
 
-                {/* ── Right Sidebar ── */}
+                {/* Right Sidebar */}
                 <aside className="lg:col-span-3 flex flex-col gap-4 sp-fade-up-4">
                   {/* Energy Grade */}
-                  <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 flex flex-col items-center text-center sp-card">
+                  <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 flex flex-col items-center text-center sp-card rounded-2xl">
                     <div style={{ width: 80, height: 80, borderRadius: "50%", background: `${C.secondary}10`, border: `2px solid ${C.secondary}`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }} className="sp-glow-pulse">
                       <span style={{ fontFamily: "Sora, sans-serif", fontSize: "24px", color: C.secondary, fontWeight: 500 }}>A+</span>
                     </div>
@@ -1423,8 +1345,8 @@ const ResultsPage = () => {
                       { label: "Horizon Shading", value: data.horizonShadingLoss !== undefined ? `${(data.horizonShadingLoss * 100).toFixed(1)}% Loss` : "3.2% Loss" },
                       { label: "Albedo",           value: "0.20" },
                       { label: "Sky View Factor",  value: data.skyViewFactor !== undefined ? data.skyViewFactor.toFixed(2) : "0.95" },
-                      { label: "Azimuth",          value: "180° (South)" },
-                      { label: "Tilt",             value: `${data.tiltDeg ?? 15}°` },
+                      { label: "Azimuth",          value: data.roof?.azimuth ? `${data.roof.azimuth} (Facing)` : "180° (South)" },
+                      { label: "Tilt",             value: `${data.roof?.tilt ?? 20}°` },
                       { label: "Wind Zone",        value: `${data.windZone ?? "Zone 1"} (${data.windZoneLabel ?? "Low"})` },
                     ]} />
                   </SideCard>
@@ -1438,7 +1360,7 @@ const ResultsPage = () => {
                   </SideCard>
 
                   {/* Installer Readiness */}
-                  <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 sp-card">
+                  <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 sp-card rounded-2xl">
                     <h3 className="text-xs font-bold uppercase tracking-wider mb-3 font-mono"
                       style={{ color: C.onSurface, borderBottom: `1px solid ${C.outlineVariant}`, paddingBottom: "8px" }}>Installer Readiness</h3>
                     <div className="flex items-center justify-between mb-2">
@@ -1471,12 +1393,12 @@ const ResultsPage = () => {
 
                   <SideCard title="Purchase vs Loan">
                     <div className="grid grid-cols-2 gap-2 text-xs text-center font-mono">
-                      <div style={{ background: `${C.secondary}08`, border: `1px solid ${C.secondary}20` }} className="p-3">
-                        <div style={{ color: C.mutedSand }} className="mb-1">Cash</div>
+                      <div style={{ background: `${C.secondary}08`, border: `1px solid ${C.secondary}20` }} className="p-3 rounded-lg">
+                        <div style={{ color: C.mutedSand }} className="mb-1 text-[9px] uppercase tracking-wider font-bold">Cash</div>
                         <div style={{ color: C.onSurface, fontFamily: "Sora, sans-serif" }} className="font-bold">₹{Math.round(Math.abs(model.npv)/100000).toFixed(1)}L NPV</div>
                       </div>
-                      <div style={{ background: `${C.primary}08`, border: `1px solid ${C.primary}20` }} className="p-3">
-                        <div style={{ color: C.mutedSand }} className="mb-1">Loan (7yr)</div>
+                      <div style={{ background: `${C.primary}08`, border: `1px solid ${C.primary}20` }} className="p-3 rounded-lg">
+                        <div style={{ color: C.mutedSand }} className="mb-1 text-[9px] uppercase tracking-wider font-bold">Loan (7yr)</div>
                         <div style={{ color: C.onSurface, fontFamily: "Sora, sans-serif" }} className="font-bold">₹{Math.round(Math.abs(model.npv)*0.78/100000).toFixed(1)}L NPV</div>
                       </div>
                     </div>
@@ -1505,18 +1427,18 @@ const ResultsPage = () => {
             </>
           ) : (
             /* ================================================================
-               LOCKED STATE — teaser + upgrade card
+               LOCKED STATE — teaser upgrade layout
             ================================================================ */
             <div className="space-y-8 sp-fade-up-1">
               {/* AI Summary + metrics strip */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div style={{ background: `${C.charcoal}99`, border: `1px solid ${C.outlineVariant}`, backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}
-                  className="lg:col-span-1 p-6 flex flex-col gap-4 sp-card animate-slide-up">
+                  className="lg:col-span-1 p-6 flex flex-col gap-4 sp-card animate-slide-up rounded-2xl">
                   <div className="flex items-center gap-2">
                     <Satellite className="w-5 h-5" style={{ color: C.secondary }} />
                     <h2 style={{ fontFamily: "Sora, sans-serif", fontSize: "16px", fontWeight: 500, color: C.secondary }}>AI Summary</h2>
                   </div>
-                  <div style={{ background: `${C.secondary}10`, border: `1px solid ${C.secondary}25` }} className="flex items-center gap-1.5 px-3 py-1.5 w-fit">
+                  <div style={{ background: `${C.secondary}10`, border: `1px solid ${C.secondary}25` }} className="flex items-center gap-1.5 px-3 py-1.5 w-fit rounded-lg">
                     <div style={{ background: C.secondary, width: 6, height: 6, borderRadius: "50%" }} className="sp-glow-pulse" />
                     <span style={{ color: C.secondary }} className="text-[10px] font-bold uppercase tracking-widest font-mono">Geospatial Analysis Active</span>
                   </div>
@@ -1534,7 +1456,7 @@ const ResultsPage = () => {
                   ].map(({ label, value, unit, highlight }) => (
                     <div key={label}
                       style={{ background: `${C.charcoal}33`, border: `1px solid ${highlight ? C.secondary+"40" : C.outlineVariant}20` }}
-                      className="sp-card p-6 flex flex-col justify-between relative overflow-hidden animate-slide-up">
+                      className="sp-card p-6 flex flex-col justify-between relative overflow-hidden animate-slide-up rounded-2xl">
                       <div style={{ background: `linear-gradient(to right, transparent, ${highlight ? C.secondary : "rgba(255,255,255,0.04)"}, transparent)` }} className="absolute top-0 left-0 w-full h-px" />
                       {highlight && <div style={{ background: `radial-gradient(ellipse at top left, ${C.secondary}08, transparent 70%)` }} className="absolute inset-0 pointer-events-none" />}
                       <span className="text-[10px] font-bold uppercase tracking-widest font-mono" style={{ color: highlight ? C.secondary : C.mutedSand }}>{label}</span>
@@ -1549,8 +1471,8 @@ const ResultsPage = () => {
                 </div>
               </div>
 
-              {/* Locked paywall teaser */}
-              <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, borderRadius: "16px", minHeight: "580px" }} className="relative w-full overflow-hidden sp-fade-up-2">
+              {/* Locked paywall teaser container */}
+              <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, minHeight: "580px" }} className="relative w-full overflow-hidden sp-fade-up-2 rounded-3xl">
                 {/* Faux content (blurred behind) */}
                 <div className="absolute inset-0 p-8 opacity-20 pointer-events-none select-none flex flex-col gap-8">
                   <div style={{ borderBottom: `1px solid ${C.outlineVariant}` }} className="flex justify-between items-end pb-4">
@@ -1577,17 +1499,15 @@ const ResultsPage = () => {
                 {/* Fade overlay */}
                 <div style={{ background: `linear-gradient(to bottom, transparent, ${C.charcoal}cc, ${C.charcoal})` }} className="absolute inset-0 pointer-events-none" />
 
-                {/* Upgrade card */}
+                {/* Upgrade panel */}
                 <div className="absolute bottom-0 left-0 w-full p-8 flex flex-col items-center justify-center text-center z-10">
                   <div style={{ background: `${C.background}e0`, backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", border: `1px solid ${C.outlineVariant}`, maxWidth: 600, width: "100%" }}
-                    className="sp-border-glow p-8 flex flex-col items-center gap-6 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.6)]">
-                    {/* Lock icon — bare, no box */}
+                    className="sp-border-glow p-8 flex flex-col items-center gap-6 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.6)] rounded-3xl">
                     <Lock style={{ color: C.primary, width: 36, height: 36 }} className="sp-float" />
 
-                    {/* Progress stepper */}
                     <div className="flex w-full max-w-xs gap-1">
                       {[C.secondary, C.secondary, C.primaryContainer, C.outlineVariant, C.outlineVariant].map((col, i) => (
-                        <div key={i} style={{ height: 2, flex: 1, background: col }} />
+                        <div key={i} style={{ height: 2, flex: 1, background: col }} className="rounded-full" />
                       ))}
                     </div>
 
@@ -1596,14 +1516,13 @@ const ResultsPage = () => {
                         Unlock Your Full Solar Intelligence Report
                       </h3>
                       <p style={{ color: C.onSurfaceVariant, fontSize: "14px", lineHeight: 1.6 }} className="max-w-md mx-auto">
-                        Access detailed financial models, itemized equipment specifications, and a certified installer readiness breakdown.
+                        Access detailed financial models, itemized equipment specifications, 3D interactive viewer, and certified installer readiness breakdown.
                       </p>
                     </div>
 
-                    {/* Feature chips */}
                     <div className="flex flex-wrap justify-center gap-2">
-                      {["25-Yr Cashflow Model","IRR & NPV Solver","Installer Readiness","PDF Export"].map(f => (
-                        <div key={f} style={{ background: `${C.secondary}10`, border: `1px solid ${C.secondary}30`, color: C.secondary }} className="text-[10px] font-bold uppercase tracking-wider font-mono px-3 py-1">
+                      {["25-Yr Cashflow Model","3D AR Preview","BESS Battery Config","PDF Export"].map(f => (
+                        <div key={f} style={{ background: `${C.secondary}10`, border: `1px solid ${C.secondary}30`, color: C.secondary }} className="text-[10px] font-bold uppercase tracking-wider font-mono px-3 py-1 rounded-lg">
                           {f}
                         </div>
                       ))}
@@ -1611,7 +1530,7 @@ const ResultsPage = () => {
 
                     <button onClick={() => setCheckoutOpen(true)}
                       style={{ background: C.primaryContainer, color: C.onPrimary }}
-                      className="flex items-center gap-2 px-8 py-4 font-semibold text-sm uppercase tracking-wider transition-all hover:opacity-90 active:scale-[0.98] group shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
+                      className="flex items-center gap-2 px-8 py-4 font-semibold text-sm uppercase tracking-wider transition-all hover:opacity-90 active:scale-[0.98] group shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] rounded-2xl cursor-pointer">
                       Unlock Report — ₹149
                       <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                     </button>
@@ -1634,15 +1553,15 @@ const ResultsPage = () => {
 
         {/* Footer */}
         <footer style={{ background: C.background, borderTop: `1px solid ${C.outlineVariant}` }} className="flex flex-col md:flex-row justify-between items-center px-4 md:px-16 py-4 gap-6 mt-4">
-          <div className="flex flex-col gap-2 max-w-xl">
+          <div className="flex flex-col gap-2 max-w-xl text-left">
             <div style={{ fontFamily: "Sora, sans-serif", color: C.mutedSand, fontSize: "14px" }}>SUNPOWER LINK</div>
             <p className="text-xs" style={{ color: C.mutedSand }}>© {new Date().getFullYear()} SUNPOWER LINK. Financial intelligence driven by geospatial AI.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate("/map")} className="btn-primary">
+            <button onClick={() => navigate("/map")} style={{ background: C.secondary, color: C.onSecondary }} className="px-4 py-2 text-xs font-bold uppercase tracking-wider hover:opacity-95 transition-opacity cursor-pointer rounded-lg font-mono">
               Analyze Another Rooftop
             </button>
-            <button onClick={() => navigate("/")} style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="px-4 py-2 text-xs font-bold uppercase tracking-wider hover:opacity-80 transition-opacity">
+            <button onClick={() => navigate("/")} style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="px-4 py-2 text-xs font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-lg font-mono">
               Back to Home
             </button>
           </div>
@@ -1655,8 +1574,8 @@ const ResultsPage = () => {
 
         {/* ── Checkout Dialog ───────────────────────────────────── */}
         <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
-          <DialogContent style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="sm:max-w-[450px] rounded-none shadow-2xl p-6 focus:outline-none">
-            <DialogHeader className="space-y-1.5">
+          <DialogContent style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="sm:max-w-[450px] rounded-3xl shadow-2xl p-6 focus:outline-none border">
+            <DialogHeader className="space-y-1.5 text-left">
               <DialogTitle className="text-sm font-bold flex items-center gap-2 font-mono uppercase tracking-wider" style={{ color: C.primary }}>
                 <Sparkles className="w-4 h-4 animate-pulse" style={{ color: C.primary }} />
                 Secure Report Checkout
@@ -1666,7 +1585,7 @@ const ResultsPage = () => {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4 my-3">
+            <div className="space-y-4 my-3 text-left">
               <div className="text-[10px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>Select tier</div>
               <div className="grid grid-cols-2 gap-3">
                 {[
@@ -1675,22 +1594,22 @@ const ResultsPage = () => {
                 ].map(plan => (
                   <button key={plan.key} onClick={() => setPaymentPlan(plan.key as any)}
                     style={{ background: paymentPlan === plan.key ? `${C.primaryContainer}15` : "transparent", border: `1px solid ${paymentPlan === plan.key ? C.primaryContainer : C.outlineVariant}`, color: C.onSurface }}
-                    className="p-3 text-left flex flex-col justify-between h-20 transition-all font-mono">
+                    className="p-3 text-left flex flex-col justify-between h-20 transition-all font-mono rounded-xl cursor-pointer">
                     <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: C.mutedSand }}>{plan.label}</span>
                     <span style={{ fontFamily: "Sora, sans-serif", fontSize: "16px" }} className="font-bold">{plan.price}</span>
-                    <span className="text-[8px]" style={{ color: (plan as any).highlight ? C.secondary : C.mutedSand }}>{plan.sub}</span>
+                    <span className="text-[8px]" style={{ color: plan.highlight ? C.secondary : C.mutedSand }}>{plan.sub}</span>
                   </button>
                 ))}
               </div>
             </div>
 
-            <div className="space-y-3 my-2">
+            <div className="space-y-3 my-2 text-left">
               <div className="text-[10px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>Payment details</div>
-              <div style={{ background: C.background, border: `1px solid ${C.outlineVariant}` }} className="flex p-0.5">
+              <div style={{ background: C.background, border: `1px solid ${C.outlineVariant}` }} className="flex p-0.5 rounded-lg">
                 {["card","upi"].map(m => (
                   <button key={m} onClick={() => setPaymentMethod(m as any)}
                     style={{ background: paymentMethod===m ? C.primaryContainer : "transparent", color: paymentMethod===m ? C.onPrimary : C.mutedSand }}
-                    className="flex-1 text-[10px] py-1.5 font-bold uppercase transition-all font-mono">
+                    className="flex-1 text-[10px] py-1.5 font-bold uppercase transition-all font-mono rounded-md cursor-pointer border-none outline-none">
                     {m === "card" ? "Card" : "UPI"}
                   </button>
                 ))}
@@ -1701,20 +1620,20 @@ const ResultsPage = () => {
                     <label className="text-[9px] font-bold uppercase font-mono block mb-1" style={{ color: C.mutedSand }}>Card number</label>
                     <input type="text" placeholder="4000 1234 5678 9010" value={cardNumber} onChange={e => setCardNumber(e.target.value)}
                       style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                      className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#ff8f00]" />
+                      className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#ff8f00] rounded-lg border" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-[9px] font-bold uppercase font-mono block mb-1" style={{ color: C.mutedSand }}>Expiry</label>
                       <input type="text" placeholder="MM/YY" value={cardExpiry} onChange={e => setCardExpiry(e.target.value)}
                         style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                        className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#ff8f00]" />
+                        className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#ff8f00] rounded-lg border" />
                     </div>
                     <div>
                       <label className="text-[9px] font-bold uppercase font-mono block mb-1" style={{ color: C.mutedSand }}>CVV</label>
                       <input type="password" placeholder="•••" value={cardCvv} onChange={e => setCardCvv(e.target.value)}
                         style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                        className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#ff8f00]" />
+                        className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#ff8f00] rounded-lg border" />
                     </div>
                   </div>
                 </div>
@@ -1731,18 +1650,30 @@ const ResultsPage = () => {
             <div style={{ borderTop: `1px solid ${C.outlineVariant}` }} className="space-y-2 pt-4 mt-4">
               <button onClick={handleSandboxCheckout} disabled={paymentProcessing || paymentSuccess}
                 style={{ background: C.primaryContainer, color: C.onPrimary }}
-                className="w-full text-xs font-bold py-3 flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity uppercase tracking-wider">
+                className="w-full text-xs font-bold py-3 flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity uppercase tracking-wider rounded-xl cursor-pointer border-none outline-none">
                 {paymentProcessing ? <><RefreshCw className="w-4 h-4 animate-spin" />Processing...</> : paymentSuccess ? <><CheckCircle2 className="w-4 h-4" />Unlocking...</> : "Simulate Instant Sandbox Unlock"}
               </button>
               <button onClick={() => { setCheckoutOpen(false); initiatePayment({ plan: paymentPlan, scanId: data?.analysisId }); }}
                 disabled={paymentProcessing || paymentSuccess || isPaymentGatewayLoading}
                 style={{ background: "transparent", border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                className="w-full text-xs font-bold py-3 flex items-center justify-center gap-2 hover:bg-[#1F1B18] transition-colors disabled:opacity-50 uppercase tracking-wider">
+                className="w-full text-xs font-bold py-3 flex items-center justify-center gap-2 hover:bg-[#1F1B18] transition-colors disabled:opacity-50 uppercase tracking-wider rounded-xl cursor-pointer">
                 {isPaymentGatewayLoading ? <><RefreshCw className="w-4 h-4 animate-spin" />Connecting...</> : "Launch Razorpay"}
               </button>
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Lead capture modal form */}
+        <LeadCaptureForm
+          open={leadFormOpen}
+          onOpenChange={setLeadFormOpen}
+          context={{
+            analysisId: data.analysisId,
+            kw: model.installedKw,
+            location: data.location?.label,
+          }}
+        />
+
       </div>
     </>
   );
