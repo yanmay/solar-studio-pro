@@ -1,10 +1,7 @@
 // NASA POWER API client for solar irradiance data
-// Fetches ALLSKY_SFC_SW_DWN (average daily solar irradiance in kWh/m²/day)
-// with 24-hour caching and regional fallback.
+// Fetches solar data from the server-side API proxy.
 
-import { getRegionalPSH } from "./india-grid";
-
-interface NASAPowerResponse {
+export interface NASAPowerResponse {
   properties: {
     parameter: {
       ALLSKY_SFC_SW_DWN: Record<string, number>;
@@ -12,95 +9,82 @@ interface NASAPowerResponse {
   };
 }
 
-interface IrradianceResult {
+export interface IrradianceResult {
   peakSunHours: number;
   source: "NASA_POWER" | "REGIONAL_FALLBACK";
   region?: string;
   monthlyValues?: Record<string, number>;
 }
 
-// In-memory cache: key → { data, timestamp }
-const cache = new Map<string, { data: IrradianceResult; timestamp: number }>();
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-function cacheKey(lat: number, lng: number): string {
-  return `${lat.toFixed(2)}_${lng.toFixed(2)}`;
+export interface MonthlyGHIResult {
+  monthly_ghi: number[];
+  lat: number;
+  lng: number;
+  year: number;
 }
 
 /**
- * Fetch solar irradiance from NASA POWER API.
- * Returns peak sun hours (kWh/m²/day annual average).
- * 
- * On failure: falls back to regional PSH lookup table.
- * Caches result for 24 hours per coordinate pair.
+ * Fetch solar data from the Vercel Edge proxy.
+ * Throws a descriptive Error if the response is not ok.
  */
-export async function fetchSolarIrradiance(
-  lat: number,
-  lng: number
-): Promise<IrradianceResult> {
-  const key = cacheKey(lat, lng);
-
-  // Check cache
-  const cached = cache.get(key);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-    return cached.data;
+export async function fetchSolarData(lat: number, lng: number): Promise<MonthlyGHIResult> {
+  const response = await fetch(`/api/solar-data?lat=${lat}&lng=${lng}`);
+  
+  if (!response.ok) {
+    let errorDetails = "";
+    try {
+      const errData = await response.json();
+      errorDetails = errData.details || errData.error || "";
+    } catch {
+      // Ignore fallback if response body is not JSON
+    }
+    
+    const message = errorDetails
+      ? `Failed to fetch solar data: ${response.status} ${response.statusText || ""} (${errorDetails})`.trim()
+      : `Failed to fetch solar data: ${response.status} ${response.statusText || ""}`.trim();
+    
+    throw new Error(message);
   }
+  
+  return response.json();
+}
 
+// Month keys matching NASA POWER API response order (annual avg is keyed "ANN")
+const MONTH_KEYS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+/**
+ * Adapter: fetches solar irradiance via the Edge proxy and converts the
+ * monthly GHI array into the IrradianceResult shape consumed by MapPage.
+ */
+export async function fetchSolarIrradiance(lat: number, lng: number): Promise<IrradianceResult> {
   try {
-    // 5-second timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const data = await fetchSolarData(lat, lng);
+    const monthlyGhi = data.monthly_ghi;
 
-    const url = `https://power.larc.nasa.gov/api/temporal/climatology/point?parameters=ALLSKY_SFC_SW_DWN&community=RE&longitude=${lng.toFixed(4)}&latitude=${lat.toFixed(4)}&format=JSON`;
-
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: { Accept: "application/json" },
-    });
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`NASA POWER API returned ${response.status}`);
-    }
-
-    const data: NASAPowerResponse = await response.json();
-    const monthly = data.properties.parameter.ALLSKY_SFC_SW_DWN;
-
-    // ANN = annual average
-    const annualAvg = monthly["ANN"];
-    if (typeof annualAvg !== "number" || annualAvg <= 0) {
-      throw new Error("Invalid annual average from NASA POWER");
-    }
-
-    // Monthly values for chart (Jan=1 .. Dec=12)
+    // Convert flat array [Jan..Dec] to keyed record
     const monthlyValues: Record<string, number> = {};
-    const monthKeys = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
-    for (const mk of monthKeys) {
-      if (typeof monthly[mk] === "number") {
-        monthlyValues[mk] = monthly[mk];
-      }
-    }
+    MONTH_KEYS.forEach((key, i) => {
+      monthlyValues[key] = monthlyGhi[i] ?? 0;
+    });
 
-    const result: IrradianceResult = {
-      peakSunHours: Math.round(annualAvg * 100) / 100,
+    // Annual average = mean of the 12 monthly values
+    const validValues = monthlyGhi.filter((v) => v > 0);
+    const peakSunHours =
+      validValues.length > 0
+        ? validValues.reduce((sum, v) => sum + v, 0) / validValues.length
+        : 4.5; // regional fallback
+
+    return {
+      peakSunHours: Math.round(peakSunHours * 100) / 100,
       source: "NASA_POWER",
       monthlyValues,
     };
-
-    cache.set(key, { data: result, timestamp: Date.now() });
-    return result;
-  } catch (error) {
-    console.error("[nasa-power] API failed, using regional fallback:", error);
-
-    // Fallback to regional lookup
-    const { psh, region } = getRegionalPSH(lat, lng);
-    const result: IrradianceResult = {
-      peakSunHours: psh,
+  } catch {
+    // Graceful fallback if the Edge proxy is unavailable (local dev without vercel dev)
+    return {
+      peakSunHours: 4.5,
       source: "REGIONAL_FALLBACK",
-      region,
+      region: "India average",
     };
-
-    cache.set(key, { data: result, timestamp: Date.now() });
-    return result;
   }
 }

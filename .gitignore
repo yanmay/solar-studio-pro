@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+.env.local
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +23,35 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Brainstorming Visual Companion
+.superpowers/
+
+# Secrets & Environment
+.env
+.env.production
+.env.development
+.env.staging
+
+# Python
+__pycache__/
+*.pyc
+
+# Local agents and skills
+.agents/
+skills-lock.json
+
+# Scratch and test results
+scratch/
+scratch_*.png
+scratch_*.txt
+*.png
+*.webp
+!public/*.png
+!public/*.webp
+test-results/
+step_*_full.txt
+
+# Nested duplicate repository and temporary directories
+solar-studio-pro/
+stitch_solar_intelligence_report_executive_summary (1)/

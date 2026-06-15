@@ -17,6 +17,7 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
         cta: "bg-sunpower-accent text-sunpower-accent-text hover:bg-sunpower-accent-hover hover:scale-[1.02] active:scale-[0.98] rounded-pill px-7 py-3",
         hero: "bg-sunpower-accent text-sunpower-accent-text hover:bg-sunpower-accent-hover hover:scale-[1.02] active:scale-[0.98] rounded-pill px-8 py-3.5 text-base font-medium shadow-float",
+        glow: "bg-primary text-primary-foreground shadow-[0_0_20px_rgba(255,102,0,0.4)] hover:bg-primary/90 hover:shadow-[0_0_25px_rgba(255,102,0,0.6)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 border-none",
       },
       size: {
         default: "h-10 px-4 py-2",
@@ -49,8 +50,12 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || loading}
         {...props}
       >
-        {loading && <Loader2 className="animate-spin" />}
-        {children}
+        {asChild ? children : (
+          <>
+            {loading && <Loader2 className="animate-spin" />}
+            {children}
+          </>
+        )}
       </Comp>
     );
   },

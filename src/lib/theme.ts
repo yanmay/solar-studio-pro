@@ -12,7 +12,9 @@ export function getStoredTheme(): Theme {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === "light" || stored === "dark" || stored === "system") return stored;
-  } catch {}
+  } catch (error) {
+    console.warn("localStorage theme access failed:", error);
+  }
   return "system";
 }
 
@@ -20,7 +22,9 @@ export function getStoredTheme(): Theme {
 export function setStoredTheme(theme: Theme) {
   try {
     localStorage.setItem(STORAGE_KEY, theme);
-  } catch {}
+  } catch (error) {
+    console.warn("localStorage theme save failed:", error);
+  }
 }
 
 /** Resolve "system" to actual light/dark */

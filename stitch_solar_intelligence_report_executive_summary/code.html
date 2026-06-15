@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SolarScan AI - Premium Report</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-family: 'Material Symbols Outlined';
+            font-weight: normal;
+            font-style: normal;
+            font-size: 24px;
+            line-height: 1;
+            letter-spacing: normal;
+            text-transform: none;
+            display: inline-block;
+            white-space: nowrap;
+            word-wrap: normal;
+            direction: ltr;
+            font-feature-settings: 'liga';
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        /* Monotone Area Chart CSS Placeholder */
+        .area-chart {
+            background: linear-gradient(to bottom, rgba(245, 166, 35, 0.15) 0%, rgba(245, 166, 35, 0) 100%);
+            border-bottom: 2px solid #f5a623; /* fallback for config color */
+            position: relative;
+        }
+        .dark .area-chart {
+            border-bottom-color: #ffc880; /* primary */
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "inverse-surface": "#e5e1e4",
+                      "surface-dim": "#131315",
+                      "outline-variant": "#524534",
+                      "on-secondary-fixed": "#002113",
+                      "on-error-container": "#ffdad6",
+                      "secondary-container": "#00a572",
+                      "primary-fixed": "#ffddb4",
+                      "on-primary-fixed": "#291800",
+                      "tertiary": "#9bd9ff",
+                      "surface-container-highest": "#353437",
+                      "on-error": "#690005",
+                      "tertiary-fixed-dim": "#7cd0ff",
+                      "on-tertiary-fixed": "#001e2c",
+                      "secondary-fixed-dim": "#4edea3",
+                      "tertiary-fixed": "#c4e7ff",
+                      "on-surface-variant": "#d7c3ae",
+                      "on-background": "#e5e1e4",
+                      "surface-container-low": "#1c1b1d",
+                      "surface-bright": "#39393b",
+                      "inverse-on-surface": "#313032",
+                      "secondary": "#4edea3",
+                      "surface-container-high": "#2a2a2c",
+                      "on-primary-fixed-variant": "#633f00",
+                      "secondary-fixed": "#6ffbbe",
+                      "surface-tint": "#ffb955",
+                      "on-secondary": "#003824",
+                      "outline": "#9f8e7a",
+                      "primary-fixed-dim": "#ffb955",
+                      "primary-container": "#f5a623",
+                      "surface-variant": "#353437",
+                      "on-primary": "#452b00",
+                      "background": "#131315",
+                      "surface-container-lowest": "#0e0e10",
+                      "on-primary-container": "#644000",
+                      "on-surface": "#e5e1e4",
+                      "error": "#ffb4ab",
+                      "on-tertiary-container": "#004d6a",
+                      "surface-container": "#201f21",
+                      "on-secondary-container": "#00311f",
+                      "on-secondary-fixed-variant": "#005236",
+                      "surface": "#131315",
+                      "on-tertiary-fixed-variant": "#004c69",
+                      "on-tertiary": "#00344a",
+                      "inverse-primary": "#835500",
+                      "primary": "#ffc880",
+                      "tertiary-container": "#3ac2ff",
+                      "error-container": "#93000a"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "stack-md": "24px",
+                      "stack-sm": "12px",
+                      "gutter": "24px",
+                      "container-margin-mobile": "20px",
+                      "stack-lg": "48px",
+                      "container-margin-desktop": "48px",
+                      "base": "8px"
+              },
+              "fontFamily": {
+                      "headline-md": ["Inter"],
+                      "body-md": ["Inter"],
+                      "headline-lg": ["Inter"],
+                      "headline-lg-mobile": ["Inter"],
+                      "label-sm": ["Inter"],
+                      "display-lg": ["Inter"],
+                      "body-lg": ["Inter"]
+              },
+              "fontSize": {
+                      "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                      "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                      "label-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                      "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}]
+              }
+            }
+          }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-surface font-body-md antialiased min-h-screen flex flex-col">
+<!-- TopNavBar from JSON -->
+<header class="bg-surface-dim/80 backdrop-blur-md shadow-sm fixed top-0 w-full z-50 border-b border-white/5 transition-all duration-300 ease-in-out">
+<div class="flex justify-between items-center px-gutter py-4 max-w-7xl mx-auto">
+<div class="font-headline-md text-headline-md font-bold text-primary flex items-center gap-2">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">solar_power</span>
+                SolarScan AI
+            </div>
+<nav class="hidden md:flex gap-8">
+<a class="text-primary font-bold border-b-2 border-primary pb-1 font-body-md text-body-md hover:bg-white/5" href="#summary">Summary</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md hover:bg-white/5 pb-1" href="#roi">ROI</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md hover:bg-white/5 pb-1" href="#specs">Specs</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md hover:bg-white/5 pb-1" href="#impact">Impact</a>
+</nav>
+<button class="bg-primary-container text-on-primary-container font-label-sm text-label-sm px-6 py-2 rounded-lg font-semibold hover:bg-primary transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined" style="font-size: 18px;">download</span>
+                Download PDF
+            </button>
+</div>
+</header>
+<!-- Main Canvas (Continuous Document) -->
+<main class="flex-grow w-full max-w-4xl mx-auto px-gutter mt-28 pb-stack-lg flex flex-col gap-stack-lg">
+<!-- Header Section -->
+<section class="flex flex-col gap-stack-sm pt-8">
+<div class="flex flex-col md:flex-row md:justify-between md:items-end gap-6">
+<div class="flex flex-col gap-2">
+<p class="font-label-sm text-label-sm text-primary uppercase tracking-widest">Investment Memorandum • Oct 24, 2024</p>
+<h1 class="font-display-lg text-display-lg text-on-surface leading-tight">Terminal 1, Airport New Road, Pune</h1>
+</div>
+</div>
+<div class="flex flex-wrap items-center gap-6 mt-6 text-on-surface-variant border-t border-white/10 pt-6">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined">location_on</span>
+<span class="font-body-md text-body-md">Pune, Maharashtra 411032</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined">bolt</span>
+<span class="font-body-md text-body-md">18.4 kWp System</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined">grid_4x4</span>
+<span class="font-body-md text-body-md">41 Premium Panels</span>
+</div>
+</div>
+</section>
+<!-- Executive Summary -->
+<section class="flex flex-col gap-4 border-l-2 border-primary pl-6 py-2 relative" id="summary">
+<div class="absolute right-0 top-0 flex flex-col items-end">
+<span class="font-headline-lg text-headline-lg text-primary">98%</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">Confidence Score</span>
+</div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Analyst Recommendation</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl leading-relaxed">
+                Based on geospatial solar irradiance data and current tariff structures, this site presents a highly lucrative opportunity. The combination of unobstructed roof surface and high commercial utility rates drives an accelerated payback period, making this a top-tier asset for immediate solar conversion.
+            </p>
+</section>
+<hr class="border-white/10"/>
+<!-- Core Metrics Grid -->
+<section class="grid grid-cols-1 md:grid-cols-4 gap-6">
+<div class="flex flex-col gap-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Annual Savings</span>
+<span class="font-headline-lg text-headline-lg text-secondary">₹182,431</span>
+</div>
+<div class="flex flex-col gap-1 border-l border-white/10 pl-6">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Payback Period</span>
+<span class="font-headline-lg text-headline-lg text-primary">4.1 Years</span>
+</div>
+<div class="flex flex-col gap-1 border-l border-white/10 pl-6">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">25-Yr Net Gain</span>
+<span class="font-headline-lg text-headline-lg text-on-surface">₹45L</span>
+</div>
+<div class="flex flex-col gap-1 border-l border-white/10 pl-6">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">System Capacity</span>
+<span class="font-headline-lg text-headline-lg text-on-surface">18.4 kWp</span>
+</div>
+</section>
+<hr class="border-white/10"/>
+<!-- ROI Centerpiece -->
+<section class="flex flex-col gap-6" id="roi">
+<div class="flex justify-between items-end">
+<h2 class="font-headline-md text-headline-md text-on-surface">Cumulative Cash Flow Projection</h2>
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-primary"></div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Cumulative Savings</span>
+</div>
+</div>
+<div class="w-full h-64 mt-4 relative rounded-lg border border-white/10 overflow-hidden bg-surface-container-lowest">
+<!-- Abstract Chart Representation -->
+<div class="absolute inset-0 flex items-end">
+<div class="w-full h-3/4 area-chart" style="clip-path: polygon(0 100%, 15% 90%, 30% 70%, 50% 40%, 75% 15%, 100% 0, 100% 100%);"></div>
+</div>
+<!-- Break-even Marker -->
+<div class="absolute top-0 bottom-0 left-[25%] border-l-2 border-dashed border-primary/50 flex flex-col justify-start pt-4 pl-2">
+<span class="font-label-sm text-label-sm text-primary uppercase">Break-even</span>
+<span class="font-headline-md text-headline-md text-on-surface">Yr 4.1</span>
+</div>
+<!-- X-Axis Labels -->
+<div class="absolute bottom-2 left-0 right-0 px-4 flex justify-between font-label-sm text-label-sm text-on-surface-variant/50">
+<span>Year 1</span>
+<span>Year 10</span>
+<span>Year 25</span>
+</div>
+</div>
+</section>
+<hr class="border-white/10"/>
+<!-- Financial Outlay Ledger -->
+<section class="flex flex-col gap-6">
+<h2 class="font-headline-md text-headline-md text-on-surface">Financial Outlay Ledger</h2>
+<div class="w-full border border-white/10 rounded-lg overflow-hidden">
+<div class="flex justify-between items-center py-4 px-6 border-b border-white/10 bg-surface-container-lowest/50">
+<span class="font-body-md text-body-md text-on-surface-variant">Gross System Cost</span>
+<span class="font-body-md text-body-md text-on-surface">₹9,20,000</span>
+</div>
+<div class="flex justify-between items-center py-4 px-6 border-b border-white/10 bg-surface-container-lowest/50">
+<div class="flex items-center gap-2 text-secondary">
+<span class="material-symbols-outlined" style="font-size: 18px;">redeem</span>
+<span class="font-body-md text-body-md">State &amp; Central Subsidies</span>
+</div>
+<span class="font-body-md text-body-md text-secondary">- ₹1,72,000</span>
+</div>
+<div class="flex justify-between items-center py-4 px-6 bg-surface-container-lowest">
+<span class="font-headline-md text-headline-md text-on-surface">Net Project Cost</span>
+<span class="font-headline-md text-headline-md text-on-surface">₹7,48,000</span>
+</div>
+</div>
+</section>
+<hr class="border-white/10"/>
+<!-- System Intelligence -->
+<section class="flex flex-col gap-6" id="specs">
+<h2 class="font-headline-md text-headline-md text-on-surface">System Intelligence</h2>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="flex flex-col gap-2 p-6 border border-white/10 rounded-lg bg-surface-container-lowest">
+<span class="material-symbols-outlined text-primary mb-2">solar_power</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">Module Specs</span>
+<span class="font-body-md text-body-md text-on-surface font-semibold">450W Monocrystalline</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-auto pt-2">Tier-1 Manufacturer</span>
+</div>
+<div class="flex flex-col gap-2 p-6 border border-white/10 rounded-lg bg-surface-container-lowest">
+<span class="material-symbols-outlined text-primary mb-2">ev_station</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">Inverter Specs</span>
+<span class="font-body-md text-body-md text-on-surface font-semibold">20 kW 3-Phase Smart</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-auto pt-2">98.4% Efficiency</span>
+</div>
+<div class="flex flex-col gap-2 p-6 border border-white/10 rounded-lg bg-surface-container-lowest">
+<span class="material-symbols-outlined text-primary mb-2">home_work</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">Roof Assumptions</span>
+<span class="font-body-md text-body-md text-on-surface font-semibold">RCC Flat Roof</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-auto pt-2">Zero Shading Penalty</span>
+</div>
+</div>
+</section>
+<hr class="border-white/10"/>
+<!-- Environmental Impact -->
+<section class="flex flex-col gap-6 mb-8" id="impact">
+<h2 class="font-headline-md text-headline-md text-on-surface">Environmental Impact (25 Yrs)</h2>
+<div class="flex flex-wrap gap-12">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full border border-secondary/30 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined">co2</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-md text-headline-md text-on-surface">412 Tons</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">CO2 Emissions Avoided</span>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full border border-secondary/30 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined">forest</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-md text-headline-md text-on-surface">6,800</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">Equivalent Trees Planted</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer from JSON -->
+<footer class="bg-surface-container-lowest w-full py-stack-lg border-t border-white/5 mt-auto">
+<div class="flex flex-col md:flex-row justify-between items-center px-gutter gap-4 max-w-7xl mx-auto">
+<div class="font-label-sm text-label-sm font-semibold text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined" style="font-size: 16px;">solar_power</span>
+                © 2024 SolarScan AI. All rights reserved. Professional Investment Memorandum.
+            </div>
+<nav class="flex flex-wrap gap-6 font-label-sm text-label-sm">
+<a class="text-on-surface-variant hover:text-primary transition-colors opacity-80 hover:opacity-100" href="#">Privacy Policy</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors opacity-80 hover:opacity-100" href="#">Terms of Service</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors opacity-80 hover:opacity-100" href="#">Disclosures</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors opacity-80 hover:opacity-100" href="#">Contact Support</a>
+</nav>
+</div>
+</footer>
+</body></html>

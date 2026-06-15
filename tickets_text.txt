@@ -1,0 +1,1001 @@
+FEATURE TICKET LIST
+SolarScan AI
+17 tickets · 1 launch blocker · 6 must-have · 6 should-have · 4 nice-to-have
+Each ticket includes a ready-to-paste Antigravity prompt   •   June 2025
+Ticket Index
+Each ticket is a complete, self-contained unit of work. Dependencies are listed explicitly. Start with SCN-001 — it is the only remaining launch blocker.
+ID
+Title
+Priority
+Area
+Deps
+SCN-001
+Real Razorpay Payment Gateway Integration
+MUST-HAVE
+Payment
+SCN-002, SCN-003
+SCN-002
+Edge Function: Payment Create-Order
+MUST-HAVE
+Backend / Security
+SCN-005
+SCN-003
+Edge Function: Payment Verify (HMAC Signature Check)
+MUST-HAVE
+Backend / Security
+SCN-002
+SCN-004
+Edge Function: NASA POWER API Proxy
+MUST-HAVE
+Backend / Security
+SCN-005
+SCN-005
+Environment Variables Setup (.env.example + Vercel config)
+MUST-HAVE
+Infrastructure
+—
+SCN-006
+Edge Function: Google Geocoding Proxy
+MUST-HAVE
+Backend / Security
+SCN-005
+SCN-007
+Zustand Store — Replace sessionStorage State
+MUST-HAVE
+State Management
+—
+SCN-008
+Rate Limiting on Edge Functions (Vercel KV)
+SHOULD-HAVE
+Backend / Security
+SCN-004, SCN-006
+SCN-009
+Mobile Interstitial on Map Page
+SHOULD-HAVE
+Frontend
+SCN-007
+SCN-010
+Restore Access Button (Post-Payment Recovery)
+SHOULD-HAVE
+Payment
+SCN-001, SCN-003
+SCN-011
+Sentry Error Monitoring Integration
+SHOULD-HAVE
+Infrastructure
+SCN-005
+SCN-012
+Shareable Results Link (Unique URL per scan)
+SHOULD-HAVE
+Frontend
+SCN-007
+SCN-013
+Playwright E2E Test: Full Payment Flow
+SHOULD-HAVE
+Testing
+SCN-001, SCN-007
+SCN-014
+Multi-Roof Polygon Merge Tool
+NICE-TO-HAVE
+Frontend
+SCN-007
+SCN-015
+Installer Lead-Gen Form on Results Page
+NICE-TO-HAVE
+Frontend
+SCN-001, SCN-007
+SCN-016
+Live DISCOM Tariff Lookup by Location
+NICE-TO-HAVE
+Backend / Security
+SCN-004, SCN-007
+SCN-017
+Vercel Analytics Integration
+NICE-TO-HAVE
+Infrastructure
+—
+Build Status Summary
+Category
+Count
+Status
+Must-have features (from PRD)
+25
+✅ ALL IMPLEMENTED
+Must-have: Real payment gateway
+1
+❌ MISSING — SCN-001 is the only launch blocker
+Should-have tickets in this list
+6
+Not started — target for v1.1
+Nice-to-have tickets in this list
+4
+Not started — future roadmap
+Infrastructure / security tickets
+3
+SCN-004, SCN-005, SCN-006 — required before launch
+READ FIRST
+You have built 25 of 26 must-have features. The one missing item (real Razorpay payment) is ticket SCN-001. Complete SCN-001, SCN-002, SCN-003, SCN-005, and SCN-006 before going live — these are your security and payment foundations. Everything else can wait.
+Recommended Build Order
+Follow this order to avoid rework and dependency conflicts.
+Order
+Ticket
+Why this order
+1st
+SCN-005 — .env.example + vercel.json
+All Edge Functions need env vars. Do this first.
+2nd
+SCN-002 — create-order Edge Function
+SCN-001 depends on this.
+3rd
+SCN-003 — verify Edge Function
+SCN-001 depends on this.
+4th
+SCN-001 — Real Razorpay integration
+Launch blocker. Needs 002 and 003.
+5th
+SCN-006 — Geocoding proxy
+Closes the last API key exposure.
+6th
+SCN-004 — NASA proxy
+Closes the NASA direct-call exposure.
+7th
+SCN-007 — Zustand store
+Fixes the sessionStorage reliability bug.
+8th
+SCN-008 — Rate limiting
+Needs the Edge Functions to exist first.
+9th
+SCN-009 — Mobile interstitial
+Quick win. Independent.
+10th
+SCN-010 — Restore access button
+Needs real payment flow to be live.
+11th
+SCN-011 — Sentry
+Best added after core flows are stable.
+12th
+SCN-017 — Vercel Analytics
+Quick win. Independent.
+13th+
+SCN-012 through SCN-016
+Should-have and nice-to-have. Order by business priority.
+Tickets
+SCN-001
+Real Razorpay Payment Gateway Integration
+Payment
+MUST-HAVE
+DESCRIPTION
+Replace the current simulated checkout (setTimeout mock) with a real Razorpay SDK integration. Users must be able to pay ₹149 via UPI or card, have their payment verified server-side, and have the paywall unlocked via a secure HttpOnly cookie. This is the only remaining launch blocker.
+CONTEXT
+The current implementation uses a setTimeout to fake a payment after 2 seconds. No money changes hands. This must be replaced before any real user is charged. Razorpay test mode (rzp_test_...) should be used during development and staging; production keys only on the live Vercel deployment.
+DEPENDS ON
+→  SCN-002 (Edge Function: create-order)
+→  SCN-003 (Edge Function: verify)
+NOTES / WARNINGS
+⚠  Razorpay script must be loaded dynamically (after order creation), not as a static import.
+⚠  Never send RAZORPAY_KEY_SECRET to the browser. Only keyId (public) goes to the client.
+⚠  Use rzp_test_ keys in .env.local during development. Never commit production keys.
+ACCEPTANCE CRITERIA  —  this ticket is done when all of the following are true
+1.  Razorpay checkout modal opens correctly when user clicks 'Unlock Full Report'.
+2.  Modal shows the correct amount: ₹149 for pay-per-scan, ₹999 for Pro monthly.
+3.  Payment succeeds using Razorpay test card (4111 1111 1111 1111, any future date, any CVV).
+4.  Payment succeeds using Razorpay test UPI (success@razorpay).
+5.  After successful payment, the paywall overlay disappears without a page reload.
+6.  After successful payment, all blurred sections (cashflow chart, harvest chart, subsidy breakdown) become fully visible.
+7.  After successful payment, the PDF download button appears in the DOM.
+8.  If user closes the Razorpay modal without paying, the paywall reappears and no unlock cookie is set.
+9.  If payment fails (test card: 4111 1111 1111 1112), user sees a friendly error and can retry.
+10.  The unlock persists across page refreshes for 24 hours (cookie survives refresh).
+11.  The setTimeout mock and all simulated checkout code is fully removed.
+12.  npm run test passes with no regressions.
+AI CODING PROMPT  —  copy and paste this directly into Antigravity
+Open src/pages/ResultsPage.tsx and src/hooks/use-payment.ts (create it if it does not exist).
+
+TASK: Replace the simulated checkout with a real Razorpay integration.
+
+Step 1 — Remove all simulation code:
+Find and delete any setTimeout, fake payment logic, or mock success callbacks in ResultsPage.tsx
+and any related hooks. Do not leave dead code commented out.
+
+Step 2 — Create src/hooks/use-payment.ts:
+Export a usePayment() hook that returns { initiatePayment, isLoading, error }.
+The initiatePayment function accepts { plan: 'pay_per_scan' | 'pro_monthly', scanId?: string }.
+It should:
+  1. POST to /api/payment/create-order with { plan, scanId }
+  2. Receive { orderId, amount, currency, keyId } from the server
+  3. Dynamically load the Razorpay checkout script:
+     https://checkout.razorpay.com/v1/checkout.js
+  4. Open the Razorpay modal with the order details, name: 'SolarScan AI',
+     description based on plan, and handler callbacks (success + dismiss)
+  5. In the success callback:
+     - POST to /api/payment/verify with { razorpay_order_id, razorpay_payment_id, razorpay_signature, plan, scanId }
+     - If verified, call useScanStore().setIsPaid(true, paymentId)
+     - Show a success toast via sonner: 'Report unlocked! Your full analysis is ready.'
+  6. In the dismiss callback: do nothing (user cancelled)
+
+Step 3 — Wire it into ResultsPage.tsx:
+Find the existing pay button / checkout trigger.
+Replace its onClick handler with: initiatePayment({ plan: selectedPlan, scanId: currentScanId })
+where selectedPlan comes from the user's plan selection state and currentScanId is from useScanStore().
+
+Step 4 — Paywall gating:
+The paywall overlay visibility must read from useScanStore().isPaid.
+All blurred/hidden sections must check isPaid from the store, not from any local state.
+The PDF export button must be rendered only when isPaid === true.
+
+Do NOT change any visual layout, styles, or copy text. Only replace the payment logic.
+Do NOT remove the plan selection UI (pay-per-scan vs pro toggle).
+SCN-002
+Edge Function: Payment Create-Order
+Backend / Security
+MUST-HAVE
+DESCRIPTION
+Create a Vercel Edge Function at api/payment/create-order.ts that creates a Razorpay order server-side. The browser never touches the Razorpay secret key — it only receives the order ID and public key ID to initialise the checkout modal.
+CONTEXT
+The amount charged must be determined entirely by the server based on the plan name. The browser should never send an amount — if it did, a user could manipulate it to pay ₹1 instead of ₹149.
+DEPENDS ON
+→  SCN-005 (.env.example and key setup)
+NOTES / WARNINGS
+⚠  File must be at api/payment/create-order.ts — Vercel maps this to /api/payment/create-order.
+⚠  RAZORPAY_KEY_ID is safe to return (public). RAZORPAY_KEY_SECRET must never appear in the response.
+ACCEPTANCE CRITERIA  —  this ticket is done when all of the following are true
+1.  File exists at api/payment/create-order.ts (project root, not inside src/).
+2.  POST /api/payment/create-order with { plan: 'pay_per_scan' } returns { orderId, amount: 14900, currency: 'INR', keyId }.
+3.  POST /api/payment/create-order with { plan: 'pro_monthly' } returns { orderId, amount: 99900, currency: 'INR', keyId }.
+4.  Any request with an invalid plan value returns HTTP 400 with { error: 'Invalid plan' }.
+5.  The amount is hardcoded on the server — no amount field from the request body is used.
+6.  RAZORPAY_KEY_SECRET is read from process.env and never included in the response.
+7.  Returns HTTP 405 for GET, PUT, DELETE requests.
+AI CODING PROMPT  —  copy and paste this directly into Antigravity
+Create a new file at api/payment/create-order.ts in the project root (same level as src/, not inside it).
+
+This is a Vercel serverless function (Edge Function) that creates a Razorpay payment order.
+
+Requirements:
+- Accept POST requests only. Return 405 { error: 'Method not allowed' } for all other methods.
+- Parse JSON body: { plan: string, scanId?: string }
+- Validate plan is exactly 'pay_per_scan' or 'pro_monthly'. Return 400 if not.
+- Determine amount IN PAISE server-side only:
+    pay_per_scan  → 14900   (₹149)
+    pro_monthly   → 99900   (₹999)
+  Do NOT use any amount from the request body.
+- Install razorpay if not present: the import is: import Razorpay from 'razorpay'
+- Initialise Razorpay: new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID, key_secret: process.env.RAZORPAY_KEY_SECRET })
+- Create order: razorpay.orders.create({ amount, currency: 'INR', receipt: 'scan_' + Date.now(), notes: { plan, scanId: scanId || '' } })
+- Return JSON: { orderId: order.id, amount: order.amount, currency: order.currency, keyId: process.env.RAZORPAY_KEY_ID }
+- On error: return 500 { error: 'Failed to create order' } — do not expose error details to browser.
+- TypeScript, no 'any' types, default export.
+- Do NOT import anything from src/.
+SCN-003
+Edge Function: Payment Verify (HMAC Signature Check)
+Backend / Security
+MUST-HAVE
+DESCRIPTION
+Create a Vercel Edge Function at api/payment/verify.ts that verifies the Razorpay HMAC signature after a payment completes, then sets the secure unlock cookie. This is the most security-critical function in the app — a wrong implementation allows anyone to unlock reports without paying.
+CONTEXT
+Razorpay generates a cryptographic signature for every payment using your webhook secret. Your server re-computes the same signature and compares. If they match, the payment is real. If not, someone is trying to fake a payment.
+DEPENDS ON
+→  SCN-002
+NOTES / WARNINGS
+⚠  CRITICAL: The pipe separator | in the HMAC body string is Razorpay's required format. Any deviation causes all verifications to fail.
+⚠  Test this with Razorpay's test mode before touching production keys.
+ACCEPTANCE CRITERIA  —  this ticket is done when all of the following are true
+1.  File exists at api/payment/verify.ts in the project root.
+2.  POST with valid razorpay_order_id, razorpay_payment_id, razorpay_signature returns HTTP 200 { verified: true, paymentId }.
+3.  POST with an invalid/tampered signature returns HTTP 400 { error: 'Invalid payment signature' }. No cookie is set.
+4.  On success, response sets a cookie: scan_unlocked_<scanId>=true; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=86400.
+5.  The HMAC body string is exactly: razorpay_order_id + '|' + razorpay_payment_id (pipe separator, no spaces).
+6.  RAZORPAY_KEY_SECRET is never included in any response.
+AI CODING PROMPT  —  copy and paste this directly into Antigravity
+Create a new file at api/payment/verify.ts in the project root.
+
+This Edge Function verifies a Razorpay payment signature and sets an unlock cookie.
+
+Requirements:
+- Accept POST requests only. Return 405 for other methods.
+- Parse JSON body: { razorpay_order_id: string, razorpay_payment_id: string, razorpay_signature: string, plan: string, scanId?: string }
+- Verify the HMAC signature using Node's built-in crypto module:
+    import { createHmac } from 'crypto'
+    const body = razorpay_order_id + '|' + razorpay_payment_id
+    const expected = createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
+                       .update(body).digest('hex')
+    const isValid = expected === razorpay_signature
+- If isValid is false: return 400 { error: 'Invalid payment signature' } — do NOT set any cookie.
+- If isValid is true:
+    1. Create a Response with body { verified: true, paymentId: razorpay_payment_id }
+    2. Set header on the response:
+       Set-Cookie: scan_unlocked_<scanId>=true; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=86400
+       where <scanId> is the scanId from the request body (use 'default' if not provided)
+    3. Return the response with HTTP 200
+- On any unexpected error: return 500 { error: 'Verification failed' }
+- TypeScript, no 'any' types. Import createHmac from 'crypto' (Node built-in, no install needed).
+- Do NOT import from src/.
+
+CRITICAL: The HMAC body string MUST be exactly order_id + pipe + payment_id with no spaces.
+Getting this wrong means all legitimate payments will be rejected.
+SCN-004
+Edge Function: NASA POWER API Proxy
+Backend / Security
+MUST-HAVE
+DESCRIPTION
+Create a Vercel Edge Function at api/solar-data.ts that proxies NASA POWER API calls server-side. Currently nasa-power.ts calls NASA directly from the browser, which exposes credentials and has no caching. This moves the call behind the server and adds a 24-hour response cache.
+CONTEXT
+NASA POWER is a public API (no auth key required), but the current direct browser call means every user interaction triggers a fresh NASA request. With the Edge Function, responses are cached for 24 hours — same lat/lng returns instantly on repeat visits.
+DEPENDS ON
+→  SCN-005
+NOTES / WARNINGS
+⚠  NASA_POWER_BASE_URL in .env.local should be: https://power.larc.nasa.gov
+⚠  NASA POWER has no API key — it is a public API. The env var just isolates the base URL for easy mocking in tests.
+ACCEPTANCE CRITERIA  —  this ticket is done when all of the following are true
+1.  File exists at api/solar-data.ts in the project root.
+2.  GET /api/solar-data?lat=28.6&lng=77.2 returns { monthly_ghi: [number x 12], lat, lng }.
+3.  Response includes Cache-Control: public, max-age=86400 header.
+4.  Missing lat or lng returns 400 { error: 'lat and lng are required' }.
+5.  If NASA API is unavailable, returns 502 with a descriptive error.
+6.  src/lib/nasa-power.ts is updated to call /api/solar-data instead of NASA directly.
+7.  No NASA API URLs or credentials appear in any browser-side file.
+AI CODING PROMPT  —  copy and paste this directly into Antigravity
+Do two things:
+
+PART 1 — Create api/solar-data.ts in the project root:
+- Accept GET requests with query params: lat (number), lng (number)
+- Validate both params are present and numeric. Return 400 if not.
+- Build NASA POWER request URL:
+  ${process.env.NASA_POWER_BASE_URL}/api/temporal/climatology/point
+  with query params: parameters=ALLSKY_SFC_SW_DWN&community=RE&longitude=<lng>&latitude=<lat>&format=JSON
+- Fetch this URL server-side using native fetch.
+- On success: extract monthly_ghi from response.properties.parameter.ALLSKY_SFC_SW_DWN
+  Return: { monthly_ghi: [...12 values], lat, lng }
+- Set response header: Cache-Control: public, max-age=86400
+- On NASA error: return 502 { error: 'Solar data temporarily unavailable' }
+- TypeScript, no 'any', default export. Do NOT import from src/.
+
+PART 2 — Update src/lib/nasa-power.ts:
+- Remove all direct fetch calls to NASA POWER URLs.
+- Keep all existing TypeScript interfaces (NasaPowerResponse, etc.) — other files import them.
+- Replace the main fetch function with one that calls fetch('/api/solar-data?lat=' + lat + '&lng=' + lng)
+- The public API signature of the module must not change — callers should work without modification.
+SCN-005
+Environment Variables Setup (.env.example + Vercel config)
+Infrastructure
+MUST-HAVE
+DESCRIPTION
+Create the .env.example template file, verify .gitignore excludes .env.local, and document all environment variables required for the app. This is a prerequisite for all Edge Function tickets.
+CONTEXT
+Without a committed .env.example, new developers (or AI tools working on the codebase) have no way to know which environment variables are required. This ticket also ensures no secrets are ever accidentally committed to git.
+DEPENDS ON
+None — can start immediately
+NOTES / WARNINGS
+⚠  This ticket is a prerequisite for SCN-002, SCN-003, and SCN-004.
+⚠  Do not create .env.local — that is the developer's job with real values.
+ACCEPTANCE CRITERIA  —  this ticket is done when all of the following are true
+1.  .env.example exists in the project root and is committed to git.
+2.  .env.local is listed in .gitignore.
+3.  .env.example documents every variable with a comment explaining what it is and where to get it.
+4.  All VITE_ prefixed variables are documented as 'public — safe for browser'.
+5.  All non-VITE_ variables are documented as 'server only — never use in src/'.
+6.  A developer reading .env.example can set up the full project without asking anyone for help.
+AI CODING PROMPT  —  copy and paste this directly into Antigravity
+Do the following:
+
+1. Create .env.example in the project root with this exact content:
+
+# SolarScan AI — Environment Variables
+# Copy to .env.local and fill in real values. NEVER commit .env.local to git.
+# Variables prefixed VITE_ are PUBLIC — they are embedded in the browser bundle.
+# All other variables are SERVER ONLY — used in api/ Edge Functions only.
+
+# ── PUBLIC (browser-safe) ─────────────────────────────────────────────────────
+# Google Maps tile API key. Restrict to your domain in Google Cloud Console.
+VITE_GOOGLE_MAPS_TILE_KEY=your_google_maps_tile_api_key_here
+
+# Base URL for local API calls. Leave empty for production (same origin).
+VITE_API_BASE_URL=http://localhost:5173
+
+# ── SERVER ONLY (Edge Functions) ─────────────────────────────────────────────
+# Google Geocoding API key. Get from: console.cloud.google.com
+# DIFFERENT key from the tile key above — easier to manage quotas separately.
+GOOGLE_GEOCODING_KEY=your_google_geocoding_key_here
+
+# NASA POWER API base URL (no key needed — public API)
+NASA_POWER_BASE_URL=https://power.larc.nasa.gov
+
+# Razorpay keys. Get from: dashboard.razorpay.com → Settings → API Keys
+# Use rzp_test_ keys for development. rzp_live_ for production only.
+RAZORPAY_KEY_ID=rzp_test_your_key_id_here
+RAZORPAY_KEY_SECRET=your_razorpay_secret_here
+RAZORPAY_WEBHOOK_SECRET=your_webhook_secret_here
+
+# ── TESTING ───────────────────────────────────────────────────────────────────
+PLAYWRIGHT_BASE_URL=http://localhost:5173
+
+# ── v1.1 — add when user accounts launch ─────────────────────────────────────
+# NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+# NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+# SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+
+2. Open .gitignore. If .env.local is not already listed, add it on its own line.
+   Do not change anything else in .gitignore.
+
+3. Create vercel.json in the project root:
+{
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/((?!api).*)", "destination": "/index.html" }
+  ]
+}
+SCN-006
+Edge Function: Google Geocoding Proxy
+Backend / Security
+MUST-HAVE
+DESCRIPTION
+Create a Vercel Edge Function at api/geocode.ts that proxies Google Geocoding API calls. Currently the geocoding call is made from the browser with the API key visible in the network tab. This moves it server-side.
+CONTEXT
+Any user who opens DevTools → Network tab on your landing page can currently see your Google API key. Restricting it to server-side calls closes this exposure entirely.
+DEPENDS ON
+→  SCN-005
+NOTES / WARNINGS
+⚠  GOOGLE_GEOCODING_KEY must NOT have the VITE_ prefix. Non-prefixed vars are server-only in Vite.
+ACCEPTANCE CRITERIA  —  this ticket is done when all of the following are true
+1.  File exists at api/geocode.ts in the project root.
+2.  GET /api/geocode?q=New+Delhi returns { lat, lng, formatted_address, place_id }.
+3.  Missing q param returns 400 { error: 'Query parameter q is required' }.
+4.  Address not found returns 404 { error: 'Address not found' }.
+5.  GOOGLE_GEOCODING_KEY does not appear anywhere in the browser bundle (no VITE_ prefix).
+6.  The address search on the landing page works end-to-end through this proxy.
+7.  Rate limited to 20 requests per IP per hour (via Vercel KV counter).
+AI CODING PROMPT  —  copy and paste this directly into Antigravity
+Do two things:
+
+PART 1 — Create api/geocode.ts in the project root:
+- Accept GET requests with query param: q (address string)
+- Validate q is present and non-empty. Return 400 { error: 'Query parameter q is required' } if missing.
+- Fetch: https://maps.googleapis.com/maps/api/geocode/json?address=<encoded_q>&key=<GOOGLE_GEOCODING_KEY>
+  Use encodeURIComponent(q) for the address. Read key from process.env.GOOGLE_GEOCODING_KEY.
+- If Google returns status 'ZERO_RESULTS' or empty results: return 404 { error: 'Address not found' }
+- If Google returns status 'OK': return the first result as:
+  { lat: results[0].geometry.location.lat, lng: results[0].geometry.location.lng,
+    formatted_address: results[0].formatted_address, place_id: results[0].place_id }
+- On fetch failure: return 502 { error: 'Geocoding service unavailable' }
+- Set Cache-Control: public, max-age=3600
+- TypeScript, no 'any', default export.
+
+PART 2 — Update the geocoding call in the frontend:
+Find wherever the app currently calls Google Geocoding directly from the browser
+(likely in src/pages/LandingPage.tsx or a hook). Replace that direct fetch with:
+  fetch('/api/geocode?q=' + encodeURIComponent(address))
+and handle the response shape { lat, lng, formatted_address }.
+Do NOT change any UI styling or copy.
+SCN-007
+Zustand Store — Replace sessionStorage State
+State Management
+MUST-HAVE
+DESCRIPTION
+Install Zustand and create a central store (use-scan-store.ts) to hold all scan state. Replace all sessionStorage reads and writes in MapPage.tsx and ResultsPage.tsx with store actions. This fixes the bug where ResultsPage shows empty if the user refreshes the tab.
+CONTEXT
+sessionStorage is cleared unpredictably across tab contexts and breaks the user flow on refresh. Zustand keeps state in memory for the session lifetime — reliable, fast, and no backend needed.
+DEPENDS ON
+None — can start immediately
+NOTES / WARNINGS
+⚠  If existing code already uses React Context for scan state, reconcile with Zustand rather than running both in parallel.
+ACCEPTANCE CRITERIA  —  this ticket is done when all of the following are true
+1.  Zustand is installed (appears in package.json dependencies).
+2.  src/types/scan.ts exists with ScanInput, PanelConfig, TariffConfig, and ScanResults interfaces.
+3.  src/hooks/use-scan-store.ts exists and exports useScanStore with all state slices and actions.
+4.  MapPage.tsx writes to the store (setScanInput, setPanelConfig, setTariff) — no sessionStorage.setItem calls remain.
+5.  ResultsPage.tsx reads from the store — no sessionStorage.getItem calls remain.
+6.  Navigating directly to /results with an empty store shows: 'No scan found. Start a new analysis.' with a button to /map.
+7.  Full flow works end-to-end: trace roof → configure → view results → data is correct.
+8.  src/test/scan-store.test.ts exists with at least 3 passing tests covering setScanInput, setIsPaid, and reset.
+AI CODING PROMPT  —  copy and paste this directly into Antigravity
+Do the following in order:
+
+STEP 1 — Install Zustand:
+Run: npm install zustand
+
+STEP 2 — Create src/types/scan.ts with these interfaces:
+export interface RoofPolygon { type: 'Polygon'; coordinates: [number, number][][]; }
+export interface ScanInput { address: string; lat: number; lng: number; roofPolygon: RoofPolygon; roofAreaM2: number; }
+export interface PanelConfig { tiltAngle: number; setbackM: number; walkwayM: number; panelWattage: 450|550; orientation: 'portrait'|'landscape'; rowAlignment: 'roof_perimeter'|'geographical_south'; panelCount: number; systemKwp: number; }
+export interface TariffConfig { tariffPerKwh: number; }
+export interface MonthlyValue { month: string; value: number; }
+export interface ScanResults { annualYieldKwh: number; monthlyYields: MonthlyValue[]; cashflow: { year: number; cumulative: number }[]; roiPercent: number; paybackYears: number; grossCostInr: number; subsidyAmountInr: number; netCostInr: number; emiInr: number; annualCo2KgSaved: number; treesEquivalent: number; }
+
+STEP 3 — Create src/hooks/use-scan-store.ts:
+Import create from 'zustand'. Create and export useScanStore with:
+State: scanInput (ScanInput|null), panelConfig (PanelConfig|null), tariff (TariffConfig|null), results (ScanResults|null), isPaid (boolean), paymentId (string|null)
+Actions: setScanInput, setPanelConfig, setTariff, setResults, setIsPaid(paid, paymentId?), reset
+
+STEP 4 — Refactor MapPage.tsx:
+Remove all sessionStorage.setItem calls. On polygon complete → call setScanInput. On step 2 complete → call setPanelConfig. On step 3 complete → call setTariff.
+
+STEP 5 — Refactor ResultsPage.tsx:
+Remove all sessionStorage.getItem calls. Read from useScanStore(). If scanInput is null, render an empty state: a centred card saying 'No scan found. Start a new analysis to see your report.' with a button that navigates to /map.
+
+STEP 6 — Create src/test/scan-store.test.ts with Vitest tests:
+Test 1: setScanInput updates scanInput correctly.
+Test 2: reset returns all state to null/false.
+Test 3: setIsPaid(true, 'pay_abc123') sets isPaid=true and paymentId='pay_abc123'.
+
+Do NOT change any UI styling, layout, or copy text in any page.
+SCN-008
+Rate Limiting on Edge Functions (Vercel KV)
+Backend / Security
+SHOULD-HAVE
+DESCRIPTION
+Add IP-based rate limiting to /api/geocode (20 req/IP/hour) and /api/solar-data (20 req/IP/hour) using Vercel KV as a counter store. Without this, a single user or bot can exhaust your Google and NASA API quotas in minutes.
+CONTEXT
+Vercel KV is a Redis-compatible key-value store available on the Vercel free tier. It takes about 30 minutes to set up and is the correct solution for stateless rate limiting on Edge Functions.
+DEPENDS ON
+→  SCN-004
+→  SCN-006
+NOTES / WARNINGS
+⚠  Vercel KV free tier includes 30,000 requests/month — sufficient for MVP.
+⚠  The 'fail open' pattern (allow on KV error) is correct for this use case — it's better to serve users than to block everyone when KV is down.
+ACCEPTANCE CRITERIA  —  this ticket is done when all of the following are true
+1.  Vercel KV store is created and connected to the project.
+2.  @vercel/kv is in package.json dependencies.
+3.  GET /api/geocode returns 429 { error: 'Too many requests. Try again in an hour.' } after 20 requests from the same IP within one hour.
+4.  GET /api/solar-data returns 429 after 20 requests from the same IP within one hour.
+5.  Rate limit counter resets after one hour.
+6.  If Vercel KV is unavailable, requests are allowed through (fail open) and a warning is logged — the app does not crash.
+AI CODING PROMPT  —  copy and paste this directly into Antigravity
+Add IP-based rate limiting to two Edge Functions using Vercel KV.
+
+SETUP:
+1. Run: npm install @vercel/kv
+2. In Vercel dashboard: Storage → Create KV Store → connect to this project.
+   (The KV_REST_API_URL and KV_REST_API_TOKEN env vars will be auto-added to Vercel.)
+
+CREATE a rate limiting utility at api/_utils/rate-limit.ts:
+import { kv } from '@vercel/kv'
+Export async function checkRateLimit(ip: string, route: string, limit: number, windowSeconds: number): Promise<{ allowed: boolean; remaining: number }>
+Logic:
+  - key = 'rl:' + route + ':' + ip
+  - Try: count = await kv.incr(key)
+  - If count === 1: await kv.expire(key, windowSeconds)
+  - return { allowed: count <= limit, remaining: Math.max(0, limit - count) }
+  - Wrap everything in try/catch: on KV error, log 'KV unavailable, allowing request' and return { allowed: true, remaining: limit }
+
+UPDATE api/geocode.ts:
+Import checkRateLimit. Extract client IP from request.headers.get('x-forwarded-for') || 'unknown'.
+Call: const { allowed } = await checkRateLimit(ip, 'geocode', 20, 3600)
+If not allowed: return Response.json({ error: 'Too many requests. Try again in an hour.' }, { status: 429 })
+
+UPDATE api/solar-data.ts:
+Same pattern: checkRateLimit(ip, 'solar-data', 20, 3600)
+
+Do NOT change any response format or error handling beyond adding the rate limit check at the top.
+SCN-009
+Mobile Interstitial on Map Page
+Frontend
+SHOULD-HAVE
+DESCRIPTION
+Show a soft warning banner on the /map page for screen widths below 768px, informing mobile users that the map editor works best on desktop. The user can still proceed — this is a nudge, not a hard block.
+CONTEXT
+A significant portion of Indian web traffic is mobile. The rooftop tracing tool requires precise click interactions that are difficult on a touch screen. This banner sets expectations without blocking mobile users entirely.
+DEPENDS ON
+→  SCN-007
+NOTES / WARNINGS
+None
+ACCEPTANCE CRITERIA  —  this ticket is done when all of the following are true
+1.  On screens narrower than 768px, a banner appears at the top of the map page.
+2.  Banner text: 'The map editor works best on a desktop or tablet. You can still continue, but tracing your roof may be harder on a small screen.'
+3.  Banner has a dismiss button (X). Dismissal persists for the session (does not reappear on re-navigation).
+4.  On screens 768px and wider, the banner does not appear.
+5.  The banner does not block any map functionality — all tools remain accessible.
+6.  Uses the existing shadcn/ui Alert component for consistent styling.
+AI CODING PROMPT  —  copy and paste this directly into Antigravity
+Open src/pages/MapPage.tsx.
+
+Add a mobile warning banner that appears only on screens narrower than 768px.
+
+Requirements:
+1. Import the existing useMobile hook from '@/hooks/use-mobile' (it already exists in the codebase).
+2. Add local state: const [mobileWarningDismissed, setMobileWarningDismissed] = useState(false)
+3. Conditionally render at the TOP of the page content (before the map container):
+   if (isMobile && !mobileWarningDismissed), show an Alert component from '@/components/ui/alert'.
+4. Alert content:
+   - Variant: default (not destructive)
+   - Icon: use the Monitor icon from lucide-react
+   - Title: "Best experienced on desktop"
+   - Description: "The map editor works best on a desktop or tablet. You can still continue, but tracing your roof may be harder on a small screen."
+   - A close button (X icon) that calls setMobileWarningDismissed(true)
+5. The alert should be positioned above the globe/map area, not overlaid on top of it.
+
+Do NOT change any other functionality, layout, or styling on the map page.
+Do NOT block map access for mobile users — this is a soft nudge only.
+SCN-010
+Restore Access Button (Post-Payment Recovery)
+Payment
+SHOULD-HAVE
+DESCRIPTION
+Add a 'Already paid? Restore access' link on the paywall overlay. Users who paid but lost their unlock (e.g. closed the browser before cookie was set, or are on a different device) can enter their Razorpay payment ID to re-verify and regain access.
+CONTEXT
+This is a critical trust feature. Without it, any user who pays and loses their cookie has no self-service recovery path. They will email you or worse — dispute the charge. A 5-minute Razorpay payment ID lookup is all that is needed.
+DEPENDS ON
+→  SCN-001
+→  SCN-003
+NOTES / WARNINGS
+⚠  Razorpay's Basic Auth uses Key ID as username and Key Secret as password.
+ACCEPTANCE CRITERIA  —  this ticket is done when all of the following are true
+1.  Paywall overlay contains a small 'Already paid? Click here' link below the main CTA.
+2.  Clicking it opens a modal/drawer with a text input for a Razorpay payment ID.
+3.  User enters a payment ID (e.g. pay_OFc...) and clicks 'Restore Access'.
+4.  App calls a new endpoint POST /api/payment/restore with { paymentId }.
+5.  Edge Function looks up the payment in Razorpay API, confirms it was captured, and re-sets the unlock cookie.
+6.  On success: modal closes, paywall lifts, toast shows 'Access restored!'.
+7.  On failure (invalid ID or payment not captured): shows error 'Payment ID not found. Check your Razorpay receipt email.'
+8.  Input is validated client-side: must start with 'pay_' and be at least 14 characters.
+AI CODING PROMPT  —  copy and paste this directly into Antigravity
+This ticket requires two things:
+
+PART 1 — Create api/payment/restore.ts Edge Function:
+- Accept POST requests with JSON body: { paymentId: string }
+- Validate paymentId starts with 'pay_' and is non-empty. Return 400 if not.
+- Fetch payment from Razorpay API:
+  GET https://api.razorpay.com/v1/payments/<paymentId>
+  Use HTTP Basic Auth: username = RAZORPAY_KEY_ID, password = RAZORPAY_KEY_SECRET
+  (Add the Authorization header: 'Basic ' + btoa(id + ':' + secret))
+- If payment.status !== 'captured': return 404 { error: 'Payment not found or not completed' }
+- If payment.status === 'captured':
+  Extract scanId from payment.notes.scanId (or use 'restored' as fallback)
+  Set unlock cookie: scan_unlocked_<scanId>=true; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=86400
+  Return 200 { restored: true, paymentId }
+- TypeScript, no 'any', default export.
+
+PART 2 — Add the restore flow to the paywall UI in ResultsPage.tsx:
+1. Add a small text link below the payment CTA: "Already paid? Restore access"
+2. Clicking opens an existing shadcn Dialog component.
+3. Dialog contains: a heading "Restore Your Access", description text explaining to find the payment ID in their Razorpay receipt email, an Input field with placeholder "pay_xxxxxxxxxxxx", and a Restore button.
+4. Client-side validation: ID must start with 'pay_' — show inline error if not.
+5. On submit: POST to /api/payment/restore, handle success (close dialog, call setIsPaid(true)), handle error (show error message in dialog).
+6. Use the sonner toast on success: 'Access restored! Your full report is ready.'
+
+Do NOT change the main payment flow or any other UI on the results page.
+SCN-011
+Sentry Error Monitoring Integration
+Infrastructure
+SHOULD-HAVE
+DESCRIPTION
+Add Sentry to the frontend and Edge Functions for real-time error tracking. Without this, you will only find out about bugs when users complain. Sentry catches silent failures — especially important for payment errors and NASA API parse failures.
+CONTEXT
+Sentry's free tier covers up to 5,000 errors/month. Setup takes about 20 minutes. The most important errors to catch are: payment verification failures, NASA API parse errors, and PDF generation failures.
+DEPENDS ON
+→  SCN-005
+NOTES / WARNINGS
+⚠  Create a free Sentry account at sentry.io before running this ticket. You need a real DSN.
+⚠  Add VITE_SENTRY_DSN to Vercel environment variables after creating the Sentry project.
+ACCEPTANCE CRITERIA  —  this ticket is done when all of the following are true
+1.  @sentry/react and @sentry/node are installed.
+2.  Sentry is initialised in src/main.tsx with the DSN from environment variables.
+3.  Unhandled errors in the React app are reported to Sentry.
+4.  The payment verify Edge Function reports errors to Sentry on signature failure.
+5.  The NASA data Edge Function reports errors to Sentry on parse failure.
+6.  A test error can be triggered manually and appears in the Sentry dashboard within 60 seconds.
+7.  Source maps are uploaded to Sentry on build so stack traces show original TypeScript line numbers.
+AI CODING PROMPT  —  copy and paste this directly into Antigravity
+Add Sentry error monitoring to the app.
+
+STEP 1 — Install:
+npm install @sentry/react @sentry/node
+
+STEP 2 — Add to .env.example (do not put real value in .env.example):
+VITE_SENTRY_DSN=your_sentry_dsn_here
+
+STEP 3 — Initialise in src/main.tsx:
+Import * as Sentry from '@sentry/react'
+Before the React.render call, add:
+Sentry.init({
+  dsn: import.meta.env.VITE_SENTRY_DSN,
+  environment: import.meta.env.MODE,
+  tracesSampleRate: 0.1,  // 10% of transactions
+  integrations: [Sentry.browserTracingIntegration()],
+})
+Only initialise if VITE_SENTRY_DSN is set (check for it) so local dev without Sentry still works.
+
+STEP 4 — Wrap the app with Sentry error boundary in src/main.tsx:
+Wrap the root component with Sentry.ErrorBoundary fallback={<p>Something went wrong.</p>}
+
+STEP 5 — Add Sentry to key Edge Functions:
+In api/payment/verify.ts: on signature mismatch, call Sentry.captureMessage('Payment signature mismatch', { extra: { orderId, paymentId } })
+In api/solar-data.ts: on parse error, call Sentry.captureException(error, { extra: { lat, lng } })
+Import Sentry in Edge Functions: import * as Sentry from '@sentry/node'
+
+Do NOT add Sentry to every file — only main.tsx and the two critical Edge Functions above.
+SCN-012
+Shareable Results Link (Unique URL per scan)
+Frontend
+SHOULD-HAVE
+DESCRIPTION
+Encode scan configuration into the /results URL as a compressed query parameter so users can share their results link. Recipients who click the link see the same scan output. This enables installers to share reports with clients and drives viral acquisition.
+CONTEXT
+Currently /results shows an empty state if visited directly. A shareable link changes this — the URL itself carries the scan data. No database needed: the scan config is encoded in the URL.
+DEPENDS ON
+→  SCN-007
+NOTES / WARNINGS
+⚠  Encode short field names (si, pc, t) to keep the URL compact.
+⚠  Test with a typical roof config that the encoded URL stays under 2,000 characters.
+ACCEPTANCE CRITERIA  —  this ticket is done when all of the following are true
+1.  After completing a scan, the /results page URL updates to include a ?scan= query parameter.
+2.  The ?scan= parameter contains a base64-encoded, JSON-serialised version of ScanInput + PanelConfig + TariffConfig.
+3.  Opening /results?scan=<encoded> directly loads the scan data and shows the full report (free tier — with paywall).
+4.  Invalid or corrupted ?scan= param shows the standard empty state (no crash).
+5.  A 'Copy link' button on the results page copies the full URL to clipboard.
+6.  The shared link URL is under 2,000 characters for typical roof configurations.
+AI CODING PROMPT  —  copy and paste this directly into Antigravity
+Add shareable URL functionality to the results page.
+
+STEP 1 — Create src/lib/scan-url.ts:
+Export two functions:
+
+encodeScanToUrl(scanInput: ScanInput, panelConfig: PanelConfig, tariff: TariffConfig): string
+  - Combine into one object: { si: scanInput, pc: panelConfig, t: tariff }
+  - JSON.stringify, then btoa() (base64 encode)
+  - Return the encoded string
+
+decodeScanFromUrl(encoded: string): { scanInput: ScanInput, panelConfig: PanelConfig, tariff: TariffConfig } | null
+  - Try: atob(encoded) → JSON.parse → validate top-level keys exist
+  - On any error: return null (do not throw)
+
+STEP 2 — Update src/pages/MapPage.tsx:
+After step 3 (tariff) is completed and before navigating to /results:
+  - Call encodeScanToUrl with the current scan config
+  - Navigate to: /results?scan=<encoded>
+
+STEP 3 — Update src/pages/ResultsPage.tsx:
+On component mount:
+  1. Read ?scan= from the URL using useSearchParams()
+  2. If ?scan= is present: decode it using decodeScanFromUrl, populate the Zustand store with setScanInput, setPanelConfig, setTariff, then run the solar calc to get results and call setResults.
+  3. If ?scan= is absent and store has no scanInput: show the empty state.
+  4. If ?scan= is present but decoding fails: show the empty state.
+
+STEP 4 — Add copy link button to ResultsPage.tsx:
+Add a small 'Share this report' button (use the Share2 icon from lucide-react) near the top of the results page.
+On click: navigator.clipboard.writeText(window.location.href), then show sonner toast: 'Link copied to clipboard!'
+Only show this button when scan data is loaded (not on empty state).
+
+Do NOT change any styling, chart components, or payment logic.
+SCN-013
+Playwright E2E Test: Full Payment Flow
+Testing
+SHOULD-HAVE
+DESCRIPTION
+Write a Playwright end-to-end test that covers the full happy path: land on homepage → search address → trace roof → configure panels → view results → complete payment → confirm paywall lifts. This test runs in CI before every Vercel deployment.
+CONTEXT
+The existing flow.spec.ts likely covers navigation but not the payment flow. This ticket adds the payment-specific test using Razorpay's test mode.
+DEPENDS ON
+→  SCN-001
+→  SCN-007
+NOTES / WARNINGS
+⚠  This test requires a running Vercel dev server with real Razorpay test keys configured.
+⚠  If Razorpay iframe interaction is flaky in CI, mock the payment hook instead for CI and run the real Razorpay test locally only.
+ACCEPTANCE CRITERIA  —  this ticket is done when all of the following are true
+1.  Test file exists at src/test/payment-flow.spec.ts.
+2.  Test uses PLAYWRIGHT_BASE_URL from environment variables.
+3.  Test covers: address search → map loads → polygon traced → configurator completed → results page loads.
+4.  Test verifies paywall is visible before payment.
+5.  Test simulates Razorpay test payment (using Razorpay test card details in the modal).
+6.  Test verifies paywall is gone after payment.
+7.  Test verifies PDF download button is visible after payment.
+8.  Test passes in CI (GitHub Actions or Vercel preview checks).
+AI CODING PROMPT  —  copy and paste this directly into Antigravity
+Create src/test/payment-flow.spec.ts as a Playwright E2E test.
+
+The test should cover the full user journey.
+
+Use the baseURL from process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173'.
+
+Test: 'Full flow — address search to paid report unlock'
+
+Steps:
+1. Navigate to '/'
+2. Find the address search input (locate by placeholder text or data-testid)
+3. Type 'Connaught Place, New Delhi' and submit
+4. Wait for navigation to /map
+5. Wait for the satellite map to be visible (wait for a leaflet-container element)
+6. Click 4–5 points on the map to simulate tracing a roof polygon
+   (use fixed coordinates in the centre of the map viewport)
+7. Find and click the 'Complete Polygon' or 'Done' button
+8. In Step 1 (Surface), set tilt to 15° and click Next
+9. In Step 2 (Panels), select 550W and click Next
+10. In Step 3 (Tariff), enter 8 in the tariff field and click 'View Report'
+11. Wait for navigation to /results
+12. Assert: paywall overlay is visible (check for text 'Unlock Full Report' or similar)
+13. Click the unlock button
+14. Wait for Razorpay iframe to appear
+15. Fill in test card: 4111 1111 1111 1111, expiry: 12/26, CVV: 123
+16. Click Pay
+17. Wait for Razorpay iframe to close (max 10 seconds)
+18. Assert: paywall overlay is no longer visible
+19. Assert: PDF download button is visible
+
+Add data-testid attributes to key elements if they are missing — note which files need them.
+Use page.waitForSelector and page.waitForURL for navigation waits.
+Set test timeout to 30 seconds.
+SCN-014
+Multi-Roof Polygon Merge Tool
+Frontend
+NICE-TO-HAVE
+DESCRIPTION
+Allow users to trace multiple disconnected roof sections (e.g. L-shaped rooftops, rooftop sections separated by a lift shaft) and merge their areas for a combined panel layout. Uses Turf.js union operation.
+CONTEXT
+Complex rooftop shapes are common in Indian urban housing. Currently users can only trace one polygon, which forces them to under-count usable area on irregular rooftops.
+DEPENDS ON
+→  SCN-007
+NOTES / WARNINGS
+⚠  This is v1.1 scope. Do not build before the must-have and should-have tickets are complete.
+ACCEPTANCE CRITERIA  —  this ticket is done when all of the following are true
+1.  Map editor has an 'Add another section' button that appears after the first polygon is completed.
+2.  User can draw a second (and third) polygon on the map.
+3.  Total usable area shown is the sum of all polygon areas.
+4.  Panel grid is generated across all polygons.
+5.  User can delete individual polygon sections.
+6.  The combined polygon data is stored correctly in the Zustand store.
+AI CODING PROMPT  —  copy and paste this directly into Antigravity
+Extend the rooftop tracer in src/pages/MapPage.tsx (or src/components/scan/RooftopTracer.tsx if it has been extracted) to support multiple polygons.
+
+Changes:
+1. Change internal polygon state from a single polygon to an array: polygons: RoofPolygon[]
+2. After completing each polygon, show an 'Add another section' button and a 'Done' button.
+   - 'Add another section': starts a new polygon draw mode
+   - 'Done': finalises all polygons and proceeds
+3. Display all traced polygons on the map simultaneously, each in a distinct colour.
+4. Calculate total area as the sum of all individual polygon areas using @turf/area.
+5. Show total area in the UI: e.g. "3 sections — 245 m² total usable area"
+6. Allow deleting a section: each polygon has a small delete button in the sidebar list.
+7. On 'Done', call setScanInput with the combined data. Store the array of polygons as roofPolygon (update the type if needed).
+8. The panel layout engine should receive the total area — it does not need to know about individual polygons unless the layout-per-section feature is implemented separately.
+
+Do NOT change the single-polygon happy path — it should still work identically.
+SCN-015
+Installer Lead-Gen Form on Results Page
+Frontend
+NICE-TO-HAVE
+DESCRIPTION
+After a user unlocks the full report, show a 'Get installer quotes' section at the bottom of the results page. Users enter their name and phone number and submit. Leads are emailed to you (or logged to a spreadsheet) for manual follow-up with solar installer partners.
+CONTEXT
+This is the B2B2C monetisation stream — you become the lead source for solar installers and charge them per qualified lead. Even a simple form + email notification is enough to start testing this channel.
+DEPENDS ON
+→  SCN-001
+→  SCN-007
+NOTES / WARNINGS
+⚠  Get a free Resend account at resend.com — 3,000 emails/month free.
+⚠  Start with email notification only. A CRM integration is a separate future ticket.
+ACCEPTANCE CRITERIA  —  this ticket is done when all of the following are true
+1.  Lead-gen section appears at the bottom of the results page only for users who have paid (isPaid === true).
+2.  Form fields: Name (required), Phone (required, 10-digit Indian mobile validation), City (pre-filled from scan address if available).
+3.  On submit, form data is sent to a POST /api/leads Edge Function.
+4.  Edge Function sends an email notification to a configured LEADS_EMAIL address using a transactional email service (Resend or Nodemailer).
+5.  On success: form shows 'Thanks! A solar installer in your area will contact you within 24 hours.'
+6.  Form is not shown to users who have not paid.
+7.  Form submission is rate-limited to 1 per session to prevent duplicate leads.
+AI CODING PROMPT  —  copy and paste this directly into Antigravity
+Add a lead generation form to the bottom of the results page.
+
+PART 1 — Create api/leads.ts Edge Function:
+- Accept POST with JSON: { name: string, phone: string, city: string, systemKwp: number }
+- Validate name (non-empty), phone (10 digits, starts with 6-9)
+- Send email using the Resend API (npm install resend):
+  import { Resend } from 'resend'
+  const resend = new Resend(process.env.RESEND_API_KEY)
+  Email to: process.env.LEADS_EMAIL
+  Subject: New installer lead — <city> — <systemKwp>kWp system
+  Body: plain text with all lead details
+- Return 200 { success: true } on success, 400 on validation error, 500 on email failure.
+- Add RESEND_API_KEY and LEADS_EMAIL to .env.example with comments.
+
+PART 2 — Add the form to ResultsPage.tsx:
+- Only render when useScanStore().isPaid === true
+- Position: below the carbon offset card, above the page footer
+- Use react-hook-form and zod for validation
+- Phone validation: z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number')
+- On submit: POST to /api/leads, show loading state on button, handle success/error
+- Success state: replace form with a success card (use CheckCircle icon from lucide-react)
+- Style consistently with the rest of the results page (use existing Card components)
+
+Do NOT change any other part of the results page.
+SCN-016
+Live DISCOM Tariff Lookup by Location
+Backend / Security
+NICE-TO-HAVE
+DESCRIPTION
+Pre-fill the electricity tariff field in the configurator based on the user's detected location and the corresponding DISCOM's published rate. Removes the friction of users needing to look up their own electricity bill.
+CONTEXT
+Currently users must manually enter their ₹/kWh tariff. Most users do not know this number off the top of their head, which causes drop-off at Step 3. A pre-filled default based on state/DISCOM significantly reduces this friction.
+DEPENDS ON
+→  SCN-004
+→  SCN-007
+NOTES / WARNINGS
+⚠  Tariff rates change annually. Add a comment in india-grid.ts with the date these rates were last reviewed.
+⚠  Do not fetch tariff data from an external API — the maintenance overhead is not worth it for MVP.
+ACCEPTANCE CRITERIA  —  this ticket is done when all of the following are true
+1.  After the user searches an address, the state is identified from the geocoding response.
+2.  The tariff field in Step 3 is pre-filled with the default residential tariff for that state's major DISCOM.
+3.  Pre-filled value is clearly labelled: 'Estimated rate for [DISCOM name] — update if your actual rate differs'.
+4.  User can always override the pre-filled value.
+5.  DISCOM tariff data is stored as a static lookup table in src/lib/india-grid.ts (not fetched from an external API).
+6.  At least 10 major DISCOMs are covered (BSES Delhi, MSEDCL Mumbai, BESCOM Bengaluru, TNEB Chennai, etc.).
+AI CODING PROMPT  —  copy and paste this directly into Antigravity
+Add automatic DISCOM tariff pre-filling based on the user's scan location.
+
+STEP 1 — Update src/lib/india-grid.ts:
+Add a DISCOM tariff lookup table:
+const DISCOM_TARIFFS: Record<string, { discom: string; defaultTariff: number }> = {
+  'delhi': { discom: 'BSES / Tata Power Delhi', defaultTariff: 8.0 },
+  'maharashtra': { discom: 'MSEDCL', defaultTariff: 7.5 },
+  'karnataka': { discom: 'BESCOM', defaultTariff: 7.0 },
+  'tamil nadu': { discom: 'TNEB', defaultTariff: 6.5 },
+  'gujarat': { discom: 'DGVCL/MGVCL', defaultTariff: 5.5 },
+  'rajasthan': { discom: 'JVVNL/AVVNL', defaultTariff: 7.0 },
+  'uttar pradesh': { discom: 'DVVNL/PuVVNL', defaultTariff: 6.5 },
+  'west bengal': { discom: 'WBSEDCL / CESC', defaultTariff: 7.5 },
+  'telangana': { discom: 'TSSPDCL/TSNPDCL', defaultTariff: 6.8 },
+  'andhra pradesh': { discom: 'APEPDCL/APSPDCL', defaultTariff: 6.5 },
+}
+Export a function getDiscomTariff(state: string): { discom: string; defaultTariff: number } | null
+that looks up by lowercase state name and returns null if not found.
+
+STEP 2 — Update the geocoding response to include state:
+In api/geocode.ts: extract the state from address_components where types includes 'administrative_area_level_1'.
+Add it to the response: { lat, lng, formatted_address, place_id, state }
+
+STEP 3 — Pre-fill the tariff in Step 3 of the configurator:
+When the user reaches Step 3, call getDiscomTariff with the state from the scan input.
+If a match is found: pre-fill the tariff input with defaultTariff and show a helper text:
+"Estimated rate for [discom] — update if your bill shows a different rate."
+If no match: leave the field empty as before.
+
+Do NOT make the pre-filled value read-only. The user must be able to override it.
+SCN-017
+Vercel Analytics Integration
+Infrastructure
+NICE-TO-HAVE
+DESCRIPTION
+Add Vercel Analytics to track page views, activation rates, and funnel drop-off. Zero configuration needed — Vercel provides this for free on all plans. Combined with custom events, this gives visibility into where users are dropping off between the landing page, map, and results.
+CONTEXT
+Without analytics you are flying blind. You need to know: what percentage of landing page visitors run a scan, what percentage complete the configurator, and what percentage convert at the paywall. These three numbers determine your entire growth strategy.
+DEPENDS ON
+None — can start immediately
+NOTES / WARNINGS
+⚠  Enable Vercel Analytics in the Vercel dashboard under the project settings — it is free for all plans.
+⚠  Events only appear in the dashboard after the first deployment with this code. Test in production, not localhost.
+ACCEPTANCE CRITERIA  —  this ticket is done when all of the following are true
+1.  @vercel/analytics is installed.
+2.  Analytics component is added to src/main.tsx.
+3.  Custom events are tracked: address_searched, polygon_completed, config_step_completed (with step number), results_viewed, paywall_shown, payment_initiated, payment_completed, pdf_downloaded.
+4.  Events appear in Vercel Analytics dashboard within 60 seconds of being triggered.
+5.  No personal data (names, emails, addresses) is included in event payloads.
+AI CODING PROMPT  —  copy and paste this directly into Antigravity
+Add Vercel Analytics with custom funnel events.
+
+STEP 1 — Install:
+npm install @vercel/analytics
+
+STEP 2 — Add to src/main.tsx:
+import { Analytics } from '@vercel/analytics/react'
+Add <Analytics /> inside the root render, as a sibling of the router (not inside a route).
+
+STEP 3 — Create src/lib/analytics.ts:
+import { track } from '@vercel/analytics'
+Export typed wrapper functions for each event:
+  export const trackAddressSearched = () => track('address_searched')
+  export const trackPolygonCompleted = (areaMq: number) => track('polygon_completed', { area_m2: Math.round(areaMq) })
+  export const trackConfigStepCompleted = (step: 1|2|3) => track('config_step_completed', { step })
+  export const trackResultsViewed = (systemKwp: number) => track('results_viewed', { system_kwp: Math.round(systemKwp * 10) / 10 })
+  export const trackPaywallShown = () => track('paywall_shown')
+  export const trackPaymentInitiated = (plan: string) => track('payment_initiated', { plan })
+  export const trackPaymentCompleted = (plan: string) => track('payment_completed', { plan })
+  export const trackPdfDownloaded = () => track('pdf_downloaded')
+
+STEP 4 — Call the tracking functions in the right places:
+- LandingPage.tsx: call trackAddressSearched after successful geocode
+- MapPage.tsx: call trackPolygonCompleted after polygon is finalised
+- MapPage.tsx: call trackConfigStepCompleted(1), (2), (3) after each step
+- ResultsPage.tsx: call trackResultsViewed on mount (when scan data is loaded)
+- ResultsPage.tsx: call trackPaywallShown when paywall overlay is shown
+- ResultsPage.tsx: call trackPaymentInitiated when checkout opens
+- use-payment.ts: call trackPaymentCompleted in the Razorpay success callback
+- pdf-generator.ts or ResultsPage.tsx: call trackPdfDownloaded when PDF is generated
+
+Do NOT track any address strings, names, coordinates, or user-identifiable information.

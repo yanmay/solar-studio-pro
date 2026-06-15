@@ -50,6 +50,15 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        brand: {
+          DEFAULT: "hsl(var(--brand))",
+          foreground: "hsl(var(--brand-foreground))",
+          orange: "#FF6600",
+          dark: "#050505",
+          gray: "#1a1a1a",
+          text: "#e5e5e5",
+        },
+        "brand-foreground": "hsl(var(--brand-foreground))",
         sunpower: {
           accent: "hsl(var(--color-accent))",
           "accent-hover": "hsl(var(--color-accent-hover))",
@@ -88,6 +97,9 @@ export default {
         card: "var(--shadow-card)",
         float: "var(--shadow-float)",
       },
+      maxWidth: {
+        container: "80rem",
+      },
       keyframes: {
         "accordion-down": {
           from: { height: "0" },
@@ -101,10 +113,32 @@ export default {
           from: { opacity: "0", transform: "translateY(16px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
+        "infinite-scroll": {
+          from: { transform: "translateX(0)" },
+          to: { transform: "translateX(-100%)" },
+        },
+        fadeInUp: {
+          "0%": { opacity: "0", transform: "translateY(20px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        appear: {
+          "0%": { opacity: "0", transform: "translateY(10px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" }
+        },
+        "appear-zoom": {
+          "0%": { opacity: "0", transform: "scale(0.95)" },
+          "100%": { opacity: "1", transform: "scale(1)" }
+        }
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "infinite-scroll": "infinite-scroll 80s linear infinite",
+        "fade-in-up": "fadeInUp 0.8s ease-out forwards",
+        "spin-slow": "spin 60s linear infinite",
+        "spin-reverse": "spin 40s linear infinite reverse",
+        appear: "appear 0.5s ease-out forwards",
+        "appear-zoom": "appear-zoom 0.5s ease-out forwards"
       },
     },
   },

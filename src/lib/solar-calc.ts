@@ -111,6 +111,15 @@ export interface SolarAnalysis {
   generatedAt: string;
   irradianceSource?: string;
   monthlyIrradiance?: Record<string, number>;
+  
+  // Custom layout properties
+  panelCount?: number;
+  panelType?: "compact" | "premium";
+  alignment?: "roof" | "south";
+  tiltDeg?: number;
+  orientation?: "portrait" | "landscape" | "auto";
+  walkways?: boolean;
+  setbackM?: number;
 }
 
 function generateAnalysisId(): string {
@@ -126,6 +135,16 @@ interface FullCalcOptions {
   electricityRate?: number;
   irradianceSource?: string;
   monthlyIrradiance?: Record<string, number>;
+  
+  // Custom capacity & layout inputs
+  customCapacityKw?: number;
+  panelCount?: number;
+  panelType?: "compact" | "premium";
+  alignment?: "roof" | "south";
+  tiltDeg?: number;
+  orientation?: "portrait" | "landscape" | "auto";
+  walkways?: boolean;
+  setbackM?: number;
 }
 
 /**
@@ -145,8 +164,8 @@ export function runFullCalculation(
   // Step 1
   const usableArea = calcUsableArea(rooftopAreaM2);
 
-  // Step 2
-  const installedKw = calcInstalledCapacity(usableArea);
+  // Step 2: Use custom capacity if provided (calculated from actual panels), otherwise fallback to area-based estimation
+  const installedKw = opts.customCapacityKw ?? calcInstalledCapacity(usableArea);
 
   // Step 3
   const annualKwh = calcAnnualEnergy(installedKw, peakSunHours);
@@ -188,5 +207,14 @@ export function runFullCalculation(
     generatedAt: new Date().toISOString(),
     irradianceSource: opts.irradianceSource,
     monthlyIrradiance: opts.monthlyIrradiance,
+    
+    // Pass custom layout properties to the results object
+    panelCount: opts.panelCount,
+    panelType: opts.panelType,
+    alignment: opts.alignment,
+    tiltDeg: opts.tiltDeg,
+    orientation: opts.orientation,
+    walkways: opts.walkways,
+    setbackM: opts.setbackM,
   };
 }

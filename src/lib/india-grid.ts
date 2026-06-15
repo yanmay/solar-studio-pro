@@ -56,10 +56,6 @@ export const INDIA_REGIONAL_PSH: RegionPSH[] = [
 // India-wide average fallback
 export const INDIA_AVERAGE_PSH = 4.5;
 
-/**
- * Look up regional PSH for given coordinates.
- * Falls back to India average if no region matches.
- */
 export function getRegionalPSH(lat: number, lng: number): { psh: number; region: string } {
   for (const region of INDIA_REGIONAL_PSH) {
     if (
@@ -73,3 +69,28 @@ export function getRegionalPSH(lat: number, lng: number): { psh: number; region:
   }
   return { psh: INDIA_AVERAGE_PSH, region: "India (National Average)" };
 }
+
+// SCN-016: DISCOM tariff lookup table (reviewed June 2025)
+const DISCOM_TARIFFS: Record<string, { discom: string; defaultTariff: number }> = {
+  'delhi': { discom: 'BSES / Tata Power Delhi', defaultTariff: 8.0 },
+  'maharashtra': { discom: 'MSEDCL', defaultTariff: 7.5 },
+  'karnataka': { discom: 'BESCOM', defaultTariff: 7.0 },
+  'tamil nadu': { discom: 'TNEB', defaultTariff: 6.5 },
+  'gujarat': { discom: 'DGVCL/MGVCL', defaultTariff: 5.5 },
+  'rajasthan': { discom: 'JVVNL/AVVNL', defaultTariff: 7.0 },
+  'uttar pradesh': { discom: 'DVVNL/PuVVNL', defaultTariff: 6.5 },
+  'west bengal': { discom: 'WBSEDCL / CESC', defaultTariff: 7.5 },
+  'telangana': { discom: 'TSSPDCL/TSNPDCL', defaultTariff: 6.8 },
+  'andhra pradesh': { discom: 'APEPDCL/APSPDCL', defaultTariff: 6.5 },
+};
+
+/**
+ * Returns the default DISCOM tariff for a given Indian state.
+ * Performs lookup by lowercase state name.
+ */
+export function getDiscomTariff(state: string): { discom: string; defaultTariff: number } | null {
+  if (!state) return null;
+  const key = state.toLowerCase().trim();
+  return DISCOM_TARIFFS[key] ?? null;
+}
+

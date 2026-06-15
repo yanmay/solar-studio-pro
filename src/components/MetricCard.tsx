@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { Card } from "@/components/ui/card";
 
 interface MetricCardProps {
   icon: React.ReactNode;
@@ -6,38 +7,40 @@ interface MetricCardProps {
   label: string;
   value: string;
   subLabel: string;
-  valueColor: string;
+  valueColor: string; // Kept for backwards compatibility but we will rely on clean theme colors
   className?: string;
   delay?: number;
 }
 
-const MetricCard = ({ icon, iconBg, label, value, subLabel, valueColor, className, delay = 0 }: MetricCardProps) => {
+const MetricCard = ({ icon, iconBg, label, value, subLabel, className }: MetricCardProps) => {
   return (
-    <div
+    <Card
       className={cn(
-        "bg-sunpower-bg-card rounded-lg shadow-card p-5 animate-fade-slide-up",
-        "transition-all duration-200 hover:shadow-float hover:-translate-y-1",
+        "bg-card/60 backdrop-blur-md border border-border rounded-2xl p-5 flex flex-col justify-between transition-all duration-300 hover:-translate-y-1 hover:shadow-lg dark:hover:shadow-primary/5 hover:border-primary/25",
         className
       )}
-      style={{ animationDelay: `${delay}ms` }}
       role="article"
       aria-label={`${label}: ${value}`}
     >
-      <div className="flex items-center gap-3 mb-3">
-        <div
-          className="w-9 h-9 rounded-md flex items-center justify-center transition-transform duration-200 group-hover:scale-110"
-          style={{ backgroundColor: iconBg }}
-          aria-hidden="true"
-        >
-          {icon}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-foreground/80 shrink-0"
+            style={{ backgroundColor: iconBg }}
+            aria-hidden="true"
+          >
+            {icon}
+          </div>
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</span>
         </div>
-        <span className="text-sm text-sunpower-text-secondary">{label}</span>
+        <div className="font-mono text-2xl font-bold tracking-tight text-foreground">
+          {value}
+        </div>
       </div>
-      <div className="font-mono text-[32px] font-semibold leading-tight" style={{ color: valueColor }}>
-        {value}
+      <div className="text-[11px] text-muted-foreground mt-3 pt-2 border-t border-border/50">
+        {subLabel}
       </div>
-      <div className="text-[13px] text-sunpower-text-muted mt-1">{subLabel}</div>
-    </div>
+    </Card>
   );
 };
 

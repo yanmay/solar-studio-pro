@@ -9,6 +9,7 @@ export const ELECTRICITY_RATE_INR = 7;       // ₹ per kWh, default
 export const EMISSION_FACTOR_KG = 0.82;      // kg CO₂ per kWh, India grid average
 export const CO2_PER_TREE_KG_YR = 21.77;     // kg CO₂ absorbed per tree per year
 export const SYSTEM_LIFETIME_YRS = 25;       // projection period
+export const COST_PER_KW_INR = 45000;        // ₹/kWp installed (India 2024-25 market rate, pre-subsidy)
 
 // Validation bounds
 export const MIN_AREA_M2 = 5;

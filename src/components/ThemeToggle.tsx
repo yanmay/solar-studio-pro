@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Moon, Sun } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const STORAGE_KEY = "sunpower-theme";
 
@@ -61,12 +62,14 @@ const ThemeToggle = ({ className = "" }: ThemeToggleProps) => {
   }, []);
 
   return (
-    <button
+    <Button
+      variant="outline"
+      size="icon"
       onClick={toggle}
       className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-300 hover:scale-110 shadow-card
         ${isDark
-          ? "bg-gray-800 text-yellow-300 hover:bg-gray-700 border border-white/10"
-          : "bg-white text-gray-600 hover:bg-gray-100 border border-black/5"
+          ? "bg-gray-800 text-yellow-300 hover:bg-gray-700 border border-white/10 hover:text-yellow-200"
+          : "bg-white text-gray-600 hover:bg-gray-100 border border-black/5 hover:text-gray-800"
         } ${className}`}
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
       title={isDark ? "Light mode" : "Dark mode"}
@@ -76,7 +79,7 @@ const ThemeToggle = ({ className = "" }: ThemeToggleProps) => {
       ) : (
         <Moon className="w-[18px] h-[18px]" />
       )}
-    </button>
+    </Button>
   );
 };
 

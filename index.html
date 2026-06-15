@@ -2,19 +2,22 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="canonical" href="https://sunpowerlink.in/" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SUNPOWER LINK — Rooftop Solar Potential Analyser for India</title>
-    <meta name="description" content="AI-powered rooftop solar analysis for Indian homes. Instantly estimate your solar energy potential, financial savings in INR, and CO₂ impact from a satellite view of your roof." />
+    <meta name="description" content="AI-powered rooftop solar analysis for Indian homes. Instantly estimate solar energy potential, INR savings, and CO₂ impact from a satellite view." />
     <meta name="author" content="SUNPOWER LINK" />
     <meta name="theme-color" content="#1A8FD1" />
 
     <meta property="og:title" content="SUNPOWER LINK — Rooftop Solar Potential Analyser" />
     <meta property="og:description" content="Draw your rooftop on a satellite map and instantly get solar energy estimates, savings in ₹, and environmental impact analysis." />
     <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://sunpowerlink.in/og-image.png" />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="SUNPOWER LINK — Solar Rooftop Analyser" />
     <meta name="twitter:description" content="Free AI-powered rooftop solar analysis for India. Estimate kWh, savings, and CO₂ impact." />
+    <meta name="twitter:image" content="https://sunpowerlink.in/og-image.png" />
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!-- Preconnect to font CDN for faster load -->
@@ -23,10 +26,80 @@
 
     <!-- Preconnect to map tile CDN -->
     <link rel="preconnect" href="https://server.arcgisonline.com" />
+    <style>
+      html, body {
+        background-color: #050505;
+        margin: 0;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+    </style>
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="sr-only">
+        <header>
+          <nav>
+            <a href="/">SUNPOWER LINK</a>
+            <a href="/map">Launch Analyzer</a>
+            <a href="/#technology">Technology</a>
+            <a href="/#about">Architecture</a>
+            <a href="/#workflow">Process</a>
+            <a href="/#faq">FAQ</a>
+          </nav>
+        </header>
+        <main>
+          <article>
+            <h1>SUNPOWER LINK — India's Rooftop Solar Potential Estimator</h1>
+            <p>AI-powered rooftop solar analysis for Indian homes. Instantly estimate solar energy potential, INR savings, and CO₂ impact from a satellite view.</p>
+            
+            <section id="analyzer-action">
+              <h2>Autonomous Solar Analysis</h2>
+              <p>Trace your roof boundaries on high-resolution satellite maps to calculate system capacities, solar irradiance values, and annual solar generation yields. Our interactive tools allow you to configure setbacks, walk paths, and panel alignments dynamically to model your specific roof geometry.</p>
+              <a href="/map">Analyze My Roof (Launch Analyzer)</a>
+            </section>
+
+            <section id="about-technology">
+              <h2>SolarNet AI Technology</h2>
+              <p>Uses advanced geocoding and GIS boundaries mapped with NASA POWER API solar radiation data and local state utility tariff rules to output complete generation reports. SolarNet matches your GPS location with regional weather trends, tracking average peak sun hours to ensure generation models are accurate and customized for your exact coordinates.</p>
+            </section>
+
+            <section id="pm-surya-ghar">
+              <h2>PM Surya Ghar Muft Bijli Yojana Subsidies</h2>
+              <p>The Government of India provides national subsidies for residential solar installations under the PM Surya Ghar scheme. SUNPOWER LINK integrates these subsidy rules automatically, estimating up to ₹78,000 in direct financial assistance for systems up to 3 kWp. We break down the gross installation costs, government incentives, and net outlays so you can make informed decisions about your renewable energy transitions.</p>
+            </section>
+
+            <section id="savings-calculator">
+              <h2>Electricity Tariff & Financial Payback Projections</h2>
+              <p>Our financial ledger maps slab rates, fixed charges, and taxes for key state utilities in India (including MSEDCL in Maharashtra and BESCOM in Karnataka) to calculate monthly and annual savings. By contrasting generation yields against grid rates, we estimate your break-even payback period and model cumulative 25-year return on investment (ROI) metrics.</p>
+            </section>
+
+            <section id="environmental-impact">
+              <h2>Environmental Benefits & Carbon Offsets</h2>
+              <p>By switching to rooftop solar power, you reduce reliance on coal-heavy grid electricity in India. SUNPOWER LINK computes the exact carbon emissions avoided annually and scales the positive impact to an equivalent number of fully matured trees planted over a 25-year system lifespan.</p>
+            </section>
+          </article>
+        </main>
+
+        <footer>
+          <p>&copy; 2026 SUNPOWER LINK. All rights reserved.</p>
+          <p>
+            <a href="/privacy">Privacy Policy</a>
+          </p>
+        </footer>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
+

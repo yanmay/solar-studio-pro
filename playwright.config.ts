@@ -1,10 +1,17 @@
-import { createLovableConfig } from "lovable-agent-playwright-config/config";
+import { config } from 'dotenv';
+config({ path: '.env.local' });
 
-export default createLovableConfig({
-  // Add your custom playwright configuration overrides here
-  // Example:
-  // timeout: 60000,
-  // use: {
-  //   baseURL: 'http://localhost:3000',
-  // },
+import { defineConfig, devices } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './src/test',
+  use: {
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173',
+  },
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
 });

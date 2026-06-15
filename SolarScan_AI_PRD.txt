@@ -1,0 +1,432 @@
+PRODUCT REQUIREMENTS DOCUMENT
+SolarScan AI
+AI-Powered Rooftop Solar Feasibility & ROI Platform
+Version 1.0   •   June 2025   •   MVP Scope
+Field
+Detail
+Document Owner
+Product Team
+Status
+DRAFT — For Internal Review
+Last Updated
+June 2025
+Target Launch
+Q3 2025 (MVP)
+Stakeholders
+Product, Engineering, Design, Growth
+1. Product Overview
+1.1  What Is SolarScan AI?
+SolarScan AI is a browser-based SaaS tool that lets homeowners, commercial property owners, and solar installers instantly evaluate rooftop solar potential for any address in India — without requiring a physical site visit or specialised engineering knowledge.
+A user enters an address or pincode, traces their rooftop boundary on satellite imagery, configures panel preferences and electricity tariffs, and receives a full financial feasibility report including projected ROI, payback period, monthly energy harvest, government subsidy eligibility, and carbon savings — all within minutes.
+1.2  The Problem
+The Indian rooftop solar market is growing at 30%+ YoY, yet the sales funnel is broken at the top:
+Homeowners have no reliable way to self-assess if solar is viable for their specific roof before inviting a vendor.
+Solar installers spend 2–4 hours per lead on manual site surveys, burning cost on unqualified prospects.
+Misinformation on pricing and subsidies (especially PM Surya Ghar) creates distrust and stalls decisions.
+The pre-purchase research phase is dominated by generic content — nothing personalised to an individual rooftop.
+Core insight
+The gap is not awareness — it is conviction. Homeowners want quantified proof before committing. SolarScan AI turns a satellite map into a personalised business case.
+1.3  The Solution
+SolarScan AI bridges the research-to-intent gap by giving any user a satellite-based, AI-assisted rooftop analysis in under 5 minutes. The platform combines:
+Satellite imagery + manual rooftop tracing for precise roof area calculation.
+Configurable panel layout engine with real-time panel count, shading, and setback modelling.
+Financial modelling engine (tariff-aware ROI, EMI, subsidy) calibrated for India.
+A paywall-gated PDF report that converts interest into a paid transaction.
+2. Target Users
+2.1  Primary Users
+Persona
+Description
+Primary Goal
+Pain Today
+Curious Homeowner
+Urban/semi-urban homeowner, 30–55 yrs, owns flat or independent house, moderate solar awareness
+Understand if solar saves money on my specific home
+Too many vendor calls, no credible self-serve tool
+Solar Installer / BD Rep
+Field sales at a solar company, runs 10–30 leads/week, needs to qualify fast
+Pre-qualify leads before site visit, share professional report
+Manual calculations, no leave-behind document for client
+Property Developer
+Commercial/residential developer evaluating C&I solar
+Model ROI across multiple properties
+No scalable tool; relies on consultant quotes
+2.2  Secondary Users
+Energy consultants and auditors creating client proposals.
+Financial institutions running solar loan viability checks.
+Students and researchers requiring rooftop dataset proxies.
+3. Core Features & Classification
+Features are classified Must-Have (required for MVP), Should-Have (target for v1.1), and Nice-to-Have (future roadmap).
+3.1  Landing Page & Discovery
+Feature
+Classification
+Notes
+Hero search bar (address / city / pincode)
+Must-Have
+Core entry point; drives activation
+Animated capability highlights (predictive yields, layouts, setbacks)
+Must-Have
+Sets user expectations and builds trust
+Timeline process flow explainer
+Must-Have
+Reduces drop-off by showing what comes next
+Pricing plans (Residential vs C&I)
+Must-Have
+Needed for revenue conversion
+Testimonials (homeowner + installer tabs)
+Should-Have
+Social proof; can launch with placeholder copy
+Custom cursor spotlight & parallax animations
+Nice-to-Have
+Delight layer; remove if perf is an issue on mobile
+Video walkthrough / demo embed
+Nice-to-Have
+High-quality lead nurture asset
+Blog / SEO content hub
+Nice-to-Have
+Organic acquisition; post-MVP
+3.2  Satellite Map & Rooftop Editor
+Feature
+Classification
+Notes
+3D Earth Globe intro (Three.js) with scroll-zoom transition to 2D map
+Must-Have
+Brand differentiator; establishes premium feel
+2D Satellite Imagery (Google / Esri fallback)
+Must-Have
+Core utility; fallback source is critical
+Rooftop tracing tool (click-to-draw polygon, Turf.js area calc)
+Must-Have
+Precise area is the foundation of all downstream maths
+Sandbox Metro Jumps (Delhi, Mumbai, Bengaluru, Chennai)
+Must-Have
+Demo & onboarding; lets users explore without searching
+3-step layout configurator (Surface / Panels / Tariff)
+Must-Have
+Core configuration UX
+Panel wattage selection (450W / 550W)
+Must-Have
+Affects output and cost calculations directly
+Row alignment options (roof-perimeter vs geographical South)
+Must-Have
+Critical for accurate yield modelling
+Portrait / Landscape panel orientation toggle
+Must-Have
+Changes panel count and layout density
+Outer boundary setback & maintenance walkway gap inputs
+Must-Have
+Required for real-world installable area accuracy
+Building tilt angle slider (0°–45°)
+Must-Have
+Affects solar irradiance calculation
+Live cell-level grid overlay on map
+Must-Have
+Visual confirmation of panel placement
+Multi-roof / polygon merge tool
+Should-Have
+L-shaped or complex rooftops; v1.1
+Shade obstacle drawing (trees, water tanks)
+Should-Have
+Accuracy improvement; v1.1
+Mobile-responsive map interactions
+Should-Have
+Large TAM on mobile; complex to implement well
+Undo / redo stack for tracing
+Nice-to-Have
+UX polish
+Snap-to-edge tool for rooftop tracing
+Nice-to-Have
+Advanced precision feature
+3.3  Financial Report & Results Page
+Feature
+Classification
+Notes
+ROI Tuning Console (tariff, active panel count, panel grade)
+Must-Have
+Dynamic recompute is core product value
+Before/After savings card
+Must-Have
+Clearest single output metric for homeowners
+Gross cost, PM Surya Ghar subsidy estimate (₹78K cap), net cost, EMI
+Must-Have
+India-specific; key decision-driving numbers
+25-year cumulative cash flow chart (Recharts area)
+Must-Have
+Visualises long-term payback case
+Monthly energy harvest bar chart
+Must-Have
+Seasonal visibility builds confidence
+Carbon offset card (tonnes CO₂ + tree equivalent)
+Must-Have
+Emotional resonance; shareable
+Paywall overlay (free preview + paid unlock)
+Must-Have
+Core monetisation mechanic
+Pay-per-scan (₹149) and Pro subscription (₹999/month)
+Must-Have
+Revenue; must integrate real payment before full launch
+PDF report export (jsPDF + auto-table)
+Must-Have
+High-value deliverable; drives WTP
+Simulated UPI / QR code checkout (placeholder)
+Must-Have
+Sufficient for MVP demo; replace with real gateway pre-launch
+Razorpay / Cashfree real payment integration
+Must-Have (pre-launch)
+Non-negotiable before charging real users
+Shareable results link (unique URL per scan)
+Should-Have
+Virality + sales enablement for installers
+Multi-property comparison view
+Should-Have
+Commercial persona need; v1.1
+Installer lead-gen form on results page
+Should-Have
+B2B2C monetisation stream
+System size recommendation engine (AI-suggested optimal config)
+Nice-to-Have
+Reduces user effort; post-MVP
+Live electricity tariff lookup by DISCOM
+Nice-to-Have
+Remove manual entry friction; API required
+4. End-to-End User Flow
+4.1  Happy Path — Homeowner Persona
+Step
+Screen / Component
+User Action
+System Response
+1
+Landing Page
+Enters address in hero search bar or clicks a Sandbox Metro
+Geocodes address → navigates to /map, centres satellite view
+2
+Map — 3D Globe
+Watches globe, scrolls down
+Globe fades out, 2D satellite map fades in
+3
+Map — Rooftop Tracer
+Clicks corners of rooftop to draw polygon
+Live polygon renders; Turf.js computes area in m²
+4
+Map — Step 1: Surface
+Sets tilt angle, outer setback, walkway gap
+Usable area updates live; reflected in panel grid
+5
+Map — Step 2: Panels
+Chooses 550W premium, geographical South alignment, portrait
+Cell grid re-renders on map with final panel count
+6
+Map — Step 3: Tariff
+Enters ₹/kWh electricity rate
+System records tariff, enables 'View Report' CTA
+7
+Results Page
+Lands on /results
+Free preview shows summary metrics; detailed sections blurred with paywall overlay
+8
+Results — Paywall
+Clicks 'Unlock Full Report', selects ₹149 Pay-per-Scan
+Checkout modal opens (UPI QR or card form)
+9
+Results — Post-Pay
+Completes payment
+Paywall lifts; all sections visible; PDF export button activates
+10
+Results — PDF Export
+Clicks 'Download Report'
+jsPDF generates formatted PDF; browser download triggers
+4.2  Drop-off & Re-entry Points
+User lands on / but doesn't search → retargeting pixel fires; landing page handles objections inline.
+User traces roof but abandons before Step 3 → local state (or session storage) preserves polygon; re-entry resumes from last step.
+User hits paywall and drops → email capture before paywall is a Should-Have to enable re-engagement.
+Installer shares a results link → recipient sees free preview; CTA drives their own scan → new paid conversion.
+5. MVP Definition
+MVP principle
+The MVP is the smallest working product that lets a paying user go from address → traced roof → financial report → purchased PDF download in one unbroken session.
+5.1  In Scope for MVP
+Functional landing page with address search and sandbox metros.
+Globe → Satellite map transition with functional rooftop tracing (polygon + area calc).
+3-step layout configurator producing a valid panel count and kWp system size.
+Results page with all financial metrics computed correctly (tariff-aware, subsidy-capped).
+Recharts: 25-year cashflow chart + monthly harvest bar chart.
+Carbon offset card.
+Paywall overlay with simulated payment UI sufficient for demo; Razorpay integration required before real user payments.
+PDF export (jsPDF) covering all core report sections.
+Mobile-readable layout for results page (full mobile editor is v1.1).
+5.2  MVP Cuts (Explicitly Out of Scope)
+User accounts / authentication — no login; session-based only in MVP.
+Saved scans history — no database persistence for user data.
+Real payment gateway — simulated checkout suffices for investor demo; required before public launch.
+Multi-roof tracing or L-shaped polygon merge.
+Shade obstacle drawing.
+Shareable results URL.
+Mobile-optimised map editor.
+AI panel-layout optimisation.
+Live DISCOM tariff API.
+Installer lead-gen CRM integration.
+6. What We Are Deliberately NOT Building in V1
+This section exists to prevent scope creep. These are intentional exclusions, not oversights.
+Not Building
+Why Not
+Future Version?
+Native mobile app (iOS / Android)
+Web-first is faster to ship; covers majority of urban Indian users via Chrome mobile
+V2 if DAU justifies it
+Real-time satellite imagery updates
+Cost-prohibitive; Google/Esri tiles are sufficient for rooftop tracing accuracy
+Possibly V3
+Structural / load-bearing analysis
+Requires physical inspection; outside our software scope and creates liability
+Never (partner play)
+Grid connection paperwork automation
+High regulatory variance by DISCOM; requires legal review and ops overhead
+V2 with partnerships
+Hardware marketplace / installer booking
+B2B complexity; shifts us from tool to marketplace — different business model
+V3 product line
+Multi-language UI (Hindi / regional)
+Language localisation requires dedicated QA pass; English covers urban TAM for MVP
+V1.1 high priority
+User authentication & scan history
+Adds backend complexity and DPDPA compliance surface area without clear V1 revenue impact
+V1.1
+Government subsidy direct filing
+Requires API integration with PM portal; not publicly available; high compliance risk
+V2
+Battery storage / EV charging modelling
+Out of core solar ROI use case; distraction for MVP
+Future product line
+7. Success Metrics
+7.1  MVP Launch KPIs (First 90 Days)
+Metric
+Target
+Measurement Method
+Landing page → map activation rate
+≥ 35%
+GA4 event: address_searched
+Map → results completion rate
+≥ 50% of activations
+GA4 funnel: tracer_complete → results_viewed
+Paywall conversion rate (free → paid)
+≥ 8%
+Payment success events / results_page_views
+Pay-per-scan (₹149) transactions
+50 in Month 1
+Payment gateway logs
+PDF downloads per paid session
+≥ 80%
+GA4 event: pdf_downloaded
+Pro subscription signups (₹999/mo)
+10 in Month 1
+Subscription records
+Average session duration on map page
+≥ 4 minutes
+GA4 engagement time
+D7 return rate
+≥ 15%
+GA4 cohort analysis
+NPS score (post-purchase survey)
+≥ 40
+Typeform / in-app survey
+7.2  Guardrail Metrics (Do Not Degrade)
+Map page load time < 3 seconds on 4G (Lighthouse LCP).
+PDF generation time < 8 seconds.
+Globe → map transition completes without crash on mid-range Android (Moto G-class).
+Zero instances of incorrect subsidy calculation (₹78K cap logic must be unit tested).
+Results page financial model margin of error vs. manual calc ≤ 2%.
+7.3  North Star Metric
+North Star
+Number of paid scans completed per week. This single metric captures activation quality, product utility, and revenue simultaneously.
+8. Technical Constraints & Assumptions
+Area
+Constraint / Assumption
+Satellite tile provider
+Google Satellite via Leaflet; Esri as fallback. API key costs must be budgeted by monthly tile request volume.
+Solar irradiance data
+Currently inferred from tilt/location heuristics. NASA POWER API integration is deferred but referenced in marketing copy — align engineering on actual data source before launch.
+Financial model
+All calculations are estimates. Legal disclaimer required on results page: 'Actual yields may vary ±15–20% based on local shading, panel degradation, and DISCOM charges.'
+Subsidy calculation
+PM Surya Ghar cap of ₹78,000 based on 2024 scheme rules. Needs quarterly review as scheme parameters change.
+Payment
+Simulated checkout in MVP. Razorpay or Cashfree integration (UPI + cards) required before charging real users. GST compliance needed from Day 1.
+Browser support
+Chrome 90+, Safari 15+, Firefox 90+. IE11 not supported. Three.js globe degrades gracefully on unsupported WebGL devices.
+Data privacy
+No user PII stored in MVP (session-only). When accounts launch, DPDPA 2023 compliance framework required.
+9. Open Questions & Decisions Pending
+#
+Question
+Owner
+Due
+1
+Is the NASA POWER API actually integrated for irradiance, or are we using a static lookup table? Marketing copy must match reality.
+Engineering Lead
+Pre-launch
+2
+Which payment gateway — Razorpay or Cashfree? Decision affects UPI QR flow and refund policy.
+Product + Finance
+Sprint 2
+3
+Do we add email capture before the paywall to enable re-engagement flows?
+Growth
+Sprint 2
+4
+What is the legal liability position on financial projections? Do we need a CA to sign off on the model?
+Founder / Legal
+Pre-launch
+5
+C&I pricing tier: what does 'Commercial & Industrial' actually unlock vs. Residential? Needs feature differentiation.
+Product
+Sprint 1
+6
+Mobile editor: 'Should-Have' for v1.1, but do we block the map page on mobile with a soft nudge to desktop?
+Design + Engineering
+Sprint 1
+7
+Subsidy scheme parameters change periodically — who owns the quarterly review and update process?
+Product Ops
+Post-launch
+10. Risks & Mitigations
+Risk
+Severity
+Mitigation
+Marketing copy (NASA data, 'predictive yields') overpromises actual model accuracy
+High
+Audit copy vs. actual tech stack before launch; add accuracy disclaimers
+Rooftop tracing is too friction-heavy for non-technical homeowners
+High
+User test with 5 non-technical users before launch; consider guided walkthrough overlay
+Satellite imagery resolution insufficient for small urban plots
+Medium
+Test in tier-2 cities; offer manual area input as fallback
+Google Maps tile API costs spike with scale
+Medium
+Implement tile request caching; set API billing alerts; Esri fallback
+Payment integration delay blocks monetisation
+High
+Build Razorpay in parallel with MVP; don't wait for perfect UI
+PM Surya Ghar scheme rules change mid-quarter
+Medium
+Modularise subsidy calculation; flag in UI as 'based on current scheme rules'
+Three.js globe causes OOM crash on low-end devices
+Medium
+Graceful degradation: skip globe, go straight to 2D map if WebGL unavailable
+Appendix: Glossary
+Term
+Definition
+kWp
+Kilowatt-peak — the rated output of a solar installation under standard test conditions
+DISCOM
+Distribution Company — the regional electricity utility that manages grid connection and tariffs
+PM Surya Ghar
+Indian government rooftop solar subsidy scheme offering up to ₹78,000 for residential installations
+Turf.js
+Open-source geospatial analysis library used to compute polygon areas from map coordinates
+Setback
+Mandatory clear space between the roof edge and the nearest solar panel row, required for safety and maintenance
+C&I
+Commercial & Industrial — the non-residential solar segment, typically ≥ 10 kWp systems
+ROI Tuning Console
+Interactive panel on the results page that lets users adjust tariff, panel count, and grade to recalculate financials in real time
+Pay-per-Scan
+One-time payment (₹149) to unlock a single full scan report, as opposed to the monthly Pro subscription

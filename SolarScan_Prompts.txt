@@ -1,0 +1,628 @@
+ANTIGRAVITY PROMPT PLAYBOOK
+SolarScan AI
+20 copy-paste prompts across 4 sprints to fix and scale your codebase
+Based on TAD v1.0   •   June 2025   •   Antigravity IDE (chat mode, local folder)
+How To Use This Document
+Each prompt in this playbook is a complete, self-contained message. Copy the dark green text block exactly and paste it into Antigravity chat. Do not summarise or rephrase — the exact wording matters for file paths and technical precision.
+ORDER
+Complete every prompt in Sprint 1 before moving to Sprint 2. Sprint 1 fixes a live security hole. Skipping ahead will create merge conflicts and broken state.
+AFTER EACH PROMPT
+Wait for Antigravity to finish, review its diff, then run: npm run test in your terminal. If tests pass, approve the change. If they fail, paste the error into Antigravity as a follow-up before continuing.
+RULE
+One prompt at a time. Never paste two prompts in one message. Antigravity will mix the tasks and produce code you can't cleanly review.
+#
+Sprint
+Task
+Type
+Risk
+P1
+Sprint 1
+Create .env.example template file
+NEW FILE
+🟢 Safe
+P2
+Sprint 1
+Create api/solar-data.ts Edge Function (NASA proxy)
+NEW FILE
+🔴 Critical fix
+P3
+Sprint 1
+Create api/geocode.ts Edge Function (Google proxy)
+NEW FILE
+🔴 Critical fix
+P4
+Sprint 1
+Remove API calls from nasa-power.ts (browser file)
+MODIFY FILE
+🔴 Critical fix
+P5
+Sprint 1
+Create vercel.json routing config
+NEW FILE
+🟡 Required for deploy
+P6
+Sprint 1
+Add Vite dev proxy for /api/* in vite.config.ts
+MODIFY FILE
+🟡 Required for local dev
+P7
+Sprint 2
+Install Zustand and create src/types/scan.ts
+NEW FILE
+🟢 Safe
+P8
+Sprint 2
+Create src/hooks/use-scan-store.ts (Zustand store)
+NEW FILE
+🟢 Safe
+P9
+Sprint 2
+Refactor MapPage.tsx to write to Zustand store
+MODIFY FILE
+🟡 Core flow
+P10
+Sprint 2
+Refactor ResultsPage.tsx to read from Zustand store
+MODIFY FILE
+🟡 Core flow
+P11
+Sprint 2
+Create src/hooks/use-solar-data.ts (TanStack Query)
+NEW FILE
+🟢 Safe
+P12
+Sprint 2
+Create src/hooks/use-geocode.ts (TanStack Query)
+NEW FILE
+🟢 Safe
+P13
+Sprint 2
+Fix Playwright baseURL in playwright.config.ts
+MODIFY FILE
+🟢 Safe
+P14
+Sprint 3
+Install Razorpay and create src/types/payment.ts
+NEW FILE
+🟢 Safe
+P15
+Sprint 3
+Create api/payment/create-order.ts Edge Function
+NEW FILE
+🟡 Money flow
+P16
+Sprint 3
+Create api/payment/verify.ts Edge Function
+NEW FILE
+🟡 Money flow
+P17
+Sprint 3
+Create src/hooks/use-payment.ts and replace sim UI
+MODIFY FILE
+🟡 Money flow
+P18
+Sprint 4
+Deduplicate use-toast.ts — remove components/ui copy
+MODIFY FILE
+🟢 Safe
+P19
+Sprint 4
+Remove unused packages from package.json
+MODIFY FILE
+🟢 Safe
+P20
+Sprint 4
+Extract RooftopTracer and StepConfigurator components
+MODIFY FILE
+🟢 Safe
+SPRINT 1
+Security & API Proxy
+Fix the critical API key exposure before any users touch this app   •   6 prompts   •   est. 2–3 hrs
+WHY FIRST
+Your NASA POWER and Google Geocoding API keys are currently visible to anyone who opens DevTools. These 6 prompts move all sensitive calls behind Vercel Edge Functions so no secrets ever reach the browser.
+PROMPT 1 OF 6
+P1
+Create .env.example   [NEW FILE]
+ 
+Create a new file called .env.example in the project root (not inside src/).
+The file should contain the following content exactly:
+# SolarScan AI — Environment Variables
+# Copy this file to .env.local and fill in real values.
+# NEVER commit .env.local to git.
+# PUBLIC — these are embedded in the browser bundle at build time
+# Prefix VITE_ means the value is visible to users. Only put non-secret keys here.
+VITE_GOOGLE_MAPS_TILE_KEY=your_google_maps_tile_api_key_here
+VITE_API_BASE_URL=http://localhost:5173
+# SERVER ONLY — consumed by Vercel Edge Functions, never sent to browser
+GOOGLE_GEOCODING_KEY=your_google_geocoding_key_here
+NASA_POWER_BASE_URL=https://power.larc.nasa.gov
+RAZORPAY_KEY_ID=rzp_test_your_key_id_here
+RAZORPAY_KEY_SECRET=your_razorpay_secret_here
+RAZORPAY_WEBHOOK_SECRET=your_webhook_secret_here
+# TESTING
+PLAYWRIGHT_BASE_URL=http://localhost:5173
+# v1.1 — add these when user accounts launch
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+Also check the existing .gitignore file. If .env.local is not already listed,
+add it. Do not modify anything else in .gitignore.
+  ↳  After Antigravity creates this, manually create your actual .env.local by copying .env.example and filling in real values.
+  ↳  Do not paste real API keys into the Antigravity chat — it logs conversations.
+PROMPT 2 OF 6
+P2
+Create NASA POWER Edge Function   [NEW FILE]
+ 
+Create a new file at api/solar-data.ts in the project root (NOT inside src/).
+This is a Vercel Edge Function that proxies NASA POWER API calls server-side.
+Requirements:
+- Accept GET requests with query params: lat (number), lng (number), year (optional number, default to current year minus 1)
+- Validate that lat and lng are present and are valid numbers. Return 400 with JSON error if missing.
+- Construct a NASA POWER API request to:
+  {process.env.NASA_POWER_BASE_URL}/api/temporal/climatology/point
+  with params: parameters=ALLSKY_SFC_SW_DWN, community=RE, longitude={lng}, latitude={lat}, format=JSON
+- Fetch this URL server-side using the native fetch API.
+- On success, extract the monthly GHI array from the response at:
+  properties.parameter.ALLSKY_SFC_SW_DWN
+  and return it as JSON: { monthly_ghi: [...12 values...], lat, lng, year }
+- On NASA API error, return 502 with { error: "NASA API unavailable", details: <status> }
+- Set response header: Cache-Control: public, max-age=86400 (cache for 24 hours)
+- Export the handler as default export compatible with Vercel Edge runtime.
+- Use TypeScript with explicit types. No any types.
+- Do not import anything from src/. This file is standalone.
+  ↳  Check the file lands at api/solar-data.ts, not src/api/solar-data.ts.
+  ↳  The Cache-Control header is important — it stops Vercel from re-fetching NASA on every map interaction.
+PROMPT 3 OF 6
+P3
+Create Google Geocoding Edge Function   [NEW FILE]
+ 
+Create a new file at api/geocode.ts in the project root (NOT inside src/).
+This is a Vercel Edge Function that proxies Google Geocoding API calls server-side.
+Requirements:
+- Accept GET requests with query param: q (string, the address to geocode)
+- Validate that q is present and non-empty. Return 400 with JSON error if missing.
+- Construct a Google Geocoding API request to:
+  https://maps.googleapis.com/maps/api/geocode/json
+  with params: address={encodeURIComponent(q)}, key={process.env.GOOGLE_GEOCODING_KEY}
+- Fetch this URL server-side.
+- On success, extract the first result and return:
+  { lat, lng, formatted_address, place_id }
+  sourced from results[0].geometry.location and results[0].formatted_address
+- If Google returns status !== "OK" or results is empty, return 404 with { error: "Address not found" }
+- On fetch failure, return 502 with { error: "Geocoding service unavailable" }
+- Set response header: Cache-Control: public, max-age=3600
+- Export as default Vercel Edge Function.
+- TypeScript with explicit types. No any types.
+- Do not import anything from src/.
+  ↳  Geocoding results are deterministic for the same address — 1hr cache is fine and saves quota.
+  ↳  The key difference from the current setup: GOOGLE_GEOCODING_KEY (no VITE_ prefix) stays server-side only.
+PROMPT 4 OF 6
+P4
+Gut nasa-power.ts browser calls   [MODIFY FILE]
+ 
+Open src/lib/nasa-power.ts.
+This file currently calls the NASA POWER API directly from the browser, which exposes
+API credentials. We have moved that logic to api/solar-data.ts (a server-side Edge Function).
+Refactor src/lib/nasa-power.ts so that:
+1. Remove any direct fetch calls to NASA POWER URLs.
+2. Remove any hardcoded API URLs or keys from this file.
+3. Keep all TypeScript interfaces and types that describe the NASA response shape
+   (e.g. NasaPowerResponse, MonthlyGHI, or similar). Other files may import these types.
+4. Export a single async function called fetchSolarData(lat: number, lng: number): Promise<MonthlyGHIResult>
+   that calls fetch('/api/solar-data?lat=' + lat + '&lng=' + lng) instead of calling NASA directly.
+5. The function should throw a descriptive Error if the response is not ok.
+6. Do not change any other files in this step.
+  ↳  This is the most important prompt in Sprint 1. After Antigravity makes this change, open DevTools Network tab and confirm no requests go to power.larc.nasa.gov directly from the browser.
+  ↳  If Antigravity tries to delete the whole file, stop it — the types are needed by other files.
+PROMPT 5 OF 6
+P5
+Create vercel.json   [NEW FILE]
+ 
+Create a new file called vercel.json in the project root.
+The file should contain:
+{
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/((?!api).*)", "destination": "/index.html" }
+  ]
+}
+This config does two things:
+1. Routes all /api/* requests to our Edge Functions in the api/ folder.
+2. Routes everything else to index.html so React Router handles client-side navigation.
+Do not modify any other files.
+  ↳  Without this file, deploying to Vercel will 404 on all /api/* routes and on direct URL navigation to /map or /results.
+PROMPT 6 OF 6
+P6
+Add Vite dev proxy for /api/*   [MODIFY FILE]
+ 
+Open vite.config.ts.
+Add a server.proxy configuration so that during local development, requests to /api/*
+are proxied to http://localhost:5173 (same origin). This allows our Edge Functions to
+be tested locally with Vercel CLI (vercel dev) alongside the Vite dev server.
+The proxy config should look like this inside defineConfig:
+  server: {
+    proxy: {
+      '/api': {
+        target: process.env.VITE_API_BASE_URL || 'http://localhost:5173',
+        changeOrigin: true,
+      }
+    }
+  }
+Do not change anything else in vite.config.ts — preserve all existing plugins and settings.
+  ↳  After this, run: npm install -g vercel  then  vercel dev  to test Edge Functions locally.
+  ↳  If you only want to test the frontend without Edge Functions, regular npm run dev still works.
+SPRINT 1 COMPLETE
+Run npm run test now. All existing Vitest tests should still pass. If anything broke, fix it before Sprint 2. The security hole is now closed.
+SPRINT 2
+State & Data Layer
+Replace fragile sessionStorage with Zustand. Wire TanStack Query to your new API routes.   •   7 prompts   •   est. 3–4 hrs
+WHY THIS MATTERS
+ResultsPage.tsx currently breaks if the user refreshes the tab, opens results in a new tab, or navigates back from the report. Zustand keeps scan state in memory for the session lifetime and eliminates that fragility.
+PROMPT 7 OF 7
+P7
+Install Zustand + create src/types/scan.ts   [NEW FILE]
+ 
+Do two things in this prompt:
+1. Add zustand to the project dependencies by running: npm install zustand
+2. Create a new file at src/types/scan.ts with the following TypeScript interfaces:
+export interface RoofPolygon {
+  type: 'Polygon';
+  coordinates: [number, number][][];
+}
+export interface ScanInput {
+  address: string;
+  lat: number;
+  lng: number;
+  roofPolygon: RoofPolygon;
+  roofAreaM2: number;
+}
+export interface PanelConfig {
+  tiltAngle: number;
+  setbackM: number;
+  walkwayM: number;
+  panelWattage: 450 | 550;
+  orientation: 'portrait' | 'landscape';
+  rowAlignment: 'roof_perimeter' | 'geographical_south';
+  panelCount: number;
+  systemKwp: number;
+}
+export interface MonthlyValue {
+  month: string;
+  value: number;
+}
+export interface ScanResults {
+  annualYieldKwh: number;
+  monthlyYields: MonthlyValue[];
+  cashflow: { year: number; cumulative: number }[];
+  roiPercent: number;
+  paybackYears: number;
+  grossCostInr: number;
+  subsidyAmountInr: number;
+  netCostInr: number;
+  emiInr: number;
+  annualCo2KgSaved: number;
+  treesEquivalent: number;
+}
+export interface TariffConfig {
+  tariffPerKwh: number;
+}
+  ↳  These types are the single source of truth for scan data shape across the whole app.
+  ↳  If existing files already define some of these (e.g. in solar-calc.ts), tell Antigravity to reconcile them — don't duplicate.
+PROMPT 8 OF 7
+P8
+Create Zustand store   [NEW FILE]
+ 
+Create a new file at src/hooks/use-scan-store.ts.
+Import from 'zustand' and from '@/types/scan' (the interfaces we just created).
+Create and export a Zustand store called useScanStore with this shape:
+interface ScanStore {
+  // State slices
+  scanInput: ScanInput | null
+  panelConfig: PanelConfig | null
+  tariff: TariffConfig | null
+  results: ScanResults | null
+  isPaid: boolean
+  paymentId: string | null
+  // Actions
+  setScanInput: (input: ScanInput) => void
+  setPanelConfig: (config: PanelConfig) => void
+  setTariff: (tariff: TariffConfig) => void
+  setResults: (results: ScanResults) => void
+  setIsPaid: (paid: boolean, paymentId?: string) => void
+  reset: () => void
+}
+Implement all actions. The reset action should return all state slices to null/false.
+Also create a Vitest unit test at src/test/scan-store.test.ts that:
+- Tests that setScanInput updates scanInput correctly
+- Tests that reset returns everything to initial state
+- Tests that setIsPaid sets both isPaid and paymentId
+  ↳  After this prompt, run npm run test and confirm the new scan-store tests pass before continuing.
+PROMPT 9 OF 7
+P9
+Refactor MapPage.tsx → write to Zustand store   [MODIFY FILE]
+ 
+Open src/pages/MapPage.tsx.
+This file currently stores scan configuration in component state and sessionStorage.
+Refactor it to write to the Zustand store instead.
+Specific changes:
+1. Import useScanStore from '@/hooks/use-scan-store'
+2. Remove any sessionStorage.setItem calls related to scan data
+3. When the user completes rooftop tracing (polygon drawn, area calculated),
+   call store.setScanInput({ address, lat, lng, roofPolygon, roofAreaM2 })
+4. When the user completes Step 2 (panel configuration),
+   call store.setPanelConfig({ tiltAngle, setbackM, walkwayM, panelWattage, orientation, rowAlignment, panelCount, systemKwp })
+5. When the user completes Step 3 (tariff entry),
+   call store.setTariff({ tariffPerKwh })
+6. The "View Report" CTA navigation to /results should remain as-is.
+   Do not change routing logic.
+Do NOT change any visual UI, layout, styling, or copy text.
+Do NOT refactor or restructure components — only change the state management layer.
+  ↳  The 'Do NOT change visual UI' instruction is critical — tell Antigravity this explicitly if it starts touching styles.
+  ↳  After this change, manually test: draw a roof, configure panels, set tariff, click View Report.
+PROMPT 10 OF 7
+P10
+Refactor ResultsPage.tsx → read from Zustand store   [MODIFY FILE]
+ 
+Open src/pages/ResultsPage.tsx.
+This file currently reads scan data from sessionStorage, which breaks on page refresh.
+Refactor it to read from the Zustand store instead.
+Specific changes:
+1. Import useScanStore from '@/hooks/use-scan-store'
+2. Remove all sessionStorage.getItem calls
+3. Read scan data from: const { scanInput, panelConfig, tariff, results, isPaid } = useScanStore()
+4. If scanInput is null (user landed on /results directly without going through /map),
+   show a friendly empty state UI with a button that navigates to /map.
+   The empty state should say: "No scan found. Start a new analysis to see your report."
+5. The ROI Tuning Console that lets users adjust tariff and panel count should call
+   store.setTariff() and store.setPanelConfig() when values change, then re-run
+   the calculation from src/lib/solar-calc.ts and call store.setResults() with the new output.
+6. isPaid should be read from store.isPaid, not from sessionStorage.
+Do NOT change any visual UI, layout, styling, copy text, chart components, or PDF export logic.
+  ↳  Test the empty state by navigating directly to http://localhost:5173/results — it should show the empty state, not crash.
+  ↳  Test the normal flow end-to-end: land → trace → configure → view results.
+PROMPT 11 OF 7
+P11
+Create use-solar-data hook   [NEW FILE]
+ 
+Create a new file at src/hooks/use-solar-data.ts.
+This hook wraps the /api/solar-data Edge Function with TanStack Query for caching,
+loading states, and error handling.
+Requirements:
+- Import useQuery from '@tanstack/react-query'
+- Export a function: useSolarData(lat: number | null, lng: number | null)
+- The query key should be: ['solar-data', lat, lng]
+- The query function should fetch: /api/solar-data?lat={lat}&lng={lng}
+- The query should only run when lat and lng are both non-null (use the 'enabled' option)
+- Return the full useQuery result (data, isLoading, isError, error)
+- Type the response data as: { monthly_ghi: number[], lat: number, lng: number }
+- Set staleTime to 1000 * 60 * 60 * 24 (24 hours — matches the Edge Function cache)
+Do not call this hook from any page yet — we will wire it in a follow-up task.
+PROMPT 12 OF 7
+P12
+Create use-geocode hook   [NEW FILE]
+ 
+Create a new file at src/hooks/use-geocode.ts.
+This hook wraps the /api/geocode Edge Function with TanStack Query.
+Requirements:
+- Import useMutation from '@tanstack/react-query'
+- Export a function: useGeocode()
+- Use useMutation (not useQuery) because geocoding is triggered by a user action, not on mount
+- The mutation function should accept a string (the address) and fetch:
+  /api/geocode?q={encodeURIComponent(address)}
+- On success, return: { lat: number, lng: number, formatted_address: string }
+- On error, throw with message: "Address not found. Please try a different search."
+Then open src/pages/LandingPage.tsx (or wherever the hero search bar lives).
+Find the existing address search handler that calls Google Geocoding directly from the browser.
+Replace that direct call with the useGeocode() mutation hook.
+Do NOT change any visual UI, layout, or styling. Only change the data-fetching logic.
+  ↳  This closes the second API key exposure. After this prompt, open DevTools Network and confirm no requests go to maps.googleapis.com/maps/api/geocode from the browser.
+PROMPT 13 OF 7
+P13
+Fix Playwright baseURL   [MODIFY FILE]
+ 
+Open playwright.config.ts.
+Find the baseURL configuration. It is likely hardcoded or missing.
+Replace it with:
+  baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173',
+Also ensure the config imports dotenv and loads .env.local if it exists, so that
+PLAYWRIGHT_BASE_URL is available when running tests locally.
+If dotenv is not already a dependency, add: import { config } from 'dotenv'; config({ path: '.env.local' });
+at the top of playwright.config.ts.
+Do not change any test files or other config. Only playwright.config.ts.
+  ↳  After this, run: npx playwright test src/test/flow.spec.ts and confirm it runs without a baseURL error.
+SPRINT 2 COMPLETE
+Run npm run test. All Vitest tests should pass including the new scan-store tests. Manually test the full flow end-to-end in the browser. The results page should survive a browser refresh (it will show the empty state, which is correct behaviour).
+SPRINT 3
+Payments
+Replace the simulated checkout with real Razorpay UPI + card integration   •   4 prompts   •   est. 3–4 hrs
+BEFORE STARTING
+Create a Razorpay account at razorpay.com and get your test Key ID and Key Secret from the dashboard. Put them in your .env.local as RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET. Use test keys (rzp_test_...) until you are ready for real money.
+PROMPT 14 OF 4
+P14
+Install Razorpay + create payment types   [NEW FILE]
+ 
+Do two things:
+1. Install the Razorpay Node.js SDK by running: npm install razorpay
+   (This is used server-side in the Edge Functions only, not in the browser.)
+2. Create a new file at src/types/payment.ts with these interfaces:
+export type PaymentPlan = 'pay_per_scan' | 'pro_monthly';
+export interface CreateOrderRequest {
+  plan: PaymentPlan;
+  scanId?: string;
+}
+export interface CreateOrderResponse {
+  orderId: string;
+  amount: number;      // in paise
+  currency: string;    // 'INR'
+  keyId: string;       // Razorpay Key ID (safe to send to browser)
+}
+export interface VerifyPaymentRequest {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+  plan: PaymentPlan;
+  scanId?: string;
+}
+export interface VerifyPaymentResponse {
+  verified: boolean;
+  paymentId: string;
+}
+const PLAN_AMOUNTS: Record<PaymentPlan, number> = {
+  pay_per_scan: 14900,   // ₹149 in paise
+  pro_monthly: 99900,    // ₹999 in paise
+};
+export { PLAN_AMOUNTS };
+PROMPT 15 OF 4
+P15
+Create payment/create-order Edge Function   [NEW FILE]
+ 
+Create a new file at api/payment/create-order.ts in the project root.
+This is a Vercel Edge Function that creates a Razorpay order.
+Requirements:
+- Accept POST requests only. Return 405 for other methods.
+- Parse the JSON body as: { plan: 'pay_per_scan' | 'pro_monthly', scanId?: string }
+- Validate that plan is one of the two valid values. Return 400 if not.
+- Determine the amount in paise: pay_per_scan = 14900, pro_monthly = 99900
+- Import Razorpay from 'razorpay' and initialise with:
+    new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID, key_secret: process.env.RAZORPAY_KEY_SECRET })
+- Create a Razorpay order using razorpay.orders.create() with:
+    amount, currency: 'INR', receipt: 'scan_' + (scanId || Date.now()),
+    notes: { plan, scanId: scanId || '' }
+- Return JSON: { orderId, amount, currency: 'INR', keyId: process.env.RAZORPAY_KEY_ID }
+- On any error, return 500 with { error: 'Failed to create order' }
+- TypeScript, no any types, default export.
+- Do not import anything from src/.
+  ↳  The keyId is safe to return to the browser — it's a public identifier, not the secret.
+  ↳  Never return RAZORPAY_KEY_SECRET to the browser under any circumstances.
+PROMPT 16 OF 4
+P16
+Create payment/verify Edge Function   [NEW FILE]
+ 
+Create a new file at api/payment/verify.ts in the project root.
+This Edge Function verifies the Razorpay payment signature after the user pays.
+Requirements:
+- Accept POST requests only. Return 405 for other methods.
+- Parse the JSON body as VerifyPaymentRequest (see src/types/payment.ts for shape):
+  { razorpay_order_id, razorpay_payment_id, razorpay_signature, plan, scanId? }
+- Verify the HMAC SHA-256 signature using the Node.js crypto module:
+  const body = razorpay_order_id + '|' + razorpay_payment_id
+  const expectedSignature = createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+                              .update(body).digest('hex')
+  const isValid = expectedSignature === razorpay_signature
+- If isValid is false, return 400 with { error: 'Invalid payment signature' }
+- If isValid is true, return 200 with { verified: true, paymentId: razorpay_payment_id }
+- Import createHmac from the 'crypto' module (Node built-in, no install needed)
+- TypeScript, no any types, default export.
+- Do not import anything from src/.
+CRITICAL: The body string for HMAC must be exactly: order_id + '|' + payment_id
+with a pipe character separator. This is Razorpay's required format.
+  ↳  This is the most security-critical function in the app. If the HMAC check is wrong, anyone can fake a payment.
+  ↳  After Antigravity writes this, manually read the HMAC logic and verify the pipe separator is correct.
+PROMPT 17 OF 4
+P17
+Create use-payment hook + replace simulated UI   [MODIFY FILE]
+ 
+Do two things:
+PART 1 — Create src/hooks/use-payment.ts
+This hook handles the full Razorpay checkout flow from the browser side.
+Export a function: usePayment()
+It should return: { initiatePayment, isLoading, error }
+The initiatePayment function should:
+1. Accept: { plan: 'pay_per_scan' | 'pro_monthly', scanId?: string }
+2. POST to /api/payment/create-order with the plan and scanId
+3. On success, load the Razorpay checkout script dynamically:
+   src="https://checkout.razorpay.com/v1/checkout.js"
+4. Open the Razorpay modal with:
+   key: data.keyId, amount: data.amount, currency: data.currency,
+   order_id: data.orderId, name: 'SolarScan AI',
+   description: plan === 'pay_per_scan' ? 'Full Scan Report — ₹149' : 'Pro Monthly — ₹999'
+5. In the Razorpay handler.success callback:
+   - POST to /api/payment/verify with the payment details
+   - If verified, call useScanStore().setIsPaid(true, paymentId)
+   - Show a success toast using the sonner library
+6. In the handler.dismiss callback: do nothing (user cancelled)
+PART 2 — Update the paywall in ResultsPage.tsx
+Find the existing simulated checkout UI (the fake credit card form and fake UPI QR code).
+Replace the payment button's onClick handler with: initiatePayment({ plan: selectedPlan })
+where selectedPlan comes from the user's plan selection (pay_per_scan or pro_monthly).
+Do NOT change the visual layout of the paywall overlay — only replace the onClick handler.
+  ↳  Razorpay's checkout.js must be loaded dynamically, not as a static import — it needs the order_id at load time.
+  ↳  Test this with Razorpay test card: 4111 1111 1111 1111, any future date, any CVV.
+SPRINT 3 COMPLETE
+You now have a real payment flow. Test end-to-end with a test card. Confirm the paywall lifts after successful payment. Check Razorpay dashboard to see the test payment appear.
+SPRINT 4
+Code Quality & Cleanup
+Remove dead code, deduplicate, and extract fat components   •   3 prompts   •   est. 2 hrs
+PROMPT 18 OF 3
+P18
+Deduplicate use-toast.ts   [MODIFY FILE]
+ 
+There are currently two copies of the toast hook in this project:
+  src/hooks/use-toast.ts         (the canonical one — keep this)
+  src/components/ui/use-toast.ts (the duplicate — delete this)
+Do the following:
+1. Search the entire codebase for any import that references
+   '@/components/ui/use-toast' or '../ui/use-toast' or similar paths pointing to the duplicate.
+2. Update every such import to point to '@/hooks/use-toast' instead.
+3. Delete src/components/ui/use-toast.ts.
+4. Do not change the content of src/hooks/use-toast.ts itself.
+5. Do not change any other files beyond updating import paths.
+  ↳  This is a safe cleanup. Run npm run test after to confirm nothing broke.
+PROMPT 19 OF 3
+P19
+Remove unused packages   [MODIFY FILE]
+ 
+Remove the following unused packages from package.json and node_modules.
+Run: npm uninstall lovable-tagger input-otp react-day-picker embla-carousel-react vaul
+Then check and clean up:
+1. If any file in src/ imports from 'input-otp', 'react-day-picker', 'embla-carousel-react',
+   or 'vaul', note which files and tell me before deleting — do not auto-delete those imports.
+2. 'lovable-tagger' is only in devDependencies and is safe to remove unconditionally.
+3. After uninstalling, run npm run build and confirm it completes without errors.
+4. Do not remove any shadcn/ui component files from src/components/ui/ —
+   only remove the npm packages themselves.
+  ↳  If Antigravity finds any of these packages ARE being used somewhere, don't remove that one — report it instead.
+  ↳  embla-carousel-react is the most likely to be in use via a shadcn carousel component.
+PROMPT 20 OF 3
+P20
+Extract RooftopTracer + StepConfigurator from MapPage   [MODIFY FILE]
+ 
+Open src/pages/MapPage.tsx.
+This file is large and contains several distinct UI concerns mixed together.
+Extract two components into their own files:
+EXTRACTION 1 — src/components/scan/RooftopTracer.tsx
+Extract all the Leaflet map interaction logic and rooftop polygon drawing UI into this component.
+It should accept props: { onPolygonComplete: (polygon: RoofPolygon, areaM2: number) => void }
+It should render the Leaflet map, handle click-to-draw, show the polygon overlay, and display the area.
+When the polygon is complete, call onPolygonComplete with the polygon and area.
+EXTRACTION 2 — src/components/scan/StepConfigurator.tsx
+Extract the 3-step panel configuration UI (Surface / Panels / Tariff steps) into this component.
+It should accept props: { onConfigComplete: (config: PanelConfig, tariff: TariffConfig) => void }
+It should manage its own internal step state (current step 1/2/3).
+When Step 3 is completed, call onConfigComplete with the final config and tariff.
+In MapPage.tsx, replace the extracted code with the new components.
+MapPage should now simply render <RooftopTracer> and <StepConfigurator> and wire their callbacks
+to write to the Zustand store (which was set up in Sprint 2).
+IMPORTANT: Do NOT change any visual styling, layout, copy text, or user-facing behaviour.
+This is a pure structural refactor — the app should look and work identically after.
+  ↳  This is the highest-effort prompt. If Antigravity times out or produces a partial result, break it into two separate prompts: one for RooftopTracer, one for StepConfigurator.
+  ↳  After this, run the full Playwright E2E test: npx playwright test src/test/flow.spec.ts
+SPRINT 4 COMPLETE — ALL SPRINTS DONE
+Run npm run test (all Vitest tests), npm run build (confirm no build errors), then npx playwright test (E2E). If all three pass, your codebase matches the target architecture from the TAD.
+Appendix: Troubleshooting Common Antigravity Issues
+Problem
+What to do
+Antigravity creates file in src/api/ instead of api/
+Reject the change. Paste a follow-up: "Move the file you just created from src/api/solar-data.ts to api/solar-data.ts at the project root. The api/ folder should be at the same level as src/, not inside it."
+Antigravity changes visual UI when I said not to
+Reject the change. Add to your next prompt: "Do NOT modify any JSX, className, Tailwind classes, or visible text. Only change the logic I specified."
+Tests fail after a prompt
+Paste the full error into Antigravity: "The following test is failing after your last change. Fix it without changing what the test asserts: [paste error]"
+Antigravity says it can't find a file
+Run: find . -name 'the-file.ts' in your terminal and paste the actual path back to Antigravity.
+Antigravity combines two tasks into one message
+Reject the change. Say: "Undo all changes from your last response. I will re-send the instructions one task at a time."
+Edge Function works in Vercel but not locally
+Run: npm install -g vercel then vercel dev instead of npm run dev. Vercel CLI serves both the Vite frontend and Edge Functions together.
+Razorpay modal does not open
+Check browser console for script load errors. The checkout.js script must be loaded before calling new Razorpay(). Tell Antigravity: "The Razorpay script is not loading before the modal is initialised. Add an await to ensure the script tag is fully loaded before calling new window.Razorpay()"
