@@ -484,6 +484,81 @@ function computeFinancials({ annualKwh, systemSizeKw, panelCount, panelWattage, 
   };
 }
 
+// --- Installer platform helpers (weighted routing, GSTIN, white-label) ---
+
+// CNAME target installers point a custom domain at for white-label verification.
+const WHITE_LABEL_CNAME_TARGET = 'cname.solarscan.in';
+
+// Valid Indian GST state codes are 01–37; values like 99 are invalid.
+const GSTIN_STATE_CODES = new Set(
+  Array.from({ length: 37 }, (_, i) => String(i + 1).padStart(2, '0'))
+);
+
+// GSTIN: 2-digit state, 10-char PAN, 1 entity char, mandatory 'Z', 1 checksum char.
+const GSTIN_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/;
+
+function validateGstinFormat(gstin) {
+  if (typeof gstin !== 'string') return { valid: false };
+  const g = gstin.trim().toUpperCase();
+  if (!GSTIN_PATTERN.test(g)) return { valid: false };
+  if (!GSTIN_STATE_CODES.has(g.slice(0, 2))) return { valid: false };
+  return { valid: true };
+}
+
+// Weighted-random ranking: returns a full permutation of `installers`, biased so
+// higher-rated / more-responsive / more-recent installers tend to rank first.
+// Bias comes only from each installer's own signals — no vendor is hard-favoured.
+function rankInstallersByWeight(installers) {
+  if (!Array.isArray(installers)) return [];
+  const weightOf = (it) => {
+    const rating = Number(it && it.rating) || 0;
+    const responseRate = Number(it && it.response_rate) || 0;
+    const recency = Number(it && it.recency_score) || 0;
+    // rating dominates; response/recency are gentle tie-breakers. Floor keeps
+    // brand-new (zero-signal) installers selectable instead of never shown.
+    return Math.max(0.0001, rating + responseRate * 0.5 + recency * 0.5);
+  };
+  const pool = installers.slice();
+  const ranked = [];
+  while (pool.length > 0) {
+    const weights = pool.map(weightOf);
+    const total = weights.reduce((a, b) => a + b, 0);
+    let r = Math.random() * total;
+    let idx = 0;
+    while (idx < pool.length - 1) {
+      r -= weights[idx];
+      if (r <= 0) break;
+      idx++;
+    }
+    ranked.push(pool.splice(idx, 1)[0]);
+  }
+  return ranked;
+}
+
+async function verifyWhiteLabelDomain(domain) {
+  if (typeof domain !== 'string' || !domain.trim()) return false;
+  try {
+    const records = await require('dns').promises.resolveCname(domain.trim());
+    return records.some((r) => String(r).toLowerCase() === WHITE_LABEL_CNAME_TARGET);
+  } catch {
+    return false;
+  }
+}
+
+// Subscription pricing: ₹3,500/mo base; annual is 15% below 12× monthly.
+const SUBSCRIPTION_MONTHLY_PAISE = 350000;
+function subscriptionPricePaise(plan) {
+  return plan === 'pro_annual'
+    ? Math.round(SUBSCRIPTION_MONTHLY_PAISE * 12 * 0.85)
+    : SUBSCRIPTION_MONTHLY_PAISE;
+}
+
+// Look up an installer in the module-level mock store (tests assign api.inMemoryTables).
+function installerProfileByUserId(userId) {
+  const tables = module.exports.inMemoryTables || {};
+  return (tables.installer_profiles || []).find((p) => p.user_id === userId);
+}
+
 // Export request handler for Vite middleware use
 async function handleRequest(req, res, next) {
   const parsedUrl = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
@@ -511,6 +586,43 @@ async function handleRequest(req, res, next) {
   }
 
   console.log(`[API SERVER] ${req.method} ${pathname}`);
+
+  // INSTALLER: GSTIN format verification
+  if (pathname === '/api/installer/verify-gstin') {
+    if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const body = await parseBody(req);
+    return sendJSON(res, { valid: validateGstinFormat(body.gstin).valid }, 200);
+  }
+
+  // INSTALLER: white-label custom-domain CNAME verification
+  if (pathname === '/api/installer/verify-domain') {
+    if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const body = await parseBody(req);
+    const verified = await verifyWhiteLabelDomain(body.domain);
+    return sendJSON(res, { verified, cnameTarget: WHITE_LABEL_CNAME_TARGET }, 200);
+  }
+
+  // SUBSCRIPTION: provider-agnostic activate / cancel (mock store)
+  if (pathname === '/api/subscription/create') {
+    if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const body = await parseBody(req);
+    const profile = installerProfileByUserId(body.installerUserId);
+    if (profile) profile.subscription_tier = 'pro';
+    return sendJSON(res, {
+      status: 'active',
+      subscriptionId: 'sub_mock_' + Math.random().toString(36).slice(2, 12),
+      plan: body.plan,
+      amountPaise: subscriptionPricePaise(body.plan),
+    }, 200);
+  }
+
+  if (pathname === '/api/subscription/cancel') {
+    if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const body = await parseBody(req);
+    const profile = installerProfileByUserId(body.installerUserId);
+    if (profile) profile.subscription_tier = 'trial';
+    return sendJSON(res, { subscription_tier: 'trial' }, 200);
+  }
 
   // 1. GEOCODE PROXY
   if (pathname === '/api/geocode') {
@@ -1506,7 +1618,7 @@ async function handleRequest(req, res, next) {
   sendJSON(res, { error: 'Not found' }, 404);
 }
 
-module.exports = { handleRequest };
+module.exports = { handleRequest, rankInstallersByWeight, validateGstinFormat, WHITE_LABEL_CNAME_TARGET };
 
 if (require.main === module) {
   const server = http.createServer((req, res) => handleRequest(req, res));
