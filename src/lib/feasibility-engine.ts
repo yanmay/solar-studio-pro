@@ -1007,10 +1007,21 @@ export async function runAutomatedFeasibility(
         let city = "Pune";
         
         try {
+          // Bound this external reverse-geocode so a slow/unreachable Nominatim
+          // never hangs the silent-save path (falls back to the default city).
+          const REVERSE_GEOCODE_TIMEOUT_MS = 2000;
           const nomUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=en`;
-          const response = await fetch(nomUrl, {
-            headers: { 'User-Agent': 'SunPowerLinkSolarApp/1.0' }
-          });
+          const geoController = new AbortController();
+          const geoTimeout = setTimeout(() => geoController.abort(), REVERSE_GEOCODE_TIMEOUT_MS);
+          let response;
+          try {
+            response = await fetch(nomUrl, {
+              headers: { 'User-Agent': 'SunPowerLinkSolarApp/1.0' },
+              signal: geoController.signal,
+            });
+          } finally {
+            clearTimeout(geoTimeout);
+          }
           if (response.ok) {
             const data = await response.json();
             if (data.display_name) {

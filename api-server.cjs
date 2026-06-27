@@ -38,7 +38,11 @@ let redis;
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (supabaseUrl && supabaseKey && supabaseUrl !== 'https://your-project.supabase.co' && supabaseKey !== 'your_service_role_key') {
+// Tests must never touch the production DB/cache — force the in-memory mocks
+// under vitest so installer/marketplace specs run against api.inMemoryTables.
+const IS_TEST_ENV = !!process.env.VITEST || process.env.NODE_ENV === 'test';
+
+if (!IS_TEST_ENV && supabaseUrl && supabaseKey && supabaseUrl !== 'https://your-project.supabase.co' && supabaseKey !== 'your_service_role_key') {
   try {
     const { createClient } = require('@supabase/supabase-js');
     supabase = createClient(supabaseUrl, supabaseKey);
@@ -58,7 +62,10 @@ if (!supabase) {
   };
   supabase = {
     from: (table) => {
-      const dataList = inMemoryTables[table] || [];
+      // Prefer the module-level store when a caller (e.g. tests) has assigned
+      // api.inMemoryTables; otherwise fall back to the internal mock store.
+      const store = module.exports.inMemoryTables || inMemoryTables;
+      const dataList = store[table] || (store[table] = []);
       return {
         select: (columns = '*') => {
           return {
@@ -145,7 +152,7 @@ if (!supabase) {
 const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
 const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
 
-if (redisUrl && redisToken && redisUrl !== 'your_upstash_redis_rest_url_here') {
+if (!IS_TEST_ENV && redisUrl && redisToken && redisUrl !== 'your_upstash_redis_rest_url_here') {
   try {
     const { Redis } = require('@upstash/redis');
     redis = new Redis({ url: redisUrl, token: redisToken });
@@ -1084,7 +1091,11 @@ async function handleRequest(req, res, next) {
     if (!name || !phone) return sendJSON(res, { error: 'Name and Phone are required' }, 400);
 
     const tables = installerTables();
-    const session = (tables.analysis_sessions || []).find((s) => s.site_id === siteId);
+    // siteId may be the human site_id (manual scans) or the session UUID id
+    // (silent automated saves) — resolve against either.
+    const session = (tables.analysis_sessions || []).find(
+      (s) => s.site_id === siteId || s.id === siteId
+    );
     if (!session) return sendJSON(res, { error: 'Scan session not found for siteId' }, 404);
 
     const leadRequestId = genInstallerId('lead');
@@ -1179,8 +1190,12 @@ async function handleRequest(req, res, next) {
       return sendJSON(res, { error: 'Unauthorized: assignment belongs to another installer' }, 403);
     }
     if (body.status) assignment.status = body.status;
+    if (body.projectStage !== undefined) assignment.project_stage = body.projectStage;
     if (body.reminderDate !== undefined) assignment.reminder_date = body.reminderDate;
     if (body.reminderNote !== undefined) assignment.reminder_note = body.reminderNote;
+    // Won-trigger: first time an assignment is marked 'won', promote it to a
+    // project (stage 'lead'). Idempotent — never clobber an advanced stage.
+    if (body.status === 'won' && !assignment.project_stage) assignment.project_stage = 'lead';
     return sendJSON(res, { success: true }, 200);
   }
 
@@ -1727,7 +1742,7 @@ async function handleRequest(req, res, next) {
   sendJSON(res, { error: 'Not found' }, 404);
 }
 
-module.exports = { handleRequest, rankInstallersByWeight, validateGstinFormat, WHITE_LABEL_CNAME_TARGET };
+module.exports = { handleRequest, supabase, rankInstallersByWeight, validateGstinFormat, WHITE_LABEL_CNAME_TARGET };
 
 if (require.main === module) {
   const server = http.createServer((req, res) => handleRequest(req, res));
