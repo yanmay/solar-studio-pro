@@ -621,6 +621,56 @@ async function handleRequest(req, res, next) {
   }
 
 
+  // 1b. GOOGLE PLACES AUTOCOMPLETE PROXY (keeps the API key server-side)
+  // Accepts { input, mapCenter? } and returns NominatimSuggestion[]. Falls back to
+  // an empty array on any failure so the client can use its Nominatim fallback.
+  if (pathname === '/api/places/autocomplete') {
+    if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const apiKey = process.env.GOOGLE_PLACES_KEY || process.env.GOOGLE_GEOCODING_KEY;
+    let payload = {};
+    try { payload = await parseBody(req); } catch { payload = {}; }
+    const input = (payload.input || '').toString().trim();
+    if (!input) return sendJSON(res, []);
+    if (!apiKey || apiKey === 'your_google_geocoding_key_here') return sendJSON(res, []);
+
+    try {
+      const body = { input, languageCode: 'en', regionCode: 'IN' };
+      if (payload.mapCenter && typeof payload.mapCenter.lat === 'number' && typeof payload.mapCenter.lng === 'number') {
+        body.locationBias = {
+          circle: { center: { latitude: payload.mapCenter.lat, longitude: payload.mapCenter.lng }, radius: 50000 },
+        };
+      }
+      const acRes = await fetch(`https://places.googleapis.com/v1/places:autocomplete?key=${apiKey}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      if (!acRes.ok) return sendJSON(res, []);
+      const data = await acRes.json();
+      const suggestions = [];
+      for (const s of (data.suggestions || [])) {
+        const pred = s.placePrediction;
+        if (!pred) continue;
+        let lat = '0', lon = '0';
+        try {
+          const dRes = await fetch(`https://places.googleapis.com/v1/places/${pred.placeId}?fields=location&key=${apiKey}`);
+          if (dRes.ok) {
+            const detail = await dRes.json();
+            if (detail.location) { lat = String(detail.location.latitude); lon = String(detail.location.longitude); }
+          }
+        } catch { continue; }
+        suggestions.push({
+          place_id: `${Date.now()}_${suggestions.length}`,
+          display_name: pred.text?.text || input,
+          lat, lon, type: 'place',
+        });
+      }
+      return sendJSON(res, suggestions);
+    } catch (e) {
+      console.error('Places autocomplete proxy error:', e);
+      return sendJSON(res, []);
+    }
+  }
+
+
   // 2. SOLAR DATA PROXY
   if (pathname === '/api/solar-data') {
     if (req.method !== 'GET') return sendJSON(res, { error: 'Method not allowed' }, 405);

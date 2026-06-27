@@ -211,6 +211,31 @@ export default function MarketInsightsPage() {
             </button>
           </div>
         </div>
+
+        {/* Mobile Page Switching Tabs */}
+        <div className="md:hidden flex items-center justify-center py-2.5 px-4 border-t border-white/5 bg-black/10 gap-3 text-[10px] font-bold uppercase tracking-wider font-mono">
+          <a
+            onClick={() => navigate("/")}
+            className="text-neutral-400 hover:text-white cursor-pointer px-2 py-1 transition-colors"
+          >
+            Home
+          </a>
+          <span className="text-white/10 select-none">•</span>
+          <a
+            onClick={() => navigate("/market-insights")}
+            className="px-2 py-1 transition-colors cursor-pointer"
+            style={{ color: C.primary }}
+          >
+            Market Insights
+          </a>
+          <span className="text-white/10 select-none">•</span>
+          <a
+            onClick={() => navigate("/policy-tracker")}
+            className="text-neutral-400 hover:text-white cursor-pointer px-2 py-1 transition-colors"
+          >
+            Policy Tracker
+          </a>
+        </div>
       </header>
 
       {/* ── Main Layout ─────────────────────────────────────── */}
