@@ -553,10 +553,20 @@ function subscriptionPricePaise(plan) {
     : SUBSCRIPTION_MONTHLY_PAISE;
 }
 
-// Look up an installer in the module-level mock store (tests assign api.inMemoryTables).
+// Module-level mock store for installer/marketplace endpoints. Tests assign
+// `api.inMemoryTables = {...}`; in production these endpoints stay empty (the
+// real app uses Supabase / the api/installer/*.ts serverless handlers).
+function installerTables() {
+  return module.exports.inMemoryTables || {};
+}
+
+function genInstallerId(prefix) {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// Look up an installer in the module-level mock store by their user id.
 function installerProfileByUserId(userId) {
-  const tables = module.exports.inMemoryTables || {};
-  return (tables.installer_profiles || []).find((p) => p.user_id === userId);
+  return (installerTables().installer_profiles || []).find((p) => p.user_id === userId);
 }
 
 // Export request handler for Vite middleware use
@@ -1066,13 +1076,112 @@ async function handleRequest(req, res, next) {
   }
 
   // 7. LEADS FORM SUBMIT
+  // LEADS: homeowner creates a lead linked to a scan session
   if (pathname === '/api/leads') {
     if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
     const body = await parseBody(req);
-    const { name, phone, city } = body;
+    const { name, phone, siteId } = body;
     if (!name || !phone) return sendJSON(res, { error: 'Name and Phone are required' }, 400);
 
-    return sendJSON(res, { success: true });
+    const tables = installerTables();
+    const session = (tables.analysis_sessions || []).find((s) => s.site_id === siteId);
+    if (!session) return sendJSON(res, { error: 'Scan session not found for siteId' }, 404);
+
+    const leadRequestId = genInstallerId('lead');
+    (tables.lead_requests = tables.lead_requests || []).push({
+      id: leadRequestId,
+      session_id: session.id,
+      homeowner_name: name,
+      homeowner_phone: phone,
+      status: 'open',
+      installers_assigned_count: 0,
+    });
+    return sendJSON(res, { success: true, leadRequestId }, 200);
+  }
+
+  // LEADS: installer views open leads in their city, enriched with scan data
+  if (pathname === '/api/installer/leads/available') {
+    if (req.method !== 'GET') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const installer = installerProfileByUserId(parsedUrl.searchParams.get('installerUserId'));
+    if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
+    const tables = installerTables();
+    const sessions = tables.analysis_sessions || [];
+    const reports = tables.solar_reports || [];
+    const leads = (tables.lead_requests || [])
+      .filter((l) => l.status === 'open')
+      .map((l) => ({ lead: l, session: sessions.find((s) => s.id === l.session_id) }))
+      .filter(({ session }) => session && session.city === installer.city)
+      .map(({ lead, session }) => ({
+        ...(reports.find((r) => r.session_id === session.id) || {}),
+        ...lead,
+      }));
+    return sendJSON(res, { leads }, 200);
+  }
+
+  // LEADS: installer purchases an open lead (max 3 buyers, ₹500 = 50000 paise)
+  if (pathname === '/api/installer/leads/purchase') {
+    if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const body = await parseBody(req);
+    const installer = installerProfileByUserId(body.installerUserId);
+    if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
+    const tables = installerTables();
+    const lead = (tables.lead_requests || []).find((l) => l.id === body.leadRequestId);
+    if (!lead) return sendJSON(res, { error: 'Lead not found' }, 404);
+    if ((lead.installers_assigned_count || 0) >= 3) {
+      return sendJSON(res, { error: 'Lead buyer cap exceeded (max 3 installers)' }, 400);
+    }
+    const priceCharged = 50000;
+    (tables.lead_assignments = tables.lead_assignments || []).push({
+      id: genInstallerId('assign'),
+      lead_request_id: lead.id,
+      installer_id: installer.id,
+      price_charged_paise: priceCharged,
+      status: 'delivered',
+    });
+    lead.installers_assigned_count = (lead.installers_assigned_count || 0) + 1;
+    if (lead.installers_assigned_count >= 3) lead.status = 'fulfilled';
+    return sendJSON(res, { success: true, priceCharged }, 200);
+  }
+
+  // LEADS: installer views leads they purchased (RLS — only their own)
+  if (pathname === '/api/installer/leads/purchased') {
+    if (req.method !== 'GET') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const installer = installerProfileByUserId(parsedUrl.searchParams.get('installerUserId'));
+    if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
+    const tables = installerTables();
+    const ownedLeadIds = new Set(
+      (tables.lead_assignments || [])
+        .filter((a) => a.installer_id === installer.id)
+        .map((a) => a.lead_request_id)
+    );
+    const leads = (tables.lead_requests || []).filter((l) => ownedLeadIds.has(l.id));
+    return sendJSON(res, { leads }, 200);
+  }
+
+  // INSTALLERS: neutral (shuffled) directory by city — no vendor favouritism
+  if (pathname === '/api/installers') {
+    if (req.method !== 'GET') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const city = parsedUrl.searchParams.get('city');
+    let installers = installerTables().installer_profiles || [];
+    if (city) installers = installers.filter((i) => i.city === city);
+    return sendJSON(res, { installers: rankInstallersByWeight(installers) }, 200);
+  }
+
+  // LEADS: installer updates their own assignment status / reminder (RLS-guarded)
+  if (pathname === '/api/installer/leads/update-assignment') {
+    if (req.method !== 'PATCH') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const body = await parseBody(req);
+    const installer = installerProfileByUserId(body.installerUserId);
+    if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
+    const assignment = (installerTables().lead_assignments || []).find((a) => a.id === body.assignmentId);
+    if (!assignment) return sendJSON(res, { error: 'Assignment not found' }, 404);
+    if (assignment.installer_id !== installer.id) {
+      return sendJSON(res, { error: 'Unauthorized: assignment belongs to another installer' }, 403);
+    }
+    if (body.status) assignment.status = body.status;
+    if (body.reminderDate !== undefined) assignment.reminder_date = body.reminderDate;
+    if (body.reminderNote !== undefined) assignment.reminder_note = body.reminderNote;
+    return sendJSON(res, { success: true }, 200);
   }
 
   // 8. MARKET INSIGHTS
