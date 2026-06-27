@@ -220,6 +220,19 @@ function parseBody(req) {
 }
 
 // --- Helper: Fetch and cache NASA POWER climatology data ---
+// Reasonable India-average monthly climatology used when NASA POWER is slow or
+// unreachable, so report generation degrades gracefully instead of hanging.
+function fallbackClimatology() {
+  return {
+    monthly_ghi: [5.0, 5.5, 6.0, 6.5, 6.5, 5.5, 4.5, 4.5, 5.0, 5.5, 5.0, 4.8],
+    monthly_dhi: [2.0, 2.1, 2.3, 2.4, 2.5, 2.6, 2.7, 2.6, 2.4, 2.2, 2.0, 1.9],
+    monthly_temperature: [22, 25, 29, 32, 33, 30, 28, 27, 28, 28, 25, 22],
+    monthly_wind_speed_10m: [2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.0, 2.8, 2.4, 2.0, 2.0, 2.0],
+    monthly_wind_speed_50m: [3.0, 3.2, 3.4, 3.6, 3.8, 4.0, 4.0, 3.8, 3.4, 3.0, 3.0, 3.0],
+    elevation_m: 0.0,
+  };
+}
+
 async function fetchClimatology(lat, lng) {
   const parsedLat = parseFloat(lat);
   const parsedLng = parseFloat(lng);
@@ -264,11 +277,21 @@ async function fetchClimatology(lat, lng) {
   }
 
   if (!cachedData) {
+   try {
     const baseUrl = process.env.NASA_POWER_BASE_URL || 'https://power.larc.nasa.gov';
     const nasaUrl = `${baseUrl}/api/temporal/climatology/point?parameters=ALLSKY_SFC_SW_DWN,ALLSKY_SFC_SW_DIFF,T2M,WS10M,WS50M&community=RE&longitude=${roundedLng}&latitude=${roundedLat}&format=JSON`;
-    
+
     console.log(`[API SERVER] Cache Miss. Fetching climatology from NASA: ${nasaUrl}`);
-    const response = await fetch(nasaUrl);
+    // Bound the NASA fetch so a slow/unreachable endpoint can't hang generation.
+    const NASA_FETCH_TIMEOUT_MS = 3500;
+    const nasaController = new AbortController();
+    const nasaTimer = setTimeout(() => nasaController.abort(), NASA_FETCH_TIMEOUT_MS);
+    let response;
+    try {
+      response = await fetch(nasaUrl, { signal: nasaController.signal });
+    } finally {
+      clearTimeout(nasaTimer);
+    }
     if (!response.ok) throw new Error('NASA API response not ok');
     const data = await response.json();
 
@@ -312,6 +335,10 @@ async function fetchClimatology(lat, lng) {
     });
 
     await redis.set(cacheKey, JSON.stringify(cachedData), { ex: ttlSeconds });
+   } catch (err) {
+     console.warn('[API SERVER] NASA climatology unavailable; using fallback climatology:', err && err.message);
+     cachedData = fallbackClimatology();
+   }
   }
 
   return cachedData;
@@ -941,7 +968,7 @@ async function handleRequest(req, res, next) {
       return sendJSON(res, { error: 'Invalid plan' }, 400);
     }
 
-    const amount = plan === 'pay_per_scan' ? 14900 : 99900;
+    const amount = plan === 'pay_per_scan' ? 14900 : 399900; // pro_monthly ₹3,999 (see src/types/payment.ts)
     const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_mockkeyid';
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
@@ -1003,6 +1030,15 @@ async function handleRequest(req, res, next) {
 
     if (!isValid) {
       return sendJSON(res, { error: 'Invalid payment signature' }, 400);
+    }
+
+    // Installer subscription: upgrade to pro tier + enable white-labeling.
+    if (body.plan === 'pro_monthly' && body.installerUserId) {
+      const installer = installerProfileByUserId(body.installerUserId);
+      if (installer) {
+        installer.subscription_tier = 'pro';
+        installer.white_label = true;
+      }
     }
 
     const sId = scanId || 'default';
@@ -1196,6 +1232,42 @@ async function handleRequest(req, res, next) {
     // Won-trigger: first time an assignment is marked 'won', promote it to a
     // project (stage 'lead'). Idempotent — never clobber an advanced stage.
     if (body.status === 'won' && !assignment.project_stage) assignment.project_stage = 'lead';
+    return sendJSON(res, { success: true }, 200);
+  }
+
+  // INSTALLER: self-serve signup (creates profile + installer_profile)
+  if (pathname === '/api/installer/signup') {
+    if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const body = await parseBody(req);
+    if (!validateGstinFormat(body.gstin).valid) {
+      return sendJSON(res, { error: 'Invalid GSTIN format' }, 400);
+    }
+    const tables = installerTables();
+    const profileId = genInstallerId('user');
+    (tables.profiles = tables.profiles || []).push({ id: profileId, role: 'installer' });
+    (tables.installer_profiles = tables.installer_profiles || []).push({
+      id: genInstallerId('inst'),
+      user_id: profileId,
+      company_name: body.companyName,
+      gstin: body.gstin,
+      city: body.city,
+      state: body.state,
+      subscription_tier: 'trial',
+      subscription_status: 'active',
+      trial_scans_remaining: 10,
+      white_label: false,
+    });
+    return sendJSON(res, { success: true, profileId }, 200);
+  }
+
+  // INSTALLER: update white-label branding (logo / custom domain)
+  if (pathname === '/api/installer/branding/update') {
+    if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const body = await parseBody(req);
+    const installer = installerProfileByUserId(body.installerUserId);
+    if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
+    if (body.customLogoUrl !== undefined) installer.custom_logo_url = body.customLogoUrl;
+    if (body.customDomain !== undefined) installer.custom_domain = body.customDomain;
     return sendJSON(res, { success: true }, 200);
   }
 
@@ -1477,7 +1549,10 @@ async function handleRequest(req, res, next) {
     if (req.method !== 'GET') return sendJSON(res, { error: 'Method not allowed' }, 405);
     const siteId = parsedUrl.searchParams.get('siteId') || 'default';
     const scanParam = parsedUrl.searchParams.get('scan');
-    
+    // Installer context (mock-store backed): drives trial scan limits + white-label branding.
+    const installerUserId = parsedUrl.searchParams.get('installerUserId');
+    const installer = installerUserId ? installerProfileByUserId(installerUserId) : null;
+
     let session = null;
     let report = null;
     
@@ -1501,6 +1576,14 @@ async function handleRequest(req, res, next) {
       console.error('Error querying database for report:', err);
     }
     
+    // Trial scan-limit enforcement: block a NEW report generation once an
+    // installer's trial allowance is exhausted (existing reports stay free).
+    const willGenerateNew = (!session || !report) && !!scanParam;
+    if (installer && installer.subscription_tier === 'trial' && willGenerateNew
+        && (installer.trial_scans_remaining || 0) <= 0) {
+      return sendJSON(res, { error: 'Scan limit reached for your trial plan' }, 403);
+    }
+
     // If not in database but scan context is provided, run pvlib engine and store report
     if ((!session || !report) && scanParam) {
       try {
@@ -1612,6 +1695,12 @@ async function handleRequest(req, res, next) {
     
     if (!session || !report) {
       return sendJSON(res, { error: 'Report not found' }, 404);
+    }
+
+    // A new report was generated for a trial installer — decrement their allowance.
+    if (installer && installer.subscription_tier === 'trial' && willGenerateNew
+        && typeof installer.trial_scans_remaining === 'number') {
+      installer.trial_scans_remaining -= 1;
     }
     
     // Check unlock state
@@ -1735,6 +1824,16 @@ async function handleRequest(req, res, next) {
       responsePayload.panel_layout = report.panel_layout;
     }
     
+    // White-label branding for pro installers (homeowner-facing report headers).
+    if (installer && installer.white_label) {
+      responsePayload.branding = {
+        isWhiteLabeled: true,
+        companyName: installer.company_name,
+        domain: installer.custom_domain || null,
+        logoUrl: installer.custom_logo_url || null,
+      };
+    }
+
     return sendJSON(res, responsePayload);
   }
 
