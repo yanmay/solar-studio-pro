@@ -220,6 +220,22 @@ function parseBody(req) {
 }
 
 // --- Helper: Fetch and cache NASA POWER climatology data ---
+// --- Supabase availability circuit breaker ---
+// When the DB host is unreachable every call otherwise waits on a DNS timeout
+// (~1.5s each), making requests crawl. After the first connection failure we
+// skip Supabase for a cooldown so the flow stays fast in compute-only mode.
+let supabaseDownUntil = 0;
+function supabaseUsable() {
+  return !!supabase && Date.now() >= supabaseDownUntil;
+}
+function noteSupabaseError(err) {
+  const msg = (err && (err.message || String(err))) || '';
+  if (/fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|getaddrinfo|network|aborted/i.test(msg)) {
+    supabaseDownUntil = Date.now() + 60 * 1000; // 60s cooldown
+    console.warn('[API SERVER] Supabase unreachable — skipping DB for 60s (compute-only mode).');
+  }
+}
+
 // Reasonable India-average monthly climatology used when NASA POWER is slow or
 // unreachable, so report generation degrades gracefully instead of hanging.
 function fallbackClimatology() {
@@ -249,7 +265,7 @@ async function fetchClimatology(lat, lng) {
     }
   } catch (err) {}
 
-  if (!cachedData) {
+  if (!cachedData && supabaseUsable()) {
     try {
       const { data: dbData } = await supabase
         .from('nasa_power_cache')
@@ -320,7 +336,7 @@ async function fetchClimatology(lat, lng) {
     const ttlSeconds = 30 * 24 * 3600;
     const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
 
-    await supabase.from('nasa_power_cache').upsert({
+    if (supabaseUsable()) await supabase.from('nasa_power_cache').upsert({
       cache_key: cacheKey,
       latitude: roundedLat,
       longitude: roundedLng,
@@ -924,7 +940,7 @@ async function handleRequest(req, res, next) {
         const ttlSeconds = 30 * 24 * 3600;
         const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
 
-        await supabase.from('nasa_power_cache').upsert({
+        if (supabaseUsable()) await supabase.from('nasa_power_cache').upsert({
           cache_key: cacheKey,
           latitude: roundedLat,
           longitude: roundedLng,
@@ -1556,24 +1572,28 @@ async function handleRequest(req, res, next) {
     let session = null;
     let report = null;
     
-    // Attempt DB Lookup
-    try {
-      const { data: dbSession } = await supabase
-        .from('analysis_sessions')
-        .select('*')
-        .eq('site_id', siteId)
-        .single();
-      if (dbSession) {
-        session = dbSession;
-        const { data: dbReport } = await supabase
-          .from('solar_reports')
+    // Attempt DB Lookup (skipped while the breaker says Supabase is unreachable)
+    if (supabaseUsable()) {
+      try {
+        const { data: dbSession, error: sErr } = await supabase
+          .from('analysis_sessions')
           .select('*')
-          .eq('session_id', session.id)
+          .eq('site_id', siteId)
           .single();
-        report = dbReport;
+        if (sErr) noteSupabaseError(sErr);
+        if (dbSession) {
+          session = dbSession;
+          const { data: dbReport } = await supabase
+            .from('solar_reports')
+            .select('*')
+            .eq('session_id', session.id)
+            .single();
+          report = dbReport;
+        }
+      } catch (err) {
+        noteSupabaseError(err);
+        console.error('Error querying database for report:', err && err.message);
       }
-    } catch (err) {
-      console.error('Error querying database for report:', err);
     }
     
     // Trial scan-limit enforcement: block a NEW report generation once an
@@ -1630,63 +1650,85 @@ async function handleRequest(req, res, next) {
         const cookies = parseCookies(req.headers.cookie);
         const isCookieUnlocked = cookies[`scan_unlocked_${siteId}`] === 'true' || cookies[`scan_unlocked_default`] === 'true';
         
-        // Insert record into analysis_sessions table
-        const { data: newSession } = await supabase
-          .from('analysis_sessions')
-          .insert({
-            site_id: siteId,
-            address: scanInput.address || 'Unknown Address',
-            latitude: scanInput.lat,
-            longitude: scanInput.lng,
-            structure_tilt: panelConfig.tiltAngle,
-            boundary_setback: panelConfig.setbackM,
-            maintenance_walkways: panelConfig.walkwayM > 0,
-            panel_wattage: panelConfig.panelWattage,
-            panel_alignment: panelConfig.rowAlignment === 'geographical_south' ? 'south' : 'roof',
-            panel_orientation: panelConfig.orientation === 'landscape' ? 'landscape' : 'portrait',
-            status: 'ready',
-            is_preview_unlocked: true,
-            is_full_unlocked: isCookieUnlocked,
-            expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
-            shading: panelConfig.shading || 'none'
-          })
-          .select()
-          .single();
-          
-        if (newSession) {
-          session = newSession;
-          
-          // Insert record into solar_reports table
-          const { data: newReport } = await supabase
-            .from('solar_reports')
-            .insert({
-              session_id: session.id,
-              total_roof_area_sqm: scanInput.roofAreaM2,
-              usable_roof_area_sqm: scanInput.roofAreaM2 * 0.75,
-              panel_count: panelConfig.panelCount || 15,
-              system_size_kwp: engineInput.system_size_kwp,
-              annual_ghi_kwh_m2_day: weather.monthly_ghi.reduce((a, b) => a + b, 0) / 12,
-              annual_production_kwh: engineResult.annual_yield_kwh,
-              lcoe_per_kwh: finResult.lcoe_per_kwh,
-              irr: finResult.irr,
-              roe: 12.5,
-              npv: finResult.npv,
-              payback_years: finResult.payback_years,
-              lifetime_savings: finResult.lifetime_savings,
-              utility_cost_25yr: finResult.lifetime_savings * 1.5,
-              capex_estimate: finResult.capex_estimate,
-              pm_surya_subsidy: finResult.pm_surya_subsidy,
-              suitability_score: suitabilityScore,
-              investment_grade: finResult.irr > 15 ? 'A+' : 'A',
-              cashflow_projection: finResult.cashflow_projection,
-              panel_layout: {},
-              horizon_shading_loss: engineResult.horizon_shading_loss,
-              sky_view_factor: 0.95 * (1 - (engineResult.horizon_shading_loss || 0.0))
-            })
-            .select()
-            .single();
-          report = newReport;
+        const newId = () => (typeof crypto !== 'undefined' && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : ('id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8));
+
+        // Build the session/report up front so a freshly computed report can be
+        // returned even when the database is unreachable (resilient no-DB mode).
+        const sessionData = {
+          id: newId(),
+          site_id: siteId,
+          address: scanInput.address || 'Unknown Address',
+          latitude: scanInput.lat,
+          longitude: scanInput.lng,
+          structure_tilt: panelConfig.tiltAngle,
+          boundary_setback: panelConfig.setbackM,
+          maintenance_walkways: panelConfig.walkwayM > 0,
+          panel_wattage: panelConfig.panelWattage,
+          panel_alignment: panelConfig.rowAlignment === 'geographical_south' ? 'south' : 'roof',
+          panel_orientation: panelConfig.orientation === 'landscape' ? 'landscape' : 'portrait',
+          status: 'ready',
+          is_preview_unlocked: true,
+          is_full_unlocked: isCookieUnlocked,
+          expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
+          shading: panelConfig.shading || 'none'
+        };
+
+        let persistedSession = null;
+        if (supabaseUsable()) {
+          try {
+            const { data, error } = await supabase
+              .from('analysis_sessions').insert(sessionData).select().single();
+            if (error) { noteSupabaseError(error); console.error('[API SERVER] analysis_sessions insert failed (no-DB fallback):', error.message); }
+            persistedSession = data || null;
+          } catch (e) {
+            noteSupabaseError(e);
+            console.error('[API SERVER] analysis_sessions insert threw (no-DB fallback):', e && e.message);
+          }
         }
+        session = persistedSession || sessionData;
+
+        const reportData = {
+          id: newId(),
+          session_id: session.id,
+          total_roof_area_sqm: scanInput.roofAreaM2,
+          usable_roof_area_sqm: scanInput.roofAreaM2 * 0.75,
+          panel_count: panelConfig.panelCount || 15,
+          system_size_kwp: engineInput.system_size_kwp,
+          annual_ghi_kwh_m2_day: weather.monthly_ghi.reduce((a, b) => a + b, 0) / 12,
+          annual_production_kwh: engineResult.annual_yield_kwh,
+          lcoe_per_kwh: finResult.lcoe_per_kwh,
+          irr: finResult.irr,
+          roe: 12.5,
+          npv: finResult.npv,
+          payback_years: finResult.payback_years,
+          lifetime_savings: finResult.lifetime_savings,
+          utility_cost_25yr: finResult.lifetime_savings * 1.5,
+          capex_estimate: finResult.capex_estimate,
+          pm_surya_subsidy: finResult.pm_surya_subsidy,
+          suitability_score: suitabilityScore,
+          investment_grade: finResult.irr > 15 ? 'A+' : 'A',
+          cashflow_projection: finResult.cashflow_projection,
+          panel_layout: {},
+          horizon_shading_loss: engineResult.horizon_shading_loss,
+          sky_view_factor: 0.95 * (1 - (engineResult.horizon_shading_loss || 0.0)),
+          generated_at: new Date().toISOString()
+        };
+
+        let persistedReport = null;
+        if (supabaseUsable()) {
+          try {
+            const { data, error } = await supabase
+              .from('solar_reports').insert(reportData).select().single();
+            if (error) { noteSupabaseError(error); console.error('[API SERVER] solar_reports insert failed (no-DB fallback):', error.message); }
+            persistedReport = data || null;
+          } catch (e) {
+            noteSupabaseError(e);
+            console.error('[API SERVER] solar_reports insert threw (no-DB fallback):', e && e.message);
+          }
+        }
+        report = persistedReport || reportData;
       } catch (err) {
         console.error('Failed to dynamically compute and save report:', err);
         return sendJSON(res, { error: 'Failed to compute and save report', details: err.message }, 500);
