@@ -294,6 +294,8 @@ async function fetchClimatology(lat, lng) {
 
   if (!cachedData) {
    try {
+    // Tests must not depend on live NASA — use the deterministic fallback.
+    if (IS_TEST_ENV) throw new Error('test-mode: use fallback climatology (no network)');
     const baseUrl = process.env.NASA_POWER_BASE_URL || 'https://power.larc.nasa.gov';
     const nasaUrl = `${baseUrl}/api/temporal/climatology/point?parameters=ALLSKY_SFC_SW_DWN,ALLSKY_SFC_SW_DIFF,T2M,WS10M,WS50M&community=RE&longitude=${roundedLng}&latitude=${roundedLat}&format=JSON`;
 
@@ -603,20 +605,25 @@ function subscriptionPricePaise(plan) {
     : SUBSCRIPTION_MONTHLY_PAISE;
 }
 
-// Module-level mock store for installer/marketplace endpoints. Tests assign
-// `api.inMemoryTables = {...}`; in production these endpoints stay empty (the
-// real app uses Supabase / the api/installer/*.ts serverless handlers).
-function installerTables() {
-  return module.exports.inMemoryTables || {};
-}
-
 function genInstallerId(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// Look up an installer in the module-level mock store by their user id.
-function installerProfileByUserId(userId) {
-  return (installerTables().installer_profiles || []).find((p) => p.user_id === userId);
+// Installer/marketplace endpoints go through `supabase` so they work against the
+// real DB in production AND the in-memory mock (which bridges to api.inMemoryTables)
+// under vitest. Array-form selects avoid .single()'s "no rows" error semantics.
+async function sbSelect(table, filters) {
+  let q = supabase.from(table).select('*');
+  if (filters) for (const [col, val] of Object.entries(filters)) q = q.eq(col, val);
+  try {
+    const { data } = await q;
+    return Array.isArray(data) ? data : (data ? [data] : []);
+  } catch (e) { noteSupabaseError(e); return []; }
+}
+async function getInstallerByUserId(userId) {
+  if (!userId) return null;
+  const rows = await sbSelect('installer_profiles', { user_id: userId });
+  return rows[0] || null;
 }
 
 // Export request handler for Vite middleware use
@@ -662,12 +669,15 @@ async function handleRequest(req, res, next) {
     return sendJSON(res, { verified, cnameTarget: WHITE_LABEL_CNAME_TARGET }, 200);
   }
 
-  // SUBSCRIPTION: provider-agnostic activate / cancel (mock store)
+  // SUBSCRIPTION: provider-agnostic activate / cancel
   if (pathname === '/api/subscription/create') {
     if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
     const body = await parseBody(req);
-    const profile = installerProfileByUserId(body.installerUserId);
-    if (profile) profile.subscription_tier = 'pro';
+    if (body.installerUserId) {
+      await supabase.from('installer_profiles')
+        .update({ subscription_tier: 'pro', subscription_status: 'active' })
+        .eq('user_id', body.installerUserId);
+    }
     return sendJSON(res, {
       status: 'active',
       subscriptionId: 'sub_mock_' + Math.random().toString(36).slice(2, 12),
@@ -679,8 +689,11 @@ async function handleRequest(req, res, next) {
   if (pathname === '/api/subscription/cancel') {
     if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
     const body = await parseBody(req);
-    const profile = installerProfileByUserId(body.installerUserId);
-    if (profile) profile.subscription_tier = 'trial';
+    if (body.installerUserId) {
+      await supabase.from('installer_profiles')
+        .update({ subscription_tier: 'trial' })
+        .eq('user_id', body.installerUserId);
+    }
     return sendJSON(res, { subscription_tier: 'trial' }, 200);
   }
 
@@ -1050,11 +1063,9 @@ async function handleRequest(req, res, next) {
 
     // Installer subscription: upgrade to pro tier + enable white-labeling.
     if (body.plan === 'pro_monthly' && body.installerUserId) {
-      const installer = installerProfileByUserId(body.installerUserId);
-      if (installer) {
-        installer.subscription_tier = 'pro';
-        installer.white_label = true;
-      }
+      await supabase.from('installer_profiles')
+        .update({ subscription_tier: 'pro', white_label: true })
+        .eq('user_id', body.installerUserId);
     }
 
     const sId = scanId || 'default';
@@ -1142,42 +1153,35 @@ async function handleRequest(req, res, next) {
     const { name, phone, siteId } = body;
     if (!name || !phone) return sendJSON(res, { error: 'Name and Phone are required' }, 400);
 
-    const tables = installerTables();
     // siteId may be the human site_id (manual scans) or the session UUID id
     // (silent automated saves) — resolve against either.
-    const session = (tables.analysis_sessions || []).find(
-      (s) => s.site_id === siteId || s.id === siteId
-    );
+    let session = (await sbSelect('analysis_sessions', { site_id: siteId }))[0];
+    if (!session) session = (await sbSelect('analysis_sessions', { id: siteId }))[0];
     if (!session) return sendJSON(res, { error: 'Scan session not found for siteId' }, 404);
 
-    const leadRequestId = genInstallerId('lead');
-    (tables.lead_requests = tables.lead_requests || []).push({
-      id: leadRequestId,
+    const { data: inserted } = await supabase.from('lead_requests').insert({
       session_id: session.id,
       homeowner_name: name,
       homeowner_phone: phone,
       status: 'open',
       installers_assigned_count: 0,
-    });
-    return sendJSON(res, { success: true, leadRequestId }, 200);
+    }).select().single();
+    return sendJSON(res, { success: true, leadRequestId: inserted && inserted.id }, 200);
   }
 
   // LEADS: installer views open leads in their city, enriched with scan data
   if (pathname === '/api/installer/leads/available') {
     if (req.method !== 'GET') return sendJSON(res, { error: 'Method not allowed' }, 405);
-    const installer = installerProfileByUserId(parsedUrl.searchParams.get('installerUserId'));
+    const installer = await getInstallerByUserId(parsedUrl.searchParams.get('installerUserId'));
     if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
-    const tables = installerTables();
-    const sessions = tables.analysis_sessions || [];
-    const reports = tables.solar_reports || [];
-    const leads = (tables.lead_requests || [])
-      .filter((l) => l.status === 'open')
-      .map((l) => ({ lead: l, session: sessions.find((s) => s.id === l.session_id) }))
-      .filter(({ session }) => session && session.city === installer.city)
-      .map(({ lead, session }) => ({
-        ...(reports.find((r) => r.session_id === session.id) || {}),
-        ...lead,
-      }));
+    const openLeads = await sbSelect('lead_requests', { status: 'open' });
+    const leads = [];
+    for (const lead of openLeads) {
+      const session = (await sbSelect('analysis_sessions', { id: lead.session_id }))[0];
+      if (!session || session.city !== installer.city) continue;
+      const report = (await sbSelect('solar_reports', { session_id: session.id }))[0] || {};
+      leads.push({ ...report, ...lead });
+    }
     return sendJSON(res, { leads }, 200);
   }
 
@@ -1185,39 +1189,36 @@ async function handleRequest(req, res, next) {
   if (pathname === '/api/installer/leads/purchase') {
     if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
     const body = await parseBody(req);
-    const installer = installerProfileByUserId(body.installerUserId);
+    const installer = await getInstallerByUserId(body.installerUserId);
     if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
-    const tables = installerTables();
-    const lead = (tables.lead_requests || []).find((l) => l.id === body.leadRequestId);
+    const lead = (await sbSelect('lead_requests', { id: body.leadRequestId }))[0];
     if (!lead) return sendJSON(res, { error: 'Lead not found' }, 404);
     if ((lead.installers_assigned_count || 0) >= 3) {
       return sendJSON(res, { error: 'Lead buyer cap exceeded (max 3 installers)' }, 400);
     }
     const priceCharged = 50000;
-    (tables.lead_assignments = tables.lead_assignments || []).push({
-      id: genInstallerId('assign'),
+    await supabase.from('lead_assignments').insert({
       lead_request_id: lead.id,
       installer_id: installer.id,
       price_charged_paise: priceCharged,
       status: 'delivered',
     });
-    lead.installers_assigned_count = (lead.installers_assigned_count || 0) + 1;
-    if (lead.installers_assigned_count >= 3) lead.status = 'fulfilled';
+    const newCount = (lead.installers_assigned_count || 0) + 1;
+    await supabase.from('lead_requests')
+      .update({ installers_assigned_count: newCount, status: newCount >= 3 ? 'fulfilled' : lead.status })
+      .eq('id', lead.id);
     return sendJSON(res, { success: true, priceCharged }, 200);
   }
 
   // LEADS: installer views leads they purchased (RLS — only their own)
   if (pathname === '/api/installer/leads/purchased') {
     if (req.method !== 'GET') return sendJSON(res, { error: 'Method not allowed' }, 405);
-    const installer = installerProfileByUserId(parsedUrl.searchParams.get('installerUserId'));
+    const installer = await getInstallerByUserId(parsedUrl.searchParams.get('installerUserId'));
     if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
-    const tables = installerTables();
-    const ownedLeadIds = new Set(
-      (tables.lead_assignments || [])
-        .filter((a) => a.installer_id === installer.id)
-        .map((a) => a.lead_request_id)
-    );
-    const leads = (tables.lead_requests || []).filter((l) => ownedLeadIds.has(l.id));
+    const assignments = await sbSelect('lead_assignments', { installer_id: installer.id });
+    const ownedLeadIds = new Set(assignments.map((a) => a.lead_request_id));
+    const allLeads = await sbSelect('lead_requests');
+    const leads = allLeads.filter((l) => ownedLeadIds.has(l.id));
     return sendJSON(res, { leads }, 200);
   }
 
@@ -1225,8 +1226,9 @@ async function handleRequest(req, res, next) {
   if (pathname === '/api/installers') {
     if (req.method !== 'GET') return sendJSON(res, { error: 'Method not allowed' }, 405);
     const city = parsedUrl.searchParams.get('city');
-    let installers = installerTables().installer_profiles || [];
-    if (city) installers = installers.filter((i) => i.city === city);
+    const installers = city
+      ? await sbSelect('installer_profiles', { city })
+      : await sbSelect('installer_profiles');
     return sendJSON(res, { installers: rankInstallersByWeight(installers) }, 200);
   }
 
@@ -1234,20 +1236,23 @@ async function handleRequest(req, res, next) {
   if (pathname === '/api/installer/leads/update-assignment') {
     if (req.method !== 'PATCH') return sendJSON(res, { error: 'Method not allowed' }, 405);
     const body = await parseBody(req);
-    const installer = installerProfileByUserId(body.installerUserId);
+    const installer = await getInstallerByUserId(body.installerUserId);
     if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
-    const assignment = (installerTables().lead_assignments || []).find((a) => a.id === body.assignmentId);
+    const assignment = (await sbSelect('lead_assignments', { id: body.assignmentId }))[0];
     if (!assignment) return sendJSON(res, { error: 'Assignment not found' }, 404);
     if (assignment.installer_id !== installer.id) {
       return sendJSON(res, { error: 'Unauthorized: assignment belongs to another installer' }, 403);
     }
-    if (body.status) assignment.status = body.status;
-    if (body.projectStage !== undefined) assignment.project_stage = body.projectStage;
-    if (body.reminderDate !== undefined) assignment.reminder_date = body.reminderDate;
-    if (body.reminderNote !== undefined) assignment.reminder_note = body.reminderNote;
+    const updates = {};
+    if (body.status) updates.status = body.status;
+    if (body.projectStage !== undefined) updates.project_stage = body.projectStage;
+    if (body.reminderDate !== undefined) updates.reminder_date = body.reminderDate;
+    if (body.reminderNote !== undefined) updates.reminder_note = body.reminderNote;
     // Won-trigger: first time an assignment is marked 'won', promote it to a
     // project (stage 'lead'). Idempotent — never clobber an advanced stage.
-    if (body.status === 'won' && !assignment.project_stage) assignment.project_stage = 'lead';
+    const effectiveStage = updates.project_stage !== undefined ? updates.project_stage : assignment.project_stage;
+    if (body.status === 'won' && !effectiveStage) updates.project_stage = 'lead';
+    await supabase.from('lead_assignments').update(updates).eq('id', assignment.id);
     return sendJSON(res, { success: true }, 200);
   }
 
@@ -1258,11 +1263,10 @@ async function handleRequest(req, res, next) {
     if (!validateGstinFormat(body.gstin).valid) {
       return sendJSON(res, { error: 'Invalid GSTIN format' }, 400);
     }
-    const tables = installerTables();
-    const profileId = genInstallerId('user');
-    (tables.profiles = tables.profiles || []).push({ id: profileId, role: 'installer' });
-    (tables.installer_profiles = tables.installer_profiles || []).push({
-      id: genInstallerId('inst'),
+    // profiles.id is a UUID PK (its FK to auth.users is dropped in mock-auth mode).
+    const profileId = crypto.randomUUID();
+    await supabase.from('profiles').insert({ id: profileId, role: 'installer' });
+    await supabase.from('installer_profiles').insert({
       user_id: profileId,
       company_name: body.companyName,
       gstin: body.gstin,
@@ -1280,10 +1284,12 @@ async function handleRequest(req, res, next) {
   if (pathname === '/api/installer/branding/update') {
     if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
     const body = await parseBody(req);
-    const installer = installerProfileByUserId(body.installerUserId);
+    const installer = await getInstallerByUserId(body.installerUserId);
     if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
-    if (body.customLogoUrl !== undefined) installer.custom_logo_url = body.customLogoUrl;
-    if (body.customDomain !== undefined) installer.custom_domain = body.customDomain;
+    const updates = {};
+    if (body.customLogoUrl !== undefined) updates.custom_logo_url = body.customLogoUrl;
+    if (body.customDomain !== undefined) updates.custom_domain = body.customDomain;
+    await supabase.from('installer_profiles').update(updates).eq('user_id', body.installerUserId);
     return sendJSON(res, { success: true }, 200);
   }
 
@@ -1567,7 +1573,7 @@ async function handleRequest(req, res, next) {
     const scanParam = parsedUrl.searchParams.get('scan');
     // Installer context (mock-store backed): drives trial scan limits + white-label branding.
     const installerUserId = parsedUrl.searchParams.get('installerUserId');
-    const installer = installerUserId ? installerProfileByUserId(installerUserId) : null;
+    const installer = installerUserId ? await getInstallerByUserId(installerUserId) : null;
 
     let session = null;
     let report = null;
@@ -1742,7 +1748,9 @@ async function handleRequest(req, res, next) {
     // A new report was generated for a trial installer — decrement their allowance.
     if (installer && installer.subscription_tier === 'trial' && willGenerateNew
         && typeof installer.trial_scans_remaining === 'number') {
-      installer.trial_scans_remaining -= 1;
+      await supabase.from('installer_profiles')
+        .update({ trial_scans_remaining: installer.trial_scans_remaining - 1 })
+        .eq('user_id', installer.user_id);
     }
     
     // Check unlock state
