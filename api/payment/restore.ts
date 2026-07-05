@@ -1,3 +1,5 @@
+import { getSupabaseAdmin, ensureSession } from '../_utils/supabase.js';
+
 export const config = {
   runtime: 'nodejs',
 };
@@ -66,6 +68,55 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     const scanId = paymentData.notes?.scanId || 'default';
+
+    // Persist the restore to the database so the unlock survives across devices.
+    const supabase = getSupabaseAdmin();
+    if (supabase) {
+      try {
+        const sessionId = await ensureSession(supabase, scanId);
+        if (sessionId) {
+          // Record the payment if we don't already have it
+          const { data: existingPayment } = await supabase
+            .from('payments')
+            .select('id, status')
+            .eq('razorpay_payment_id', paymentId)
+            .maybeSingle();
+
+          if (!existingPayment) {
+            await supabase.from('payments').insert({
+              session_id: sessionId,
+              amount_paise: paymentData.amount ?? 0,
+              currency: paymentData.currency ?? 'INR',
+              payment_type: 'report_unlock',
+              razorpay_order_id: paymentData.order_id ?? null,
+              razorpay_payment_id: paymentId,
+              status: 'success',
+              gateway_response: paymentData,
+              confirmed_at: new Date().toISOString(),
+            });
+          } else if (existingPayment.status !== 'success') {
+            await supabase
+              .from('payments')
+              .update({
+                status: 'success',
+                gateway_response: paymentData,
+                confirmed_at: new Date().toISOString(),
+              })
+              .eq('id', existingPayment.id);
+          }
+
+          // Mark the session as fully unlocked
+          await supabase
+            .from('analysis_sessions')
+            .update({ is_full_unlocked: true })
+            .eq('id', sessionId);
+        }
+      } catch (err) {
+        // Do not fail the restore if persistence has an issue — cookie still set
+        console.error('restore: DB persistence failed:', err);
+      }
+    }
+
     const cookieHeader = `scan_unlocked_${scanId}=true; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=86400`;
 
     return new Response(JSON.stringify({ restored: true, paymentId }), {
