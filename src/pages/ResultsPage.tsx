@@ -47,7 +47,7 @@ import {
 import { useScanStore } from "@/hooks/use-scan-store";
 import { usePayment } from "@/hooks/use-payment";
 import { runFullCalculation } from "@/lib/solar-calc";
-import { decodeScanFromUrl } from "@/lib/scan-url";
+import { decodeScanFromUrl, encodeScanToUrl } from "@/lib/scan-url";
 import { computePanelLayout } from "@/lib/panel-layout";
 import { fetchSolarIrradiance } from "@/lib/nasa-power";
 import {
@@ -105,6 +105,7 @@ interface FullResult extends SolarAnalysis {
   suitabilityScore?: number;
   horizonShadingLoss?: number;
   skyViewFactor?: number;
+  roof?: { azimuth?: string | number; tilt?: number };
   battery?: {
     mode: "none" | "evening" | "offgrid";
     recommendedKwh: number;
@@ -113,6 +114,16 @@ interface FullResult extends SolarAnalysis {
     backupHours: number;
     description: string;
   };
+}
+
+// Average lat/lng centroid of a set of vertices
+function calcCentroid(points: { lat: number; lng: number }[]): { lat: number; lng: number } {
+  if (points.length === 0) return { lat: 0, lng: 0 };
+  const sum = points.reduce(
+    (acc, p) => ({ lat: acc.lat + p.lat, lng: acc.lng + p.lng }),
+    { lat: 0, lng: 0 }
+  );
+  return { lat: sum.lat / points.length, lng: sum.lng / points.length };
 }
 
 const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
