@@ -60,35 +60,9 @@ export function useGeocode() {
         // Any other error (timeout/ECONNREFUSED) → fall through to Nominatim
       }
 
-      // Direct Nominatim call as fallback with Google client-side ultimate fallback
-      try {
-        return await nominatimGeocode(address);
-      } catch (nomErr) {
-        try {
-          const googleUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
-            address.trim()
-          )}&key=AIzaSyDFkPRXVfhHADwyZHtFy2j_XElhNqa2HS4`;
-          const googleRes = await fetch(googleUrl);
-          if (googleRes.ok) {
-            const data = await googleRes.json();
-            if (data.status === "OK" && data.results && data.results.length > 0) {
-              const first = data.results[0];
-              const stateComp = first.address_components?.find((c: any) =>
-                c.types.includes("administrative_area_level_1")
-              );
-              return {
-                lat: first.geometry.location.lat,
-                lng: first.geometry.location.lng,
-                formatted_address: first.formatted_address,
-                state: stateComp ? stateComp.long_name : undefined,
-              };
-            }
-          }
-        } catch (googleErr) {
-          console.warn("Client-side Google Geocoding fallback failed:", googleErr);
-        }
-        throw nomErr;
-      }
+      // Keyless Nominatim fallback. Google is only ever reached via the
+      // server proxy (/api/geocode) above so the API key stays server-side.
+      return await nominatimGeocode(address);
     },
   });
 }

@@ -25,7 +25,6 @@ import {
   FileIcon,
 } from "@/components/ui/animated-state-icons";
 import { CTASection } from "@/components/ui/cta-with-glow";
-import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 const LandingPage = () => {
   const navigate = useNavigate();
@@ -171,7 +170,7 @@ const LandingPage = () => {
     <div className="min-h-screen bg-[#050505] text-white antialiased selection:bg-[#FF6600]/30 selection:text-white overflow-x-hidden">
 
       {/* ── Nav ──────────────────────────────────────────────── */}
-      <nav className={`fixed w-full z-[1000] transition-all duration-300 ${isNavActive ? "bg-[#050505]/[0.97] backdrop-blur-xl py-3 border-b border-white/8" : "bg-transparent py-5"}`}>
+      <nav className={`fixed w-full z-[1000] transition-all duration-300 ${isNavActive ? "bg-[#050505]/[0.97] backdrop-blur-xl py-3" : "bg-transparent py-5"}`}>
         {/* Scroll progress line — visible only when scrolled */}
         <div
           ref={progressBarRef}
@@ -286,7 +285,6 @@ const LandingPage = () => {
           </div>
 
           <div className="hidden md:flex items-center space-x-4">
-            <LanguageSwitcher />
             <button
               onClick={() => navigate("/map")}
               className="btn-primary px-5 h-10 text-sm font-bold rounded-xl active:scale-[0.98] transition-all border-none cursor-pointer bg-[#FF6600] text-black hover:bg-orange-500 shadow-lg shadow-[#FF6600]/20 hover:shadow-[#FF6600]/40"
@@ -296,11 +294,40 @@ const LandingPage = () => {
           </div>
 
           <div className="md:hidden flex items-center space-x-2">
-            <LanguageSwitcher />
             <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2 active:scale-90 transition-transform text-white">
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </div>
+        </div>
+
+        {/* Mobile Horizontal Scrollable Tabs */}
+        <div className="md:hidden flex items-center overflow-x-auto whitespace-nowrap scrollbar-none py-2 px-4 mt-2 gap-4 bg-black/40">
+          {[
+            { href: "#about", label: "Architecture", id: "about" },
+            { href: "#technology", label: "Technology", id: "technology" },
+            { href: "#workflow", label: "Process", id: "workflow" },
+            { href: "#faq", label: "FAQ", id: "faq" },
+          ].map(({ href, label, id }) => (
+            <a
+              key={id}
+              href={href}
+              className={`transition-colors relative text-xs font-medium px-3 py-1.5 rounded-lg ${activeSection === id ? "text-[#FF6600] bg-white/5 font-semibold" : "text-neutral-400 hover:text-white"}`}
+            >
+              {label}
+            </a>
+          ))}
+          <a
+            onClick={() => navigate("/market-insights")}
+            className="transition-colors text-xs font-medium px-3 py-1.5 text-neutral-400 hover:text-white cursor-pointer"
+          >
+            Market Insights
+          </a>
+          <a
+            onClick={() => navigate("/policy-tracker")}
+            className="transition-colors text-xs font-medium px-3 py-1.5 text-neutral-400 hover:text-white cursor-pointer"
+          >
+            Policy Tracker
+          </a>
         </div>
 
         {/* Mobile menu */}

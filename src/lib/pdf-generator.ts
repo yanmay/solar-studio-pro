@@ -10,6 +10,28 @@ interface PDFOptions {
 }
 
 /**
+ * PM-Surya Ghar national subsidy (INR) for a given system size in kWp.
+ * ≤2 kWp: ₹30,000/kWp · 2–3 kWp: ₹60,000 + ₹18,000/kWp above 2 · >3 kWp: capped ₹78,000.
+ */
+export function calculateSubsidy(installedKw: number): number {
+  if (installedKw <= 0) return 0;
+  if (installedKw <= 2) return Math.round(installedKw * 30000);
+  if (installedKw <= 3) return Math.round(60000 + (installedKw - 2) * 18000);
+  return 78000;
+}
+
+/**
+ * Build a wa.me share URL. Strips non-digits from the phone; a bare 10-digit
+ * Indian number is prefixed with 91, an already-prefixed number is left as-is.
+ * The message is URI-encoded.
+ */
+export function buildWhatsAppUrl(phone: string, text: string): string {
+  const digits = (phone || "").replace(/\D/g, "");
+  const normalized = digits.length === 10 ? `91${digits}` : digits;
+  return `https://wa.me/${normalized}?text=${encodeURIComponent(text)}`;
+}
+
+/**
  * Generate a branded PDF report from a SolarAnalysis object.
  * Returns a Promise that resolves when the download triggers.
  * 
@@ -133,10 +155,7 @@ export async function generatePDFReport(
       // Capital calculations matching ResultsPage.tsx
       const installedKw = analysis.energy.installedCapacityKw;
       const grossCostInr = Math.round(installedKw * COST_PER_KW_INR);
-      let subsidyInr = 0;
-      if (installedKw <= 2) subsidyInr = Math.round(installedKw * 30000);
-      else if (installedKw <= 3) subsidyInr = 60000 + Math.round((installedKw - 2) * 18000);
-      else subsidyInr = 78000;
+      const subsidyInr = calculateSubsidy(installedKw);
       const netCostInr = Math.max(0, grossCostInr - subsidyInr);
       const emi5yr = Math.round((netCostInr * 0.08 / 12) / (1 - Math.pow(1 + 0.08 / 12, -60)));
 

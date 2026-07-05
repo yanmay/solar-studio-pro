@@ -38,7 +38,11 @@ let redis;
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (supabaseUrl && supabaseKey && supabaseUrl !== 'https://your-project.supabase.co' && supabaseKey !== 'your_service_role_key') {
+// Tests must never touch the production DB/cache — force the in-memory mocks
+// under vitest so installer/marketplace specs run against api.inMemoryTables.
+const IS_TEST_ENV = !!process.env.VITEST || process.env.NODE_ENV === 'test';
+
+if (!IS_TEST_ENV && supabaseUrl && supabaseKey && supabaseUrl !== 'https://your-project.supabase.co' && supabaseKey !== 'your_service_role_key') {
   try {
     const { createClient } = require('@supabase/supabase-js');
     supabase = createClient(supabaseUrl, supabaseKey);
@@ -58,7 +62,10 @@ if (!supabase) {
   };
   supabase = {
     from: (table) => {
-      const dataList = inMemoryTables[table] || [];
+      // Prefer the module-level store when a caller (e.g. tests) has assigned
+      // api.inMemoryTables; otherwise fall back to the internal mock store.
+      const store = module.exports.inMemoryTables || inMemoryTables;
+      const dataList = store[table] || (store[table] = []);
       return {
         select: (columns = '*') => {
           return {
@@ -145,7 +152,7 @@ if (!supabase) {
 const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
 const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
 
-if (redisUrl && redisToken && redisUrl !== 'your_upstash_redis_rest_url_here') {
+if (!IS_TEST_ENV && redisUrl && redisToken && redisUrl !== 'your_upstash_redis_rest_url_here') {
   try {
     const { Redis } = require('@upstash/redis');
     redis = new Redis({ url: redisUrl, token: redisToken });
@@ -213,6 +220,35 @@ function parseBody(req) {
 }
 
 // --- Helper: Fetch and cache NASA POWER climatology data ---
+// --- Supabase availability circuit breaker ---
+// When the DB host is unreachable every call otherwise waits on a DNS timeout
+// (~1.5s each), making requests crawl. After the first connection failure we
+// skip Supabase for a cooldown so the flow stays fast in compute-only mode.
+let supabaseDownUntil = 0;
+function supabaseUsable() {
+  return !!supabase && Date.now() >= supabaseDownUntil;
+}
+function noteSupabaseError(err) {
+  const msg = (err && (err.message || String(err))) || '';
+  if (/fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|getaddrinfo|network|aborted/i.test(msg)) {
+    supabaseDownUntil = Date.now() + 60 * 1000; // 60s cooldown
+    console.warn('[API SERVER] Supabase unreachable — skipping DB for 60s (compute-only mode).');
+  }
+}
+
+// Reasonable India-average monthly climatology used when NASA POWER is slow or
+// unreachable, so report generation degrades gracefully instead of hanging.
+function fallbackClimatology() {
+  return {
+    monthly_ghi: [5.0, 5.5, 6.0, 6.5, 6.5, 5.5, 4.5, 4.5, 5.0, 5.5, 5.0, 4.8],
+    monthly_dhi: [2.0, 2.1, 2.3, 2.4, 2.5, 2.6, 2.7, 2.6, 2.4, 2.2, 2.0, 1.9],
+    monthly_temperature: [22, 25, 29, 32, 33, 30, 28, 27, 28, 28, 25, 22],
+    monthly_wind_speed_10m: [2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.0, 2.8, 2.4, 2.0, 2.0, 2.0],
+    monthly_wind_speed_50m: [3.0, 3.2, 3.4, 3.6, 3.8, 4.0, 4.0, 3.8, 3.4, 3.0, 3.0, 3.0],
+    elevation_m: 0.0,
+  };
+}
+
 async function fetchClimatology(lat, lng) {
   const parsedLat = parseFloat(lat);
   const parsedLng = parseFloat(lng);
@@ -229,7 +265,7 @@ async function fetchClimatology(lat, lng) {
     }
   } catch (err) {}
 
-  if (!cachedData) {
+  if (!cachedData && supabaseUsable()) {
     try {
       const { data: dbData } = await supabase
         .from('nasa_power_cache')
@@ -257,11 +293,23 @@ async function fetchClimatology(lat, lng) {
   }
 
   if (!cachedData) {
+   try {
+    // Tests must not depend on live NASA — use the deterministic fallback.
+    if (IS_TEST_ENV) throw new Error('test-mode: use fallback climatology (no network)');
     const baseUrl = process.env.NASA_POWER_BASE_URL || 'https://power.larc.nasa.gov';
     const nasaUrl = `${baseUrl}/api/temporal/climatology/point?parameters=ALLSKY_SFC_SW_DWN,ALLSKY_SFC_SW_DIFF,T2M,WS10M,WS50M&community=RE&longitude=${roundedLng}&latitude=${roundedLat}&format=JSON`;
-    
+
     console.log(`[API SERVER] Cache Miss. Fetching climatology from NASA: ${nasaUrl}`);
-    const response = await fetch(nasaUrl);
+    // Bound the NASA fetch so a slow/unreachable endpoint can't hang generation.
+    const NASA_FETCH_TIMEOUT_MS = 3500;
+    const nasaController = new AbortController();
+    const nasaTimer = setTimeout(() => nasaController.abort(), NASA_FETCH_TIMEOUT_MS);
+    let response;
+    try {
+      response = await fetch(nasaUrl, { signal: nasaController.signal });
+    } finally {
+      clearTimeout(nasaTimer);
+    }
     if (!response.ok) throw new Error('NASA API response not ok');
     const data = await response.json();
 
@@ -290,7 +338,7 @@ async function fetchClimatology(lat, lng) {
     const ttlSeconds = 30 * 24 * 3600;
     const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
 
-    await supabase.from('nasa_power_cache').upsert({
+    if (supabaseUsable()) await supabase.from('nasa_power_cache').upsert({
       cache_key: cacheKey,
       latitude: roundedLat,
       longitude: roundedLng,
@@ -305,6 +353,10 @@ async function fetchClimatology(lat, lng) {
     });
 
     await redis.set(cacheKey, JSON.stringify(cachedData), { ex: ttlSeconds });
+   } catch (err) {
+     console.warn('[API SERVER] NASA climatology unavailable; using fallback climatology:', err && err.message);
+     cachedData = fallbackClimatology();
+   }
   }
 
   return cachedData;
@@ -484,6 +536,96 @@ function computeFinancials({ annualKwh, systemSizeKw, panelCount, panelWattage, 
   };
 }
 
+// --- Installer platform helpers (weighted routing, GSTIN, white-label) ---
+
+// CNAME target installers point a custom domain at for white-label verification.
+const WHITE_LABEL_CNAME_TARGET = 'cname.solarscan.in';
+
+// Valid Indian GST state codes are 01–37; values like 99 are invalid.
+const GSTIN_STATE_CODES = new Set(
+  Array.from({ length: 37 }, (_, i) => String(i + 1).padStart(2, '0'))
+);
+
+// GSTIN: 2-digit state, 10-char PAN, 1 entity char, mandatory 'Z', 1 checksum char.
+const GSTIN_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/;
+
+function validateGstinFormat(gstin) {
+  if (typeof gstin !== 'string') return { valid: false };
+  const g = gstin.trim().toUpperCase();
+  if (!GSTIN_PATTERN.test(g)) return { valid: false };
+  if (!GSTIN_STATE_CODES.has(g.slice(0, 2))) return { valid: false };
+  return { valid: true };
+}
+
+// Weighted-random ranking: returns a full permutation of `installers`, biased so
+// higher-rated / more-responsive / more-recent installers tend to rank first.
+// Bias comes only from each installer's own signals — no vendor is hard-favoured.
+function rankInstallersByWeight(installers) {
+  if (!Array.isArray(installers)) return [];
+  const weightOf = (it) => {
+    const rating = Number(it && it.rating) || 0;
+    const responseRate = Number(it && it.response_rate) || 0;
+    const recency = Number(it && it.recency_score) || 0;
+    // rating dominates; response/recency are gentle tie-breakers. Floor keeps
+    // brand-new (zero-signal) installers selectable instead of never shown.
+    return Math.max(0.0001, rating + responseRate * 0.5 + recency * 0.5);
+  };
+  const pool = installers.slice();
+  const ranked = [];
+  while (pool.length > 0) {
+    const weights = pool.map(weightOf);
+    const total = weights.reduce((a, b) => a + b, 0);
+    let r = Math.random() * total;
+    let idx = 0;
+    while (idx < pool.length - 1) {
+      r -= weights[idx];
+      if (r <= 0) break;
+      idx++;
+    }
+    ranked.push(pool.splice(idx, 1)[0]);
+  }
+  return ranked;
+}
+
+async function verifyWhiteLabelDomain(domain) {
+  if (typeof domain !== 'string' || !domain.trim()) return false;
+  try {
+    const records = await require('dns').promises.resolveCname(domain.trim());
+    return records.some((r) => String(r).toLowerCase() === WHITE_LABEL_CNAME_TARGET);
+  } catch {
+    return false;
+  }
+}
+
+// Subscription pricing: ₹3,500/mo base; annual is 15% below 12× monthly.
+const SUBSCRIPTION_MONTHLY_PAISE = 350000;
+function subscriptionPricePaise(plan) {
+  return plan === 'pro_annual'
+    ? Math.round(SUBSCRIPTION_MONTHLY_PAISE * 12 * 0.85)
+    : SUBSCRIPTION_MONTHLY_PAISE;
+}
+
+function genInstallerId(prefix) {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// Installer/marketplace endpoints go through `supabase` so they work against the
+// real DB in production AND the in-memory mock (which bridges to api.inMemoryTables)
+// under vitest. Array-form selects avoid .single()'s "no rows" error semantics.
+async function sbSelect(table, filters) {
+  let q = supabase.from(table).select('*');
+  if (filters) for (const [col, val] of Object.entries(filters)) q = q.eq(col, val);
+  try {
+    const { data } = await q;
+    return Array.isArray(data) ? data : (data ? [data] : []);
+  } catch (e) { noteSupabaseError(e); return []; }
+}
+async function getInstallerByUserId(userId) {
+  if (!userId) return null;
+  const rows = await sbSelect('installer_profiles', { user_id: userId });
+  return rows[0] || null;
+}
+
 // Export request handler for Vite middleware use
 async function handleRequest(req, res, next) {
   const parsedUrl = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
@@ -511,6 +653,49 @@ async function handleRequest(req, res, next) {
   }
 
   console.log(`[API SERVER] ${req.method} ${pathname}`);
+
+  // INSTALLER: GSTIN format verification
+  if (pathname === '/api/installer/verify-gstin') {
+    if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const body = await parseBody(req);
+    return sendJSON(res, { valid: validateGstinFormat(body.gstin).valid }, 200);
+  }
+
+  // INSTALLER: white-label custom-domain CNAME verification
+  if (pathname === '/api/installer/verify-domain') {
+    if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const body = await parseBody(req);
+    const verified = await verifyWhiteLabelDomain(body.domain);
+    return sendJSON(res, { verified, cnameTarget: WHITE_LABEL_CNAME_TARGET }, 200);
+  }
+
+  // SUBSCRIPTION: provider-agnostic activate / cancel
+  if (pathname === '/api/subscription/create') {
+    if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const body = await parseBody(req);
+    if (body.installerUserId) {
+      await supabase.from('installer_profiles')
+        .update({ subscription_tier: 'pro', subscription_status: 'active' })
+        .eq('user_id', body.installerUserId);
+    }
+    return sendJSON(res, {
+      status: 'active',
+      subscriptionId: 'sub_mock_' + Math.random().toString(36).slice(2, 12),
+      plan: body.plan,
+      amountPaise: subscriptionPricePaise(body.plan),
+    }, 200);
+  }
+
+  if (pathname === '/api/subscription/cancel') {
+    if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const body = await parseBody(req);
+    if (body.installerUserId) {
+      await supabase.from('installer_profiles')
+        .update({ subscription_tier: 'trial' })
+        .eq('user_id', body.installerUserId);
+    }
+    return sendJSON(res, { subscription_tier: 'trial' }, 200);
+  }
 
   // 1. GEOCODE PROXY
   if (pathname === '/api/geocode') {
@@ -621,6 +806,56 @@ async function handleRequest(req, res, next) {
   }
 
 
+  // 1b. GOOGLE PLACES AUTOCOMPLETE PROXY (keeps the API key server-side)
+  // Accepts { input, mapCenter? } and returns NominatimSuggestion[]. Falls back to
+  // an empty array on any failure so the client can use its Nominatim fallback.
+  if (pathname === '/api/places/autocomplete') {
+    if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const apiKey = process.env.GOOGLE_PLACES_KEY || process.env.GOOGLE_GEOCODING_KEY;
+    let payload = {};
+    try { payload = await parseBody(req); } catch { payload = {}; }
+    const input = (payload.input || '').toString().trim();
+    if (!input) return sendJSON(res, []);
+    if (!apiKey || apiKey === 'your_google_geocoding_key_here') return sendJSON(res, []);
+
+    try {
+      const body = { input, languageCode: 'en', regionCode: 'IN' };
+      if (payload.mapCenter && typeof payload.mapCenter.lat === 'number' && typeof payload.mapCenter.lng === 'number') {
+        body.locationBias = {
+          circle: { center: { latitude: payload.mapCenter.lat, longitude: payload.mapCenter.lng }, radius: 50000 },
+        };
+      }
+      const acRes = await fetch(`https://places.googleapis.com/v1/places:autocomplete?key=${apiKey}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      if (!acRes.ok) return sendJSON(res, []);
+      const data = await acRes.json();
+      const suggestions = [];
+      for (const s of (data.suggestions || [])) {
+        const pred = s.placePrediction;
+        if (!pred) continue;
+        let lat = '0', lon = '0';
+        try {
+          const dRes = await fetch(`https://places.googleapis.com/v1/places/${pred.placeId}?fields=location&key=${apiKey}`);
+          if (dRes.ok) {
+            const detail = await dRes.json();
+            if (detail.location) { lat = String(detail.location.latitude); lon = String(detail.location.longitude); }
+          }
+        } catch { continue; }
+        suggestions.push({
+          place_id: `${Date.now()}_${suggestions.length}`,
+          display_name: pred.text?.text || input,
+          lat, lon, type: 'place',
+        });
+      }
+      return sendJSON(res, suggestions);
+    } catch (e) {
+      console.error('Places autocomplete proxy error:', e);
+      return sendJSON(res, []);
+    }
+  }
+
+
   // 2. SOLAR DATA PROXY
   if (pathname === '/api/solar-data') {
     if (req.method !== 'GET') return sendJSON(res, { error: 'Method not allowed' }, 405);
@@ -718,7 +953,7 @@ async function handleRequest(req, res, next) {
         const ttlSeconds = 30 * 24 * 3600;
         const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
 
-        await supabase.from('nasa_power_cache').upsert({
+        if (supabaseUsable()) await supabase.from('nasa_power_cache').upsert({
           cache_key: cacheKey,
           latitude: roundedLat,
           longitude: roundedLng,
@@ -762,7 +997,7 @@ async function handleRequest(req, res, next) {
       return sendJSON(res, { error: 'Invalid plan' }, 400);
     }
 
-    const amount = plan === 'pay_per_scan' ? 14900 : 99900;
+    const amount = plan === 'pay_per_scan' ? 14900 : 399900; // pro_monthly ₹3,999 (see src/types/payment.ts)
     const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_mockkeyid';
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
@@ -824,6 +1059,13 @@ async function handleRequest(req, res, next) {
 
     if (!isValid) {
       return sendJSON(res, { error: 'Invalid payment signature' }, 400);
+    }
+
+    // Installer subscription: upgrade to pro tier + enable white-labeling.
+    if (body.plan === 'pro_monthly' && body.installerUserId) {
+      await supabase.from('installer_profiles')
+        .update({ subscription_tier: 'pro', white_label: true })
+        .eq('user_id', body.installerUserId);
     }
 
     const sId = scanId || 'default';
@@ -904,13 +1146,151 @@ async function handleRequest(req, res, next) {
   }
 
   // 7. LEADS FORM SUBMIT
+  // LEADS: homeowner creates a lead linked to a scan session
   if (pathname === '/api/leads') {
     if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
     const body = await parseBody(req);
-    const { name, phone, city } = body;
+    const { name, phone, siteId } = body;
     if (!name || !phone) return sendJSON(res, { error: 'Name and Phone are required' }, 400);
 
-    return sendJSON(res, { success: true });
+    // siteId may be the human site_id (manual scans) or the session UUID id
+    // (silent automated saves) — resolve against either.
+    let session = (await sbSelect('analysis_sessions', { site_id: siteId }))[0];
+    if (!session) session = (await sbSelect('analysis_sessions', { id: siteId }))[0];
+    if (!session) return sendJSON(res, { error: 'Scan session not found for siteId' }, 404);
+
+    const { data: inserted } = await supabase.from('lead_requests').insert({
+      session_id: session.id,
+      homeowner_name: name,
+      homeowner_phone: phone,
+      status: 'open',
+      installers_assigned_count: 0,
+    }).select().single();
+    return sendJSON(res, { success: true, leadRequestId: inserted && inserted.id }, 200);
+  }
+
+  // LEADS: installer views open leads in their city, enriched with scan data
+  if (pathname === '/api/installer/leads/available') {
+    if (req.method !== 'GET') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const installer = await getInstallerByUserId(parsedUrl.searchParams.get('installerUserId'));
+    if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
+    const openLeads = await sbSelect('lead_requests', { status: 'open' });
+    const leads = [];
+    for (const lead of openLeads) {
+      const session = (await sbSelect('analysis_sessions', { id: lead.session_id }))[0];
+      if (!session || session.city !== installer.city) continue;
+      const report = (await sbSelect('solar_reports', { session_id: session.id }))[0] || {};
+      leads.push({ ...report, ...lead });
+    }
+    return sendJSON(res, { leads }, 200);
+  }
+
+  // LEADS: installer purchases an open lead (max 3 buyers, ₹500 = 50000 paise)
+  if (pathname === '/api/installer/leads/purchase') {
+    if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const body = await parseBody(req);
+    const installer = await getInstallerByUserId(body.installerUserId);
+    if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
+    const lead = (await sbSelect('lead_requests', { id: body.leadRequestId }))[0];
+    if (!lead) return sendJSON(res, { error: 'Lead not found' }, 404);
+    if ((lead.installers_assigned_count || 0) >= 3) {
+      return sendJSON(res, { error: 'Lead buyer cap exceeded (max 3 installers)' }, 400);
+    }
+    const priceCharged = 50000;
+    await supabase.from('lead_assignments').insert({
+      lead_request_id: lead.id,
+      installer_id: installer.id,
+      price_charged_paise: priceCharged,
+      status: 'delivered',
+    });
+    const newCount = (lead.installers_assigned_count || 0) + 1;
+    await supabase.from('lead_requests')
+      .update({ installers_assigned_count: newCount, status: newCount >= 3 ? 'fulfilled' : lead.status })
+      .eq('id', lead.id);
+    return sendJSON(res, { success: true, priceCharged }, 200);
+  }
+
+  // LEADS: installer views leads they purchased (RLS — only their own)
+  if (pathname === '/api/installer/leads/purchased') {
+    if (req.method !== 'GET') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const installer = await getInstallerByUserId(parsedUrl.searchParams.get('installerUserId'));
+    if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
+    const assignments = await sbSelect('lead_assignments', { installer_id: installer.id });
+    const ownedLeadIds = new Set(assignments.map((a) => a.lead_request_id));
+    const allLeads = await sbSelect('lead_requests');
+    const leads = allLeads.filter((l) => ownedLeadIds.has(l.id));
+    return sendJSON(res, { leads }, 200);
+  }
+
+  // INSTALLERS: neutral (shuffled) directory by city — no vendor favouritism
+  if (pathname === '/api/installers') {
+    if (req.method !== 'GET') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const city = parsedUrl.searchParams.get('city');
+    const installers = city
+      ? await sbSelect('installer_profiles', { city })
+      : await sbSelect('installer_profiles');
+    return sendJSON(res, { installers: rankInstallersByWeight(installers) }, 200);
+  }
+
+  // LEADS: installer updates their own assignment status / reminder (RLS-guarded)
+  if (pathname === '/api/installer/leads/update-assignment') {
+    if (req.method !== 'PATCH') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const body = await parseBody(req);
+    const installer = await getInstallerByUserId(body.installerUserId);
+    if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
+    const assignment = (await sbSelect('lead_assignments', { id: body.assignmentId }))[0];
+    if (!assignment) return sendJSON(res, { error: 'Assignment not found' }, 404);
+    if (assignment.installer_id !== installer.id) {
+      return sendJSON(res, { error: 'Unauthorized: assignment belongs to another installer' }, 403);
+    }
+    const updates = {};
+    if (body.status) updates.status = body.status;
+    if (body.projectStage !== undefined) updates.project_stage = body.projectStage;
+    if (body.reminderDate !== undefined) updates.reminder_date = body.reminderDate;
+    if (body.reminderNote !== undefined) updates.reminder_note = body.reminderNote;
+    // Won-trigger: first time an assignment is marked 'won', promote it to a
+    // project (stage 'lead'). Idempotent — never clobber an advanced stage.
+    const effectiveStage = updates.project_stage !== undefined ? updates.project_stage : assignment.project_stage;
+    if (body.status === 'won' && !effectiveStage) updates.project_stage = 'lead';
+    await supabase.from('lead_assignments').update(updates).eq('id', assignment.id);
+    return sendJSON(res, { success: true }, 200);
+  }
+
+  // INSTALLER: self-serve signup (creates profile + installer_profile)
+  if (pathname === '/api/installer/signup') {
+    if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const body = await parseBody(req);
+    if (!validateGstinFormat(body.gstin).valid) {
+      return sendJSON(res, { error: 'Invalid GSTIN format' }, 400);
+    }
+    // profiles.id is a UUID PK (its FK to auth.users is dropped in mock-auth mode).
+    const profileId = crypto.randomUUID();
+    await supabase.from('profiles').insert({ id: profileId, role: 'installer' });
+    await supabase.from('installer_profiles').insert({
+      user_id: profileId,
+      company_name: body.companyName,
+      gstin: body.gstin,
+      city: body.city,
+      state: body.state,
+      subscription_tier: 'trial',
+      subscription_status: 'active',
+      trial_scans_remaining: 10,
+      white_label: false,
+    });
+    return sendJSON(res, { success: true, profileId }, 200);
+  }
+
+  // INSTALLER: update white-label branding (logo / custom domain)
+  if (pathname === '/api/installer/branding/update') {
+    if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const body = await parseBody(req);
+    const installer = await getInstallerByUserId(body.installerUserId);
+    if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
+    const updates = {};
+    if (body.customLogoUrl !== undefined) updates.custom_logo_url = body.customLogoUrl;
+    if (body.customDomain !== undefined) updates.custom_domain = body.customDomain;
+    await supabase.from('installer_profiles').update(updates).eq('user_id', body.installerUserId);
+    return sendJSON(res, { success: true }, 200);
   }
 
   // 8. MARKET INSIGHTS
@@ -1191,30 +1571,45 @@ async function handleRequest(req, res, next) {
     if (req.method !== 'GET') return sendJSON(res, { error: 'Method not allowed' }, 405);
     const siteId = parsedUrl.searchParams.get('siteId') || 'default';
     const scanParam = parsedUrl.searchParams.get('scan');
-    
+    // Installer context (mock-store backed): drives trial scan limits + white-label branding.
+    const installerUserId = parsedUrl.searchParams.get('installerUserId');
+    const installer = installerUserId ? await getInstallerByUserId(installerUserId) : null;
+
     let session = null;
     let report = null;
     
-    // Attempt DB Lookup
-    try {
-      const { data: dbSession } = await supabase
-        .from('analysis_sessions')
-        .select('*')
-        .eq('site_id', siteId)
-        .single();
-      if (dbSession) {
-        session = dbSession;
-        const { data: dbReport } = await supabase
-          .from('solar_reports')
+    // Attempt DB Lookup (skipped while the breaker says Supabase is unreachable)
+    if (supabaseUsable()) {
+      try {
+        const { data: dbSession, error: sErr } = await supabase
+          .from('analysis_sessions')
           .select('*')
-          .eq('session_id', session.id)
+          .eq('site_id', siteId)
           .single();
-        report = dbReport;
+        if (sErr) noteSupabaseError(sErr);
+        if (dbSession) {
+          session = dbSession;
+          const { data: dbReport } = await supabase
+            .from('solar_reports')
+            .select('*')
+            .eq('session_id', session.id)
+            .single();
+          report = dbReport;
+        }
+      } catch (err) {
+        noteSupabaseError(err);
+        console.error('Error querying database for report:', err && err.message);
       }
-    } catch (err) {
-      console.error('Error querying database for report:', err);
     }
     
+    // Trial scan-limit enforcement: block a NEW report generation once an
+    // installer's trial allowance is exhausted (existing reports stay free).
+    const willGenerateNew = (!session || !report) && !!scanParam;
+    if (installer && installer.subscription_tier === 'trial' && willGenerateNew
+        && (installer.trial_scans_remaining || 0) <= 0) {
+      return sendJSON(res, { error: 'Scan limit reached for your trial plan' }, 403);
+    }
+
     // If not in database but scan context is provided, run pvlib engine and store report
     if ((!session || !report) && scanParam) {
       try {
@@ -1261,63 +1656,85 @@ async function handleRequest(req, res, next) {
         const cookies = parseCookies(req.headers.cookie);
         const isCookieUnlocked = cookies[`scan_unlocked_${siteId}`] === 'true' || cookies[`scan_unlocked_default`] === 'true';
         
-        // Insert record into analysis_sessions table
-        const { data: newSession } = await supabase
-          .from('analysis_sessions')
-          .insert({
-            site_id: siteId,
-            address: scanInput.address || 'Unknown Address',
-            latitude: scanInput.lat,
-            longitude: scanInput.lng,
-            structure_tilt: panelConfig.tiltAngle,
-            boundary_setback: panelConfig.setbackM,
-            maintenance_walkways: panelConfig.walkwayM > 0,
-            panel_wattage: panelConfig.panelWattage,
-            panel_alignment: panelConfig.rowAlignment === 'geographical_south' ? 'south' : 'roof',
-            panel_orientation: panelConfig.orientation === 'landscape' ? 'landscape' : 'portrait',
-            status: 'ready',
-            is_preview_unlocked: true,
-            is_full_unlocked: isCookieUnlocked,
-            expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
-            shading: panelConfig.shading || 'none'
-          })
-          .select()
-          .single();
-          
-        if (newSession) {
-          session = newSession;
-          
-          // Insert record into solar_reports table
-          const { data: newReport } = await supabase
-            .from('solar_reports')
-            .insert({
-              session_id: session.id,
-              total_roof_area_sqm: scanInput.roofAreaM2,
-              usable_roof_area_sqm: scanInput.roofAreaM2 * 0.75,
-              panel_count: panelConfig.panelCount || 15,
-              system_size_kwp: engineInput.system_size_kwp,
-              annual_ghi_kwh_m2_day: weather.monthly_ghi.reduce((a, b) => a + b, 0) / 12,
-              annual_production_kwh: engineResult.annual_yield_kwh,
-              lcoe_per_kwh: finResult.lcoe_per_kwh,
-              irr: finResult.irr,
-              roe: 12.5,
-              npv: finResult.npv,
-              payback_years: finResult.payback_years,
-              lifetime_savings: finResult.lifetime_savings,
-              utility_cost_25yr: finResult.lifetime_savings * 1.5,
-              capex_estimate: finResult.capex_estimate,
-              pm_surya_subsidy: finResult.pm_surya_subsidy,
-              suitability_score: suitabilityScore,
-              investment_grade: finResult.irr > 15 ? 'A+' : 'A',
-              cashflow_projection: finResult.cashflow_projection,
-              panel_layout: {},
-              horizon_shading_loss: engineResult.horizon_shading_loss,
-              sky_view_factor: 0.95 * (1 - (engineResult.horizon_shading_loss || 0.0))
-            })
-            .select()
-            .single();
-          report = newReport;
+        const newId = () => (typeof crypto !== 'undefined' && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : ('id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8));
+
+        // Build the session/report up front so a freshly computed report can be
+        // returned even when the database is unreachable (resilient no-DB mode).
+        const sessionData = {
+          id: newId(),
+          site_id: siteId,
+          address: scanInput.address || 'Unknown Address',
+          latitude: scanInput.lat,
+          longitude: scanInput.lng,
+          structure_tilt: panelConfig.tiltAngle,
+          boundary_setback: panelConfig.setbackM,
+          maintenance_walkways: panelConfig.walkwayM > 0,
+          panel_wattage: panelConfig.panelWattage,
+          panel_alignment: panelConfig.rowAlignment === 'geographical_south' ? 'south' : 'roof',
+          panel_orientation: panelConfig.orientation === 'landscape' ? 'landscape' : 'portrait',
+          status: 'ready',
+          is_preview_unlocked: true,
+          is_full_unlocked: isCookieUnlocked,
+          expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
+          shading: panelConfig.shading || 'none'
+        };
+
+        let persistedSession = null;
+        if (supabaseUsable()) {
+          try {
+            const { data, error } = await supabase
+              .from('analysis_sessions').insert(sessionData).select().single();
+            if (error) { noteSupabaseError(error); console.error('[API SERVER] analysis_sessions insert failed (no-DB fallback):', error.message); }
+            persistedSession = data || null;
+          } catch (e) {
+            noteSupabaseError(e);
+            console.error('[API SERVER] analysis_sessions insert threw (no-DB fallback):', e && e.message);
+          }
         }
+        session = persistedSession || sessionData;
+
+        const reportData = {
+          id: newId(),
+          session_id: session.id,
+          total_roof_area_sqm: scanInput.roofAreaM2,
+          usable_roof_area_sqm: scanInput.roofAreaM2 * 0.75,
+          panel_count: panelConfig.panelCount || 15,
+          system_size_kwp: engineInput.system_size_kwp,
+          annual_ghi_kwh_m2_day: weather.monthly_ghi.reduce((a, b) => a + b, 0) / 12,
+          annual_production_kwh: engineResult.annual_yield_kwh,
+          lcoe_per_kwh: finResult.lcoe_per_kwh,
+          irr: finResult.irr,
+          roe: 12.5,
+          npv: finResult.npv,
+          payback_years: finResult.payback_years,
+          lifetime_savings: finResult.lifetime_savings,
+          utility_cost_25yr: finResult.lifetime_savings * 1.5,
+          capex_estimate: finResult.capex_estimate,
+          pm_surya_subsidy: finResult.pm_surya_subsidy,
+          suitability_score: suitabilityScore,
+          investment_grade: finResult.irr > 15 ? 'A+' : 'A',
+          cashflow_projection: finResult.cashflow_projection,
+          panel_layout: {},
+          horizon_shading_loss: engineResult.horizon_shading_loss,
+          sky_view_factor: 0.95 * (1 - (engineResult.horizon_shading_loss || 0.0)),
+          generated_at: new Date().toISOString()
+        };
+
+        let persistedReport = null;
+        if (supabaseUsable()) {
+          try {
+            const { data, error } = await supabase
+              .from('solar_reports').insert(reportData).select().single();
+            if (error) { noteSupabaseError(error); console.error('[API SERVER] solar_reports insert failed (no-DB fallback):', error.message); }
+            persistedReport = data || null;
+          } catch (e) {
+            noteSupabaseError(e);
+            console.error('[API SERVER] solar_reports insert threw (no-DB fallback):', e && e.message);
+          }
+        }
+        report = persistedReport || reportData;
       } catch (err) {
         console.error('Failed to dynamically compute and save report:', err);
         return sendJSON(res, { error: 'Failed to compute and save report', details: err.message }, 500);
@@ -1326,6 +1743,14 @@ async function handleRequest(req, res, next) {
     
     if (!session || !report) {
       return sendJSON(res, { error: 'Report not found' }, 404);
+    }
+
+    // A new report was generated for a trial installer — decrement their allowance.
+    if (installer && installer.subscription_tier === 'trial' && willGenerateNew
+        && typeof installer.trial_scans_remaining === 'number') {
+      await supabase.from('installer_profiles')
+        .update({ trial_scans_remaining: installer.trial_scans_remaining - 1 })
+        .eq('user_id', installer.user_id);
     }
     
     // Check unlock state
@@ -1449,6 +1874,16 @@ async function handleRequest(req, res, next) {
       responsePayload.panel_layout = report.panel_layout;
     }
     
+    // White-label branding for pro installers (homeowner-facing report headers).
+    if (installer && installer.white_label) {
+      responsePayload.branding = {
+        isWhiteLabeled: true,
+        companyName: installer.company_name,
+        domain: installer.custom_domain || null,
+        logoUrl: installer.custom_logo_url || null,
+      };
+    }
+
     return sendJSON(res, responsePayload);
   }
 
@@ -1456,7 +1891,7 @@ async function handleRequest(req, res, next) {
   sendJSON(res, { error: 'Not found' }, 404);
 }
 
-module.exports = { handleRequest };
+module.exports = { handleRequest, supabase, rankInstallersByWeight, validateGstinFormat, WHITE_LABEL_CNAME_TARGET };
 
 if (require.main === module) {
   const server = http.createServer((req, res) => handleRequest(req, res));

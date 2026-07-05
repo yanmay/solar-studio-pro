@@ -76,6 +76,7 @@ import { detectBuildingAt, nearbyBuildings } from "@/lib/osm-buildings";
 import { recommendBattery, type BackupMode } from "@/lib/battery-calc";
 import { calcTiltAzimuthFactor, type Azimuth, AZIMUTH_LABELS } from "@/lib/tilt-azimuth";
 import PhotoRoofEstimator from "@/components/PhotoRoofEstimator";
+import { ProgressiveFluxLoader } from "@/components/ui/progressive-flux-loader";
 import { useVoiceSearch } from "@/hooks/use-voice-search";
 import {
   ELECTRICITY_RATE_INR,
@@ -89,7 +90,6 @@ import {
 type LatLng = { lat: number; lng: number };
 type DrawState = "IDLE" | "DRAWING" | "COMPLETE";
 
-const GOOGLE_MAPS_API_KEY = "AIzaSyDFkPRXVfhHADwyZHtFy2j_XElhNqa2HS4";
 const CLOSE_SNAP_PX = 20;
 const GLOBE_DISMISS_DISTANCE = 250;
 
@@ -208,68 +208,17 @@ async function fetchSuggestions(
   signal: AbortSignal,
   mapCenter?: { lat: number; lng: number },
 ): Promise<NominatimSuggestion[]> {
-  // Try Google Autocomplete first
-  const body: Record<string, unknown> = {
-    input: query,
-    languageCode: "en",
-    regionCode: "IN",
-  };
-
-  if (mapCenter) {
-    body.locationBias = {
-      circle: {
-        center: { latitude: mapCenter.lat, longitude: mapCenter.lng },
-        radius: 50000,
-      },
-    };
-  }
-
+  // Try Google Autocomplete first via the server-side proxy (keeps the API key off the client).
   try {
-    const res = await fetch(
-      `https://places.googleapis.com/v1/places:autocomplete?key=${GOOGLE_MAPS_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        signal,
-      },
-    );
+    const res = await fetch("/api/places/autocomplete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ input: query, mapCenter }),
+      signal,
+    });
     if (res.ok) {
-      const data = await res.json();
-      if (data.suggestions) {
-        const nomSuggestions: NominatimSuggestion[] = [];
-        for (const s of data.suggestions) {
-          const pred = s.placePrediction;
-          if (!pred) continue;
-          
-          let lat = "0";
-          let lon = "0";
-          try {
-            const detailRes = await fetch(
-              `https://places.googleapis.com/v1/places/${pred.placeId}?fields=location&key=${GOOGLE_MAPS_API_KEY}`,
-              { signal }
-            );
-            if (detailRes.ok) {
-              const detail = await detailRes.json();
-              if (detail.location) {
-                lat = String(detail.location.latitude);
-                lon = String(detail.location.longitude);
-              }
-            }
-          } catch {
-            continue;
-          }
-
-          nomSuggestions.push({
-            place_id: Date.now() + Math.random(),
-            display_name: pred.text.text,
-            lat,
-            lon,
-            type: "place",
-          });
-        }
-        if (nomSuggestions.length > 0) return nomSuggestions;
-      }
+      const suggestions = (await res.json()) as NominatimSuggestion[];
+      if (Array.isArray(suggestions) && suggestions.length > 0) return suggestions;
     }
   } catch {
     // Fallback
@@ -349,6 +298,57 @@ const MapPage = () => {
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState("");
   const [locationDotMarker, setLocationDotMarker] = useState<L.Marker | null>(null);
+
+  // ── Loading Interstitial state ──────────────────────────
+  const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
+  const [loaderProgress, setLoaderProgress] = useState(0);
+  const [pendingNavigationUrl, setPendingNavigationUrl] = useState("");
+  const calculationDoneRef = useRef(false);
+
+  // ── Loading Interstitial Simulation ──────────────────────
+  useEffect(() => {
+    if (!showLoadingOverlay) {
+      setLoaderProgress(0);
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      setLoaderProgress((prev) => {
+        const isDone = calculationDoneRef.current;
+        
+        if (prev >= 100) {
+          clearInterval(intervalId);
+          return 100;
+        }
+
+        if (prev >= 95 && !isDone) {
+          return 95;
+        }
+
+        // Increment size: slower normal progress, faster once calculation completes
+        let increment = 1;
+        if (isDone) {
+          increment = 3;
+        } else {
+          increment = Math.random() > 0.55 ? 1 : 2;
+        }
+
+        return Math.min(100, prev + increment);
+      });
+    }, 150);
+
+    return () => clearInterval(intervalId);
+  }, [showLoadingOverlay]);
+
+  useEffect(() => {
+    if (loaderProgress >= 100 && pendingNavigationUrl) {
+      const delay = setTimeout(() => {
+        setShowLoadingOverlay(false);
+        navigate(pendingNavigationUrl);
+      }, 800);
+      return () => clearTimeout(delay);
+    }
+  }, [loaderProgress, pendingNavigationUrl, navigate]);
 
   // ── SCN-014: Distinct colors for multi-roof polygons ───
   const [polygons, setPolygons] = useState<{ id: string; vertices: LatLng[]; area: number; polygonLayer: L.Polygon }[]>([]);
@@ -1101,6 +1101,10 @@ const MapPage = () => {
       setCalcError(`Area is too small (${totalArea} m²). Please draw a larger rooftop (minimum ${MIN_AREA_M2} m²).`);
       return;
     }
+    setShowLoadingOverlay(true);
+    setLoaderProgress(0);
+    calculationDoneRef.current = false;
+    setPendingNavigationUrl("");
     setCalculating(true);
     setCalcError(null);
 
@@ -1199,8 +1203,10 @@ const MapPage = () => {
 
       // Encode scan configuration URL payload
       const encoded = encodeScanToUrl(scanInput, panelConfig, tariff);
-      navigate(`/results?scan=${encoded}`);
+      setPendingNavigationUrl(`/results?scan=${encoded}`);
+      calculationDoneRef.current = true;
     } catch (error) {
+      setShowLoadingOverlay(false);
       setCalculating(false);
       let errorMsg = "Something went wrong. Please try again.";
       if (error instanceof SolarCalcError) errorMsg = error.message;
@@ -2215,6 +2221,55 @@ const MapPage = () => {
             onOpenChange={setPhotoEstOpen}
             onAccept={handlePhotoAreaAccept}
           />
+
+          {showLoadingOverlay && (
+            <div 
+              className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#050505] text-white p-6 animate-in fade-in duration-300"
+              style={{
+                backgroundImage: "radial-gradient(circle at center, rgba(255,102,0,0.06) 0%, transparent 65%)",
+                ["--flux-from" as any]: "#FF6600",
+                ["--flux-to" as any]: "#FFAA00"
+              }}
+            >
+              <div className="w-full max-w-md space-y-8 text-center flex flex-col items-center">
+                {/* Pulsing branding icon */}
+                <div className="relative w-16 h-16 mb-4 flex items-center justify-center">
+                  <div className="absolute w-20 h-20 bg-primary/10 rounded-full blur-xl animate-pulse" />
+                  <img 
+                    src="/logo.png" 
+                    alt="SUNPOWER LINK Logo" 
+                    className="w-16 h-16 object-contain relative z-10 animate-bounce"
+                    style={{ animationDuration: "3s" }} 
+                  />
+                </div>
+
+                <h2 className="text-xl font-extrabold tracking-tight uppercase text-muted-foreground/80 font-mono text-xs">
+                  SUNPOWER LINK AI
+                </h2>
+
+                <ProgressiveFluxLoader 
+                  value={loaderProgress} 
+                  phases={[
+                    { at: 0, label: "scanning roof surface" },
+                    { at: 20, label: "tracing boundary setbacks" },
+                    { at: 40, label: "fetching nasa irradiance" },
+                    { at: 60, label: "arranging panel layout" },
+                    { at: 80, label: "calculating pm subsidy" },
+                    { at: 95, label: "modeling tariff savings" },
+                    { at: 100, label: "solar report ready" },
+                  ]}
+                  showLabel={true}
+                  loop={false}
+                  className="w-full"
+                  textClassName="text-[#FFAA00] font-sans font-bold text-center block"
+                />
+                
+                <p className="text-xs text-muted-foreground font-light max-w-xs mt-2 leading-relaxed animate-pulse">
+                  Running geocoding algorithms & grid calculation matrices...
+                </p>
+              </div>
+            </div>
+          )}
 
           <style>{`
             @keyframes sunpowerPulse {

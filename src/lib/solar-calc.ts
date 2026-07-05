@@ -146,7 +146,11 @@ export interface SolarAnalysis {
   generatedAt: string;
   irradianceSource?: string;
   monthlyIrradiance?: Record<string, number>;
-  
+
+  // Shading accuracy outputs
+  horizonShadingLoss?: number;
+  skyViewFactor?: number;
+
   // Custom layout properties
   panelCount?: number;
   panelType?: "compact" | "premium";
@@ -166,11 +170,22 @@ function generateAnalysisId(): string {
   return id;
 }
 
+/** Roof shading levels → fractional yield loss (matches Python engine + ResultsPage UI). */
+export const SHADING_LOSS: Record<"none" | "partial" | "heavy", number> = {
+  none: 0.0,
+  partial: 0.15,
+  heavy: 0.30,
+};
+
+/** Clear-sky sky-view factor before shading is applied. */
+export const BASE_SKY_VIEW_FACTOR = 0.95;
+
 interface FullCalcOptions {
   electricityRate?: number;
   irradianceSource?: string;
   monthlyIrradiance?: Record<string, number>;
-  
+  shading?: "none" | "partial" | "heavy";
+
   // Custom capacity & layout inputs
   customCapacityKw?: number;
   panelCount?: number;
@@ -202,8 +217,11 @@ export function runFullCalculation(
   // Step 2: Use custom capacity if provided (calculated from actual panels), otherwise fallback to area-based estimation
   const installedKw = opts.customCapacityKw ?? calcInstalledCapacity(usableArea);
 
-  // Step 3
-  const annualKwh = calcAnnualEnergy(installedKw, peakSunHours);
+  // Step 3: base annual energy, then apply roof-shading derating.
+  const shadingLoss = SHADING_LOSS[opts.shading ?? "none"];
+  const skyViewFactor = BASE_SKY_VIEW_FACTOR * (1 - shadingLoss);
+  const baseAnnualKwh = calcAnnualEnergy(installedKw, peakSunHours);
+  const annualKwh = Math.round(baseAnnualKwh * (1 - shadingLoss) * 10) / 10;
 
   // Step 4
   const dailyKwh = Math.round((annualKwh / 365) * 10) / 10;
@@ -246,7 +264,11 @@ export function runFullCalculation(
     generatedAt: new Date().toISOString(),
     irradianceSource: opts.irradianceSource,
     monthlyIrradiance: opts.monthlyIrradiance,
-    
+
+    // Shading accuracy outputs
+    horizonShadingLoss: shadingLoss,
+    skyViewFactor,
+
     // Pass custom layout properties to the results object
     panelCount: opts.panelCount,
     panelType: opts.panelType,
