@@ -1,18 +1,18 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
 import { ArrowLeftIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Globe } from "@/components/ui/cosmic-404";
 
 // 🎞️ Animation Variants
-const fadeUp = {
+const fadeUp: Variants = {
   hidden: { opacity: 0, y: 20 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.9, ease: "easeOut" } },
 };
 
-const globeVariants = {
+const globeVariants: Variants = {
   hidden: { scale: 0.85, opacity: 0, y: 10 },
   visible: {
     scale: 1,
