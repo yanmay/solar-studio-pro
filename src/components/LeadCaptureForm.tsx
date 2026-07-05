@@ -37,7 +37,7 @@ interface LeadCaptureFormProps {
   };
 }
 
-// Simple in-browser persistence — replace with API call later
+// Local history only — the authoritative record is stored server-side via /api/leads
 function persistLead(lead: LeadForm & { context?: LeadCaptureFormProps["context"]; ts: string }) {
   try {
     const existing = JSON.parse(localStorage.getItem("sunpower-leads") || "[]");
@@ -63,15 +63,37 @@ const LeadCaptureForm = ({ open, onOpenChange, context }: LeadCaptureFormProps) 
   });
 
   const onSubmit = async (values: LeadForm) => {
-    // Simulate network latency — replace with real fetch('/api/leads', ...)
-    await new Promise((r) => setTimeout(r, 600));
-    persistLead({ ...values, context, ts: new Date().toISOString() });
-    track("Lead Submitted", { kw: context?.kw ?? 0, city: values.city });
-    setSubmitted(true);
-    toast({
-      title: "Request received",
-      description: "An MNRE-empanelled installer will call you within 24 hours.",
-    });
+    try {
+      const res = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: values.name,
+          phone: values.phone,
+          city: values.city,
+          systemKwp: context?.kw,
+          scanId: context?.analysisId,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to submit request");
+      }
+      // Local copy kept only as offline history — server DB is source of truth
+      persistLead({ ...values, context, ts: new Date().toISOString() });
+      track("Lead Submitted", { kw: context?.kw ?? 0, city: values.city });
+      setSubmitted(true);
+      toast({
+        title: "Request received",
+        description: "An MNRE-empanelled installer will call you within 24 hours.",
+      });
+    } catch (err) {
+      toast({
+        title: "Could not submit request",
+        description: err instanceof Error ? err.message : "Please try again in a moment.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleClose = (next: boolean) => {

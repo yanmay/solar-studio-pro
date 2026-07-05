@@ -20,7 +20,7 @@ async function fetchStatus(url: string): Promise<UnlockStatus> {
  * never trust URL flags, localStorage, or sessionStorage for paywall state.
  */
 export function useUnlockStatus(scanId: string | null | undefined) {
-  const { data, error, isLoading } = useSWR<UnlockStatus>(
+  const { data, error, isLoading, mutate: revalidate } = useSWR<UnlockStatus>(
     scanId ? statusKey(scanId) : null,
     fetchStatus,
     {
@@ -33,6 +33,8 @@ export function useUnlockStatus(scanId: string | null | undefined) {
     unlocked: data?.unlocked === true,
     isChecking: isLoading,
     error,
+    /** Re-fetch unlock state from the server (e.g. right after payment verification). */
+    refresh: () => void revalidate(),
   };
 }
 
