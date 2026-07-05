@@ -279,6 +279,35 @@ async function fetchSuggestions(
   return fetchNominatimSuggestions(query, signal);
 }
 
+// Fallback forward geocoder — queries Nominatim directly, biased to the
+// current map bounds when available. Used when the primary geocoder fails.
+async function geocodeAddress(
+  address: string,
+  bounds?: L.LatLngBounds | null
+): Promise<{ lat: number; lng: number; label: string }> {
+  let url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+    address.trim()
+  )}&format=json&addressdetails=1&limit=1&accept-language=en`;
+  if (bounds) {
+    const viewbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
+    url += `&viewbox=${viewbox}`;
+  }
+  const res = await fetch(url, {
+    headers: { "User-Agent": "SunPowerLinkSolarApp/1.0" },
+  });
+  if (!res.ok) throw new Error("Geocoding service unavailable.");
+  const data = await res.json();
+  if (!data || data.length === 0) {
+    throw new Error("Location not found. Try adding details like city or state name.");
+  }
+  const first = data[0];
+  return {
+    lat: parseFloat(first.lat),
+    lng: parseFloat(first.lon),
+    label: first.display_name,
+  };
+}
+
 async function reverseGeocode(lat: number, lng: number): Promise<string> {
   try {
     const nomUrl = `/api/geocode?lat=${lat.toFixed(6)}&lng=${lng.toFixed(6)}`;
@@ -1499,7 +1528,7 @@ const MapPage = () => {
                       size="sm"
                       className="text-[10px] h-8 rounded-xl flex items-center justify-center gap-1.5 font-bold hover:scale-[1.02] active:scale-[0.98] transition-all border-border"
                       onClick={handleAutoDetect}
-                      disabled={autoDetecting || drawState === "COMPLETE"}
+                      disabled={autoDetecting}
                     >
                       {autoDetecting ? (
                         <><Loader2 className="w-3 h-3 animate-spin" /> {t("map.detecting", "Detecting...")}</>
@@ -1513,7 +1542,6 @@ const MapPage = () => {
                       size="sm"
                       className="text-[10px] h-8 rounded-xl flex items-center justify-center gap-1.5 font-bold hover:scale-[1.02] active:scale-[0.98] transition-all border-border"
                       onClick={() => setPhotoEstOpen(true)}
-                      disabled={drawState === "COMPLETE"}
                     >
                       <Sun className="w-3 h-3 text-primary" />
                       <span>Photo Area</span>
@@ -1532,7 +1560,7 @@ const MapPage = () => {
                   </div>
 
                   {/* Polygons drawing lists */}
-                  {polygons.length > 0 && drawState !== "COMPLETE" && (
+                  {polygons.length > 0 && (
                     <div className="space-y-2.5">
                       <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                         <span>Rooftop Sections</span>

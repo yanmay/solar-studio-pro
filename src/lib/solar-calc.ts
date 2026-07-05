@@ -170,6 +170,7 @@ interface FullCalcOptions {
   electricityRate?: number;
   irradianceSource?: string;
   monthlyIrradiance?: Record<string, number>;
+  shading?: "none" | "partial" | "heavy";
   
   // Custom capacity & layout inputs
   customCapacityKw?: number;

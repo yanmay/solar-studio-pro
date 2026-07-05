@@ -9,6 +9,7 @@ export interface ScanInput {
   lng: number;
   roofPolygon: RoofPolygon[];
   roofAreaM2: number;
+  unlocked?: boolean;
 }
 
 export interface PanelConfig {
@@ -20,6 +21,7 @@ export interface PanelConfig {
   rowAlignment: 'roof_perimeter' | 'geographical_south';
   panelCount: number;
   systemKwp: number;
+  shading?: 'none' | 'partial' | 'heavy';
 }
 
 export interface MonthlyValue {

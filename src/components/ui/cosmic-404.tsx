@@ -1,13 +1,12 @@
 "use client";
 
 import createGlobe, { type COBEOptions } from "cobe";
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 const GLOBE_CONFIG: COBEOptions = {
   width: 600,
   height: 600,
-  onRender: () => {},
   devicePixelRatio: 2,
   phi: 0,
   theta: 0.3,
@@ -36,13 +35,6 @@ export function Globe({ className, config = GLOBE_CONFIG }: GlobeProps) {
   const phiRef = useRef(0);
   const widthRef = useRef(0);
 
-  const onRender = useCallback((state: Record<string, any>) => {
-    phiRef.current += 0.005; 
-    state.phi = phiRef.current;
-    state.width = widthRef.current * 2;
-    state.height = widthRef.current * 2;
-  }, []);
-
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -58,14 +50,27 @@ export function Globe({ className, config = GLOBE_CONFIG }: GlobeProps) {
       ...config,
       width: widthRef.current * 2,
       height: widthRef.current * 2,
-      onRender,
     });
 
+    // cobe v2 removed the onRender callback; drive rotation via update() in a rAF loop
+    let rafId = 0;
+    const animate = () => {
+      phiRef.current += 0.005;
+      globe.update({
+        phi: phiRef.current,
+        width: widthRef.current * 2,
+        height: widthRef.current * 2,
+      });
+      rafId = requestAnimationFrame(animate);
+    };
+    rafId = requestAnimationFrame(animate);
+
     return () => {
+      cancelAnimationFrame(rafId);
       globe.destroy();
       window.removeEventListener("resize", handleResize);
     };
-  }, [config, onRender]);
+  }, [config]);
 
   return (
     <div className={cn("relative aspect-square w-full max-w-md", className)}>
