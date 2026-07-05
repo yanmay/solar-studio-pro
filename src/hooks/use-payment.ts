@@ -6,6 +6,8 @@ import { trackPaymentCompleted } from "@/lib/analytics";
 interface InitiatePaymentArgs {
   plan: "pay_per_scan" | "pro_monthly";
   scanId?: string;
+  /** Called after the server has verified the payment (e.g. to revalidate server unlock status). */
+  onSuccess?: () => void;
 }
 
 // Function to dynamically load scripts
@@ -28,7 +30,7 @@ export function usePayment() {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const initiatePayment = async ({ plan, scanId }: InitiatePaymentArgs) => {
+  const initiatePayment = async ({ plan, scanId, onSuccess }: InitiatePaymentArgs) => {
     setIsLoading(true);
     setError(null);
 
@@ -107,6 +109,9 @@ export function usePayment() {
 
               // Track payment completed event
               trackPaymentCompleted(plan);
+
+              // Let the caller revalidate the server-authoritative unlock status
+              onSuccess?.();
 
               toast({
                 title: "Payment Successful",

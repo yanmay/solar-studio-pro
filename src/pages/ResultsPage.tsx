@@ -46,6 +46,7 @@ import {
 } from "recharts";
 import { useScanStore } from "@/hooks/use-scan-store";
 import { usePayment } from "@/hooks/use-payment";
+import { useUnlockStatus } from "@/hooks/use-unlock-status";
 import { runFullCalculation } from "@/lib/solar-calc";
 import { decodeScanFromUrl, encodeScanToUrl } from "@/lib/scan-url";
 import { computePanelLayout } from "@/lib/panel-layout";
@@ -427,7 +428,12 @@ const ResultsPage = () => {
     return () => obs.disconnect();
   }, []);
 
-  const unlocked = store.isPaid || !!data?.unlocked;
+  // Unlock state is server-authoritative: /api/payment/status reads the
+  // Supabase-backed session. store.isPaid is only an optimistic in-session
+  // cache set after a server-verified payment (use-payment.ts) — a tampered
+  // share URL or client state can never grant unlock on a fresh load.
+  const { unlocked: serverUnlocked, refresh: refreshUnlock } = useUnlockStatus(data?.analysisId);
+  const unlocked = serverUnlocked || store.isPaid;
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [paymentPlan,    setPaymentPlan]    = useState<"pay_per_scan"|"pro_monthly">("pay_per_scan");
   const [paymentMethod,  setPaymentMethod]  = useState<"card"|"upi">("card");
@@ -480,7 +486,6 @@ const ResultsPage = () => {
                 label: decoded.scanInput.address || "Rooftop Structure",
               },
               panelCount: pCountVal,
-              unlocked: decoded.scanInput.unlocked
             };
 
             store.setScanInput(decoded.scanInput);
@@ -488,11 +493,9 @@ const ResultsPage = () => {
             store.setTariff(decoded.tariff);
             store.setFullAnalysis(fullResult);
 
-            if (decoded.scanInput.unlocked !== false) {
-              store.setIsPaid(true, `pay_mock_${Date.now()}`);
-            } else {
-              store.setIsPaid(false);
-            }
+            // Shared URLs never grant unlock — the server decides via
+            // useUnlockStatus(analysisId). Reset any stale local flag.
+            store.setIsPaid(false);
 
             setData(fullResult);
             setLoading(false);
@@ -553,8 +556,11 @@ const ResultsPage = () => {
           s.setTariff({ tariffPerKwh: p.financials.electricityRateInr });
           s.setFullAnalysis(p);
 
-          if (p.unlocked !== false) {
-            s.setIsPaid(true, p.paymentId || `pay_mock_${Date.now()}`);
+          // Only restore paid state when a real payment id was recorded in
+          // this browser session; never unlock by default. The server unlock
+          // check (useUnlockStatus) remains the source of truth either way.
+          if (p.unlocked === true && p.paymentId) {
+            s.setIsPaid(true, p.paymentId);
           } else {
             s.setIsPaid(false);
           }
@@ -1664,7 +1670,7 @@ const ResultsPage = () => {
                 className="w-full text-xs font-bold py-3 flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity uppercase tracking-wider rounded-xl cursor-pointer border-none outline-none">
                 {paymentProcessing ? <><RefreshCw className="w-4 h-4 animate-spin" />Processing...</> : paymentSuccess ? <><CheckCircle2 className="w-4 h-4" />Unlocking...</> : "Simulate Instant Sandbox Unlock"}
               </button>
-              <button onClick={() => { setCheckoutOpen(false); initiatePayment({ plan: paymentPlan, scanId: data?.analysisId }); }}
+              <button onClick={() => { setCheckoutOpen(false); initiatePayment({ plan: paymentPlan, scanId: data?.analysisId, onSuccess: refreshUnlock }); }}
                 disabled={paymentProcessing || paymentSuccess || isPaymentGatewayLoading}
                 style={{ background: "transparent", border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
                 className="w-full text-xs font-bold py-3 flex items-center justify-center gap-2 hover:bg-[#1F1B18] transition-colors disabled:opacity-50 uppercase tracking-wider rounded-xl cursor-pointer">
