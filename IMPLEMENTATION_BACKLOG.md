@@ -18,13 +18,15 @@
 
 ## Tier 0 — Blockers (do first, in order)
 
-### T0-1. Server-authoritative payment verification
+### T0-1. Server-authoritative payment verification — **DONE**
+- **Landed:** schema applied to Supabase (11 tables + RLS, migration `initial_schema_solarscan`); all four `api/payment/*` routes DB-backed; `use-unlock-status` SWR hook makes `/api/payment/status` the client's source of truth; `unlocked` flag stripped from scan-url encode/decode; shared URLs and sessionStorage can no longer grant unlock.
 - **Source:** ARCHITECTURE_AUDIT §Payments, MARKETPLACE_AUDIT §Trust
 - **Problem:** `api/payment/verify.ts` verifies the Razorpay HMAC but persists nothing; unlock state lives in client localStorage (`use-payment.ts`) and in the shareable scan URL (`unlocked` flag in `scan-url.ts`). Anyone can forge an unlocked URL.
 - **Files:** `api/payment/verify.ts`, `api/payment/status.ts`, `api/payment/restore.ts`, `src/hooks/use-payment.ts`, `src/lib/scan-url.ts`, Supabase `payments` table
 - **Done when:** verify writes a `payments` row (order_id, payment_id, amount, scan hash, status); status/restore read from DB; the `unlocked` URL flag is removed; a tampered URL cannot unlock a report.
 
-### T0-2. Wire Supabase client + persist scans and leads
+### T0-2. Wire Supabase client + persist scans and leads — **DONE (leads); scan persistence at analysis time deferred to T1-2**
+- **Landed:** `api/_utils/supabase.ts` (service-role client + `ensureSession`); `api/leads.ts` inserts into `lead_requests` with Resend demoted to best-effort notification; `LeadCaptureForm` posts to the API with error handling. Sessions are created lazily (at payment/lead time); persisting every completed scan moves to T1-2 (scan history).
 - **Source:** ARCHITECTURE_AUDIT §Persistence
 - **Problem:** 11-table schema with RLS exists in `supabase/migrations/` but zero runtime code references Supabase. `api/leads.ts` logs and discards leads — every lead is lost.
 - **Files:** new `src/lib/supabase.ts` + `api/_utils/supabase.ts` (service role), `api/leads.ts`, `src/pages/ResultsPage.tsx`
