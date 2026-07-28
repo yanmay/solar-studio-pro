@@ -13,130 +13,152 @@ import {
 
 const FEATURES = [
   {
-    icon: <Satellite className="w-5 h-5" />,
-    title: "NASA satellite data",
-    desc: "Live irradiance from NASA POWER per location.",
-    tint: "from-sky-500/10 to-sky-500/0 border-sky-500/20 text-sky-500",
+    icon: <Satellite className="w-5 h-5 text-sky-400" />,
+    title: "NASA Satellite Data",
+    desc: "Live irradiance & solar flux from NASA POWER per location.",
+    glow: "hover:border-sky-500/40 hover:shadow-[0_0_24px_rgba(56,189,248,0.15)]",
+    iconBg: "bg-sky-500/10 border-sky-500/20",
   },
   {
-    icon: <Sparkles className="w-5 h-5" />,
-    title: "One-tap roof detection",
-    desc: "Fetches your building outline from OpenStreetMap.",
-    tint: "from-orange-500/10 to-orange-500/0 border-orange-500/20 text-orange-500",
+    icon: <Sparkles className="w-5 h-5 text-[#FF6600]" />,
+    title: "One-Tap Roof Detection",
+    desc: "Auto-detects building footprints & solar area from satellite GIS.",
+    glow: "hover:border-[#FF6600]/40 hover:shadow-[0_0_24px_rgba(255,102,0,0.15)]",
+    iconBg: "bg-[#FF6600]/10 border-[#FF6600]/20",
   },
   {
-    icon: <BatteryCharging className="w-5 h-5" />,
-    title: "Battery + off-grid sizing",
-    desc: "LFP Li-ion recommendation with 25-yr cost.",
-    tint: "from-indigo-500/10 to-indigo-500/0 border-indigo-500/20 text-indigo-500",
+    icon: <BatteryCharging className="w-5 h-5 text-indigo-400" />,
+    title: "Battery & Off-Grid Sizing",
+    desc: "LFP Li-ion storage optimization with 25-yr lifecycle modeling.",
+    glow: "hover:border-indigo-500/40 hover:shadow-[0_0_24px_rgba(129,140,248,0.15)]",
+    iconBg: "bg-indigo-500/10 border-indigo-500/20",
   },
   {
-    icon: <Clock className="w-5 h-5" />,
-    title: "Time-of-use scheduling",
-    desc: "Know when to run AC, washer, EV for max self-use.",
-    tint: "from-emerald-500/10 to-emerald-500/0 border-emerald-500/20 text-emerald-500",
+    icon: <Clock className="w-5 h-5 text-emerald-400" />,
+    title: "Time-of-Use Scheduling",
+    desc: "DISCOM peak-hour load shifting for maximum net-metering ROI.",
+    glow: "hover:border-emerald-500/40 hover:shadow-[0_0_24px_rgba(52,211,153,0.15)]",
+    iconBg: "bg-emerald-500/10 border-emerald-500/20",
   },
   {
-    icon: <Box className="w-5 h-5" />,
-    title: "3D + AR rooftop preview",
-    desc: "See panels arranged on your roof. WebXR on Android.",
-    tint: "from-violet-500/10 to-violet-500/0 border-violet-500/20 text-violet-500",
+    icon: <Box className="w-5 h-5 text-violet-400" />,
+    title: "3D & AR Rooftop Preview",
+    desc: "Arrange solar geometry on your roof in real time.",
+    glow: "hover:border-violet-500/40 hover:shadow-[0_0_24px_rgba(167,139,250,0.15)]",
+    iconBg: "bg-violet-500/10 border-violet-500/20",
   },
   {
-    icon: <Globe2 className="w-5 h-5" />,
-    title: "5 Indian languages",
-    desc: "English, हिन्दी, मराठी, தமிழ், বাংলা.",
-    tint: "from-amber-500/10 to-amber-500/0 border-amber-500/20 text-amber-500",
+    icon: <Globe2 className="w-5 h-5 text-amber-400" />,
+    title: "5 Indian Languages",
+    desc: "Full localization in English, हिन्दी, मराठी, தமிழ், & বাংলা.",
+    glow: "hover:border-amber-500/40 hover:shadow-[0_0_24px_rgba(251,191,36,0.15)]",
+    iconBg: "bg-amber-500/10 border-amber-500/20",
   },
   {
-    icon: <Mic className="w-5 h-5" />,
-    title: "Voice search",
-    desc: "Speak your address — Indian English + regional.",
-    tint: "from-rose-500/10 to-rose-500/0 border-rose-500/20 text-rose-500",
+    icon: <Mic className="w-5 h-5 text-rose-400" />,
+    title: "Voice-Powered Search",
+    desc: "Speak your pincode or city name with regional accent support.",
+    glow: "hover:border-rose-500/40 hover:shadow-[0_0_24px_rgba(251,113,133,0.15)]",
+    iconBg: "bg-rose-500/10 border-rose-500/20",
   },
   {
-    icon: <FileBadge className="w-5 h-5" />,
-    title: "PM Surya Ghar built-in",
-    desc: "Auto-calculates your ₹30k–₹78k govt subsidy.",
-    tint: "from-green-500/10 to-green-500/0 border-green-500/20 text-green-500",
+    icon: <FileBadge className="w-5 h-5 text-emerald-400" />,
+    title: "PM Surya Ghar Subsidy",
+    desc: "Auto-calculates ₹30,000–₹78,000 national direct transfer.",
+    glow: "hover:border-emerald-500/40 hover:shadow-[0_0_24px_rgba(52,211,153,0.15)]",
+    iconBg: "bg-emerald-500/10 border-emerald-500/20",
   },
 ];
 
 const CREDENTIALS = [
   {
-    icon: <Satellite className="w-4 h-4" />,
-    label: "NASA POWER",
-    sub: "Satellite-derived irradiance · open data",
+    icon: <Satellite className="w-4 h-4 text-sky-400" />,
+    label: "NASA POWER API",
+    sub: "Satellite solar irradiance & climate data",
   },
   {
-    icon: <ShieldCheck className="w-4 h-4" />,
-    label: "MNRE-empanelled partners",
-    sub: "PM Surya Ghar end-to-end paperwork",
+    icon: <ShieldCheck className="w-4 h-4 text-emerald-400" />,
+    label: "MNRE Empannelled",
+    sub: "PM Surya Ghar paperwork verification",
   },
   {
-    icon: <Lock className="w-4 h-4" />,
-    label: "TRAI-compliant",
-    sub: "No spam · Your number stays private",
+    icon: <Lock className="w-4 h-4 text-[#FF6600]" />,
+    label: "Zero Spam Privacy",
+    sub: "Encrypted details · No unrequested calls",
   },
   {
-    icon: <FileBadge className="w-4 h-4" />,
-    label: "OpenStreetMap",
-    sub: "Building footprints · open geospatial data",
+    icon: <FileBadge className="w-4 h-4 text-amber-400" />,
+    label: "OpenStreetMap GIS",
+    sub: "Satellite building footprint boundary data",
   },
 ];
 
 const Testimonials = () => {
   return (
-    <section className="py-14 sm:py-20 px-4 bg-background" aria-label="Features and trust credentials">
+    <section className="py-20 px-4 sm:px-6 bg-[#050505] border-b border-white/5 relative overflow-hidden" aria-label="Features and trust credentials">
       <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-10 sm:mb-12">
-          <h2 className="font-display text-3xl sm:text-4xl gradient-text mb-2 leading-tight">
-            Everything a rooftop needs
+        <div className="text-center mb-12 sm:mb-16">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-mono text-[#FF6600] uppercase tracking-wider mb-4">
+            <Sparkles className="w-3.5 h-3.5" /> High Precision Platform
+          </div>
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white tracking-tight mb-4">
+            Everything Your Rooftop Needs
           </h2>
-          <p className="text-sm text-sunpower-text-muted max-w-xl mx-auto">
-            Built on open satellite data and verified installer networks — no guesswork, no vendor lock-in.
+          <p className="text-sm sm:text-base text-white/60 max-w-2xl mx-auto font-light leading-relaxed">
+            Built on open satellite data and verified installer networks — zero guesswork, accurate ROI calculations, and complete transparency.
           </p>
         </div>
 
         {/* Feature grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
           {FEATURES.map((f) => (
             <div
               key={f.title}
-              className={`bg-gradient-to-br ${f.tint} border rounded-2xl p-4 sm:p-5 hover:shadow-float transition-shadow`}
+              className={`relative bg-[#0A0A0A]/90 backdrop-blur-2xl border border-white/10 rounded-3xl p-6 transition-all duration-300 ease-out hover:-translate-y-1 group ${f.glow}`}
             >
-              <div className={`inline-flex items-center justify-center w-10 h-10 rounded-lg bg-current/10 mb-2.5 ${f.tint.split(" ").find((c) => c.startsWith("text-")) || ""}`}>
+              {/* Highlight top line */}
+              <div
+                className="absolute top-0 left-0 right-0 h-px rounded-t-3xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+                style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)" }}
+                aria-hidden="true"
+              />
+
+              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center border mb-4 ${f.iconBg} transition-transform group-hover:scale-110`}>
                 {f.icon}
               </div>
-              <div className="text-[15px] font-medium text-sunpower-text-primary mb-1 leading-tight">
+              <h3 className="text-base font-bold text-white mb-1.5 leading-snug group-hover:text-white transition-colors">
                 {f.title}
-              </div>
-              <div className="text-xs text-sunpower-text-muted leading-relaxed">{f.desc}</div>
+              </h3>
+              <p className="text-xs text-white/50 leading-relaxed font-light group-hover:text-white/70 transition-colors">
+                {f.desc}
+              </p>
             </div>
           ))}
         </div>
 
         {/* Security + credentials strip */}
-        <div className="mt-10 sm:mt-14">
-          <div className="text-center mb-5">
-            <div className="inline-flex items-center gap-2 text-xs font-medium text-sunpower-text-muted tracking-wide uppercase">
-              <ShieldCheck className="w-3.5 h-3.5" /> Trust & Compliance
-            </div>
+        <div className="mt-14 sm:mt-20">
+          <div className="text-center mb-6">
+            <span className="text-xs font-mono font-bold text-white/40 uppercase tracking-[0.2em] flex items-center justify-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-[#FF6600]" /> Verified Data Standards & Compliance
+            </span>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             {CREDENTIALS.map((c) => (
               <div
                 key={c.label}
-                className="bg-sunpower-bg-card border border-foreground/[0.06] rounded-xl px-4 py-3 flex items-start gap-3 hover:border-sunpower-accent/30 transition-colors"
+                className="bg-[#0A0A0A]/90 border border-white/10 rounded-2xl p-4 flex items-center gap-3.5 hover:border-white/20 transition-all hover:-translate-y-0.5"
               >
-                <div className="w-8 h-8 rounded-lg bg-sunpower-accent/10 text-sunpower-accent flex items-center justify-center shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
                   {c.icon}
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[13px] font-medium text-sunpower-text-primary leading-tight">
+                  <div className="text-xs font-bold text-white leading-tight">
                     {c.label}
                   </div>
-                  <div className="text-[11px] text-sunpower-text-muted leading-snug mt-0.5">{c.sub}</div>
+                  <div className="text-[11px] font-mono text-white/40 leading-tight mt-1 truncate">
+                    {c.sub}
+                  </div>
                 </div>
               </div>
             ))}
@@ -148,3 +170,4 @@ const Testimonials = () => {
 };
 
 export default Testimonials;
+

@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useScanStore } from "./use-scan-store";
 import { useToast } from "./use-toast";
 import { trackPaymentCompleted } from "@/lib/analytics";
+import { useUnlockStatus } from "./use-unlock-status";
+import { processReferralConversion } from "@/lib/referrals";
 
 interface InitiatePaymentArgs {
   plan: "pay_per_scan" | "pro_monthly";
@@ -25,21 +27,25 @@ function loadScript(src: string): Promise<boolean> {
   });
 }
 
-export function usePayment() {
+export function usePayment(scanId?: string) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  const { unlocked } = useUnlockStatus(scanId);
 
-  const initiatePayment = async ({ plan, scanId, onSuccess }: InitiatePaymentArgs) => {
+  const initiatePayment = async ({ plan, scanId: methodScanId, onSuccess }: InitiatePaymentArgs) => {
     setIsLoading(true);
     setError(null);
 
+    const activeScanId = methodScanId || scanId;
+
     try {
       // 1. Create order on the serverless API
+      const referrerCode = localStorage.getItem("sunpower-referrer-code") || undefined;
       const res = await fetch("/api/payment/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan, scanId }),
+        body: JSON.stringify({ plan, scanId: activeScanId, referrerCode }),
       });
 
       if (!res.ok) {
@@ -77,7 +83,7 @@ export function usePayment() {
           setIsLoading(true);
           try {
             // Verify payment signature on the backend
-            const verifyRes = await fetch("/api/payment/verify", {
+             const verifyRes = await fetch("/api/payment/verify", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -85,7 +91,9 @@ export function usePayment() {
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
                 plan,
-                scanId: scanId || "default",
+                scanId: activeScanId || "default",
+                scan_hash: activeScanId || "default",
+                referrerCode: localStorage.getItem("sunpower-referrer-code") || undefined
               }),
             });
 
@@ -95,20 +103,11 @@ export function usePayment() {
 
             const verifyData = await verifyRes.json();
             if (verifyData.verified) {
-              // Mark scan as paid in store
-              useScanStore.getState().setIsPaid(true, response.razorpay_payment_id);
-              
-              // If results exist on page, update their unlocked state
-              const currentAnalysis = useScanStore.getState().fullAnalysis;
-              if (currentAnalysis) {
-                useScanStore.getState().setFullAnalysis({
-                  ...currentAnalysis,
-                  unlocked: true,
-                });
-              }
-
               // Track payment completed event
               trackPaymentCompleted(plan);
+
+              // Attribute referral reward
+              processReferralConversion();
 
               // Let the caller revalidate the server-authoritative unlock status
               onSuccess?.();
@@ -157,5 +156,5 @@ export function usePayment() {
     }
   };
 
-  return { initiatePayment, isLoading, error };
+  return { initiatePayment, isLoading, error, unlocked };
 }

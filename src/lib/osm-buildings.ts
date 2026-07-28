@@ -176,3 +176,55 @@ export async function nearbyBuildings(
   }
   return [];
 }
+
+/**
+ * Query nearby buildings not at the tap point, returning their full geometries as OsmBuildingResult[].
+ */
+export async function nearbyOsmBuildings(
+  lat: number,
+  lng: number,
+  radiusMeters: number = 50,
+  signal?: AbortSignal,
+): Promise<OsmBuildingResult[]> {
+  const query = `
+    [out:json][timeout:6];
+    (way["building"](around:${radiusMeters},${lat},${lng}););
+    out tags geom;
+  `.trim();
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `data=${encodeURIComponent(query)}`,
+        signal,
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const out: OsmBuildingResult[] = [];
+      for (const el of (data?.elements || [])) {
+        if (!el.geometry || el.geometry.length < 3) continue;
+        const poly: OsmBuildingPoint[] = el.geometry.map((g: { lat: number; lon: number }) => ({ lat: g.lat, lng: g.lon }));
+        
+        const cLat = poly.reduce((s, p) => s + p.lat, 0) / poly.length;
+        const cLng = poly.reduce((s, p) => s + p.lng, 0) / poly.length;
+        const dx = (cLng - lng) * 111320 * Math.cos(lat * Math.PI / 180);
+        const dy = (cLat - lat) * 110540;
+        const distanceM = Math.sqrt(dx * dx + dy * dy);
+        // Skip the building right at the tap
+        if (distanceM < 4) continue;
+
+        const levelsRaw = el.tags?.["building:levels"] || el.tags?.levels;
+        const approxLevels = levelsRaw ? parseFloat(levelsRaw) : undefined;
+        out.push({
+          polygon: poly,
+          source: "osm",
+          buildingTags: el.tags || {},
+          approxLevels: Number.isFinite(approxLevels) ? approxLevels : undefined,
+        });
+      }
+      return out;
+    } catch { continue; }
+  }
+  return [];
+}

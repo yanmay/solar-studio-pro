@@ -25,7 +25,8 @@ export function useUnlockStatus(scanId: string | null | undefined) {
     fetchStatus,
     {
       revalidateOnFocus: true,
-      dedupingInterval: 10_000,
+      revalidateOnMount: true,
+      dedupingInterval: 0,
     }
   );
 

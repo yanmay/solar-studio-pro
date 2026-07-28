@@ -4,16 +4,6 @@ export const config = {
   runtime: 'nodejs',
 };
 
-// Helper to parse cookies from header
-function getCookie(cookieHeader: string, name: string): string | null {
-  if (!cookieHeader) return null;
-  const cookies = cookieHeader.split(';');
-  for (const cookie of cookies) {
-    const [cName, cVal] = cookie.trim().split('=');
-    if (cName === name) return decodeURIComponent(cVal);
-  }
-  return null;
-}
 
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'GET') {
@@ -24,36 +14,42 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   const { searchParams } = new URL(req.url);
-  const scanId = searchParams.get('scanId') || 'default';
+  const scanId = searchParams.get('scanId') || '';
+  const orderId = searchParams.get('orderId') || searchParams.get('order_id') || '';
+  const paymentId = searchParams.get('paymentId') || searchParams.get('payment_id') || '';
 
-  // Source of truth: the database. A scan is unlocked if its session has
-  // is_full_unlocked = true (set only by verified/restored payments).
   const supabase = getSupabaseAdmin();
   if (supabase) {
     try {
-      const { data: session } = await supabase
-        .from('analysis_sessions')
-        .select('is_full_unlocked')
-        .eq('site_id', scanId)
-        .maybeSingle();
+      const filters = [];
+      if (paymentId) filters.push(`payment_id.eq.${paymentId}`);
+      if (orderId) filters.push(`order_id.eq.${orderId}`);
+      if (scanId && scanId !== 'default') {
+        filters.push(`scan_hash.eq.${scanId}`);
+        filters.push(`payment_id.eq.${scanId}`);
+        filters.push(`order_id.eq.${scanId}`);
+      }
 
-      if (session?.is_full_unlocked) {
-        return new Response(JSON.stringify({ unlocked: true, source: 'db' }), {
+      if (filters.length > 0) {
+        const { data: dbData, error } = await supabase
+          .from('payments')
+          .select('status')
+          .or(filters.join(','));
+
+        if (error) throw error;
+
+        const isUnlocked = dbData?.some(p => p.status === 'captured') || false;
+        return new Response(JSON.stringify({ unlocked: isUnlocked }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
       }
     } catch (err) {
-      console.error('status: DB lookup failed, falling back to cookie:', err);
+      console.error('status: DB query failed:', err);
     }
   }
 
-  // Fallback: legacy cookie (device-local only)
-  const cookieHeader = req.headers.get('cookie') || '';
-  const cookieName = `scan_unlocked_${scanId}`;
-  const isUnlocked = getCookie(cookieHeader, cookieName) === 'true';
-
-  return new Response(JSON.stringify({ unlocked: isUnlocked, source: 'cookie' }), {
+  return new Response(JSON.stringify({ unlocked: false }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   });

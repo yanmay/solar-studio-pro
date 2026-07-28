@@ -20,6 +20,7 @@ export default async function handler(req: Request): Promise<Response> {
       razorpay_signature?: string;
       plan?: string;
       scanId?: string;
+      scan_hash?: string;
     } = {};
 
     try {
@@ -31,7 +32,7 @@ export default async function handler(req: Request): Promise<Response> {
       });
     }
 
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, scanId } = body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, scanId, plan } = body;
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return new Response(JSON.stringify({ error: 'Missing signature parameters' }), {
@@ -87,34 +88,28 @@ export default async function handler(req: Request): Promise<Response> {
     try {
       const supabase = getSupabaseAdmin();
       if (supabase) {
-        const { data: updated, error: updateError } = await supabase
+        const { error: insertError } = await supabase
           .from('payments')
-          .update({
-            status: 'success',
-            razorpay_payment_id,
-            razorpay_signature,
-            confirmed_at: new Date().toISOString(),
-          })
-          .eq('razorpay_order_id', razorpay_order_id)
-          .select('session_id')
-          .maybeSingle();
+          .insert({
+            order_id: razorpay_order_id,
+            payment_id: razorpay_payment_id,
+            status: 'captured',
+            scan_hash: scan_hash || scanId,
+          });
 
-        if (updateError) {
-          console.error('Failed to update payment record:', updateError.message);
+        if (insertError) {
+          console.error('Failed to insert verified payment record:', insertError.message);
         }
 
-        // Unlock the analysis session server-side
-        let sessionId = updated?.session_id as string | undefined;
-        if (!sessionId && scanId) {
-          sessionId = (await ensureSession(supabase, scanId)) ?? undefined;
-        }
-        if (sessionId) {
+        // Backwards compatibility: also unlock the analysis session in analysis_sessions table
+        const targetScanId = scan_hash || scanId;
+        if (targetScanId) {
           const { error: unlockError } = await supabase
             .from('analysis_sessions')
             .update({ is_full_unlocked: true })
-            .eq('id', sessionId);
+            .eq('site_id', targetScanId);
           if (unlockError) {
-            console.error('Failed to unlock session:', unlockError.message);
+            console.error('Failed to unlock session in analysis_sessions:', unlockError.message);
           }
         }
       } else {

@@ -22,35 +22,44 @@ import {
   TreeDeciduous,
   Wallet,
   Calendar,
-  BadgePercent
+  BadgePercent,
+  HelpCircle,
 } from "lucide-react";
-import { AnimatedThemeToggleButton } from "@/components/ui/animated-theme-toggle-button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { SnappySlider } from "@/components/ui/snappy-slider";
 import { useEffect, useState, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type { SolarAnalysis } from "@/lib/solar-calc";
+import { calcConfidenceScore } from "@/lib/confidence-score";
 import { generatePDFReport } from "@/lib/pdf-generator";
+import { useAuth } from "@/contexts/AuthContext";
+import { saveScanToDb } from "@/lib/supabase";
 import {
   AreaChart,
   Area,
-  BarChart,
-  Bar,
   ComposedChart,
   Line,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
+  Grid as CartesianGrid,
+  ChartTooltip,
   ReferenceLine,
-} from "recharts";
+  Gauge,
+} from "@/components/charts";
+import { ComposedBar as Bar } from "@/components/charts/ComposedChart";
 import { useScanStore } from "@/hooks/use-scan-store";
 import { usePayment } from "@/hooks/use-payment";
 import { useUnlockStatus } from "@/hooks/use-unlock-status";
 import { runFullCalculation } from "@/lib/solar-calc";
 import { decodeScanFromUrl, encodeScanToUrl } from "@/lib/scan-url";
+import { generateWhatsAppMessage, generateWhatsAppUrl, shortenUrl } from "@/lib/whatsapp-share";
 import { computePanelLayout } from "@/lib/panel-layout";
 import { fetchSolarIrradiance } from "@/lib/nasa-power";
+import { calcWindCostAdder } from "@/lib/wind-zone";
+import { calcTemperatureDerate } from "@/lib/temperature-derate";
+import { calcPMSuryaSubsidy, isEligible } from "@/lib/pm-surya-subsidy";
+import { getOrCreateReferralState, getReferralShareContent, MONTHLY_LEADERBOARD } from "@/lib/referrals";
+import { jsPDF } from "jspdf";
 import {
   trackResultsViewed,
   trackPaywallShown,
@@ -74,25 +83,32 @@ import LeadCaptureForm from "@/components/LeadCaptureForm";
 import InstallerMarketplace from "@/components/InstallerMarketplace";
 import TimeOfUseCard from "@/components/TimeOfUseCard";
 import RooftopARViewer from "@/components/RooftopARViewer";
+import SolarSimulator from "@/components/SolarSimulator";
 import { recommendBattery, type BackupMode } from "@/lib/battery-calc";
 
 // ─── Color tokens from code.html ─────────────────────────────
+// ─── Institutional Design Tokens ─────────────────────────────
 const C = {
-  background:          "#171210",
-  charcoal:            "#1F1B18",
-  surfaceVariant:      "#393431",
-  surfaceContainerHigh:"#2e2927",
-  primary:             "#ffb87b",
-  primaryContainer:    "#ff8f00",
-  secondary:           "#41e1b4",
-  onSurface:           "#eae0dd",
-  onSurfaceVariant:    "#dcc1ae",
-  mutedSand:           "#AD9F92",
-  outline:             "#a48c7a",
-  outlineVariant:      "#564334",
-  error:               "#ffb4ab",
-  onPrimary:           "#4c2700",
-  onSecondary:         "#00382a",
+  // Surfaces
+  background:          "#050505",
+  charcoal:            "#0A0A0A",
+  surfaceVariant:      "#121215",
+  surfaceContainerHigh:"#1A1A1E",
+  // Borders
+  outlineVariant:      "rgba(255, 255, 255, 0.1)",
+  outline:             "rgba(255, 255, 255, 0.15)",
+  // Text
+  onSurface:           "#F0EEE9",
+  onSurfaceVariant:    "#C8C4BC",
+  mutedSand:           "#8A8A99",
+  // Accents
+  primary:             "#FF6600",   // Solar Orange
+  primaryContainer:    "#E05800",
+  secondary:           "#2BD4A0",   // teal — positive values
+  error:               "#FF6B6B",   // red — negative / warning
+  // Text on accent surfaces
+  onPrimary:           "#000000",
+  onSecondary:         "#001A12",
 };
 
 interface FullResult extends SolarAnalysis {
@@ -137,19 +153,35 @@ const leadFormSchema = z.object({
 });
 
 // ─── Financial solver ────────────────────────────────────────
-function computeModel({ peakSunHours, pCount, pType, tariff, escalation, discountRate, omCost, batteryStorage }: {
+function computeModel({ peakSunHours, pCount, pType, tariff, escalation, discountRate, omCost, batteryStorage, overrideAnnualKwh, shading = "auto", computedShadingLoss = null, windZone, tempDerate }: {
   peakSunHours: number; pCount: number; pType: "compact"|"premium";
   tariff: number; escalation: number; discountRate: number; omCost: number; batteryStorage: boolean;
+  overrideAnnualKwh?: number;
+  shading?: "none" | "partial" | "heavy" | "auto";
+  computedShadingLoss?: number | null;
+  windZone?: number;
+  tempDerate?: number;
 }) {
   const panelW = pType === "premium" ? 550 : 450;
   const installedKw = (pCount * panelW) / 1000;
-  const grossCost = pCount * (pType === "premium" ? 22000 : 18000) + 35000;
+  const windCostAdder = windZone ? calcWindCostAdder(windZone) : 0;
+  const grossCost = pCount * (pType === "premium" ? 22000 : 18000) + 35000 + (windCostAdder * installedKw);
   const batteryCost = batteryStorage ? 85000 : 0;
   const totalGrossCapEx = grossCost + batteryCost;
-  let subsidyInr = installedKw <= 2 ? installedKw * 30000 : installedKw <= 3 ? 60000 + (installedKw - 2) * 18000 : 78000;
-  subsidyInr = Math.min(78000, Math.round(subsidyInr));
+  const subsidyInr = calcPMSuryaSubsidy(installedKw);
   const netCostInr = Math.max(0, totalGrossCapEx - subsidyInr);
-  const baseAnnualKwh = installedKw * peakSunHours * 365 * 0.86;
+
+  let shadingLoss = 0;
+  if (shading === "auto") {
+    shadingLoss = computedShadingLoss ?? 0;
+  } else if (shading === "partial") {
+    shadingLoss = 0.15;
+  } else if (shading === "heavy") {
+    shadingLoss = 0.30;
+  }
+
+  const tempMultiplier = tempDerate ?? 1.0;
+  const baseAnnualKwh = (overrideAnnualKwh ?? (installedKw * peakSunHours * 365 * 0.86 * (1 - shadingLoss))) * tempMultiplier;
   const cashFlows: number[] = [-netCostInr];
   const yearlySavings: number[] = [];
   const yearlyOm: number[] = [];
@@ -191,7 +223,7 @@ function computeModel({ peakSunHours, pCount, pType, tariff, escalation, discoun
   }
   const lcoe = dep > 0 ? dlc / dep : 0;
   return { installedKw, baseAnnualKwh, grossCost, totalGrossCapEx, subsidyInr, netCostInr,
-    cashFlows, cumulativeCashFlow, yearlySavings, yearlyOm, irr: irr * 100, npv, paybackPeriod, breakEvenYr, lcoe, breakEvenFound };
+    cashFlows, cumulativeCashFlow, yearlySavings, yearlyOm, irr: irr * 100, npv, paybackPeriod, breakEvenYr, lcoe, breakEvenFound, shadingLoss };
 }
 
 // ─── Lead form ───────────────────────────────────────────────
@@ -379,11 +411,105 @@ function RoofLayoutDiagram({
   );
 }
 
+const formatLakhsCr = (val: number) => {
+  const abs = Math.abs(val);
+  const sign = val < 0 ? "-" : "";
+  if (abs >= 1_00_00_000) {
+    return `${sign}₹${(abs / 1_00_00_000).toFixed(2)} Cr`;
+  }
+  if (abs >= 1_00_000) {
+    return `${sign}₹${(abs / 1_00_00_000).toFixed(2)} L`;
+  }
+  return `${sign}₹${Math.round(abs).toLocaleString("en-IN")}`;
+};
+
+const INDIAN_STATES = [
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
+  "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", 
+  "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", 
+  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", 
+  "West Bengal", "Delhi"
+];
+
+function generatePMSuryaApplicationPDF(details: {
+  name: string;
+  phone: string;
+  systemSizeKw: number;
+  estimatedCost: number;
+  subsidyAmount: number;
+  state: string;
+}) {
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  
+  // Header / Title
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text("PM-SURYA GHAR MUFT BIJLI YOJANA", 105, 20, { align: "center" });
+  doc.setFontSize(12);
+  doc.text("National Portal for Rooftop Solar — Pre-Filled Application Form", 105, 27, { align: "center" });
+  
+  // Decorative separator
+  doc.setLineWidth(0.5);
+  doc.line(15, 32, 195, 32);
+  
+  // Section: Applicant Details
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
+  doc.text("1. APPLICANT INFORMATION", 15, 42);
+  
+  doc.setFont("helvetica", "normal");
+  doc.text(`Full Name: ${details.name || "N/A"}`, 15, 50);
+  doc.text(`WhatsApp Number: +91 ${details.phone || "N/A"}`, 15, 57);
+  doc.text(`State / Region: ${details.state || "N/A"}`, 15, 64);
+  doc.text("Connection Type: Domestic (Residential)", 15, 71);
+  
+  // Section: System Specifications
+  doc.setFont("helvetica", "bold");
+  doc.text("2. PROPOSED SOLAR SYSTEM SPECIFICATIONS", 15, 85);
+  
+  doc.setFont("helvetica", "normal");
+  doc.text(`Proposed System Capacity: ${details.systemSizeKw.toFixed(2)} kWp`, 15, 93);
+  doc.text(`Estimated System Cost: INR ${Math.round(details.estimatedCost).toLocaleString()}`, 15, 100);
+  doc.text(`Eligible Subsidy: INR ${Math.round(details.subsidyAmount).toLocaleString()}`, 15, 107);
+  doc.text(`Net Cost to Homeowner: INR ${Math.round(details.estimatedCost - details.subsidyAmount).toLocaleString()}`, 15, 114);
+  
+  // Section: Bank Account Details
+  doc.setFont("helvetica", "bold");
+  doc.text("3. BANK ACCOUNT FOR SUBSIDY DISBURSEMENT (PLACEHOLDER)", 15, 128);
+  
+  doc.setFont("helvetica", "normal");
+  doc.text("Account Holder Name: ___________________________________", 15, 136);
+  doc.text("Bank Name: ___________________________________________", 15, 143);
+  doc.text("Account Number: _______________________________________", 15, 150);
+  doc.text("IFSC Code: ____________________________________________", 15, 157);
+  
+  // Section: Checklist & Declaration
+  doc.setFont("helvetica", "bold");
+  doc.text("4. DECLARATION", 15, 172);
+  
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  const declarationText = "I hereby declare that all the information provided above is correct. I own the property and declare that a dual-source bidirectional net meter will be installed according to DISCOM guidelines. The subsidy will be claimed only after successful installation and inspection by DISCOM officials.";
+  doc.text(declarationText, 15, 180, { maxWidth: 180 });
+  
+  // Signatures
+  doc.setFontSize(10);
+  doc.text("Signature of Applicant: _____________________", 15, 220);
+  doc.text("Date: _____________________", 140, 220);
+  
+  // Footer
+  doc.setFontSize(8);
+  doc.text("This is an automatically generated pre-filled application form from SolarStudio Pro.", 105, 280, { align: "center" });
+  
+  doc.save("pm-surya-ghar-prefilled-application.pdf");
+}
+
 // ─── Main Page ───────────────────────────────────────────────
 const ResultsPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const store = useScanStore();
+  const { user, signOut } = useAuth();
   const [searchParams] = useSearchParams();
   const { initiatePayment, isLoading: isPaymentGatewayLoading } = usePayment();
 
@@ -393,6 +519,8 @@ const ResultsPage = () => {
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [noData, setNoData] = useState(false);
   const [leadFormOpen, setLeadFormOpen] = useState(false);
+  const [pvlibData, setPvlibData] = useState<any>(null);
+  const [isPvlibLoading, setIsPvlibLoading] = useState(false);
 
   const hasTrackedViewed  = useRef(false);
   const hasTrackedPaywall = useRef(false);
@@ -405,10 +533,39 @@ const ResultsPage = () => {
   const [discountRate,   setDiscountRate]   = useState(8.5);
   const [omCost,         setOmCost]         = useState(1.0);
   const [batteryStorage, setBatteryStorage] = useState(false);
-  const [shading,        setShading]        = useState<"none" | "partial" | "heavy">("none");
+  const [shading,        setShading]        = useState<"none" | "partial" | "heavy" | "auto">("auto");
   const [activeTab,      setActiveTab]      = useState<"roi"|"yield"|"monthly">("roi");
+  const [showAllYears,   setShowAllYears]   = useState(false);
 
-  const handleShadingChange = (newShading: "none" | "partial" | "heavy") => {
+  // PM-Surya Ghar Subsidy Eligibility Checklist states
+  const [checklistResidential, setChecklistResidential] = useState(true);
+  const [checklistGridConnected, setChecklistGridConnected] = useState(true);
+  const [eligibilityConnectionType, setEligibilityConnectionType] = useState("domestic");
+  const [eligibilityState, setEligibilityState] = useState("Maharashtra");
+
+  const referralState = getOrCreateReferralState();
+  const hasReferralDiscount = referralState.unlockedDiscount;
+  const payPerScanPrice = hasReferralDiscount ? 129 : 149;
+
+  // Attempt to infer state from address label
+  useEffect(() => {
+    if (data?.location?.label) {
+      const label = data.location.label.toLowerCase();
+      const allStates = [
+        "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
+        "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", 
+        "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", 
+        "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", 
+        "West Bengal", "Delhi"
+      ];
+      const matched = allStates.find(s => label.includes(s.toLowerCase()));
+      if (matched) {
+        setEligibilityState(matched);
+      }
+    }
+  }, [data]);
+
+  const handleShadingChange = (newShading: "none" | "partial" | "heavy" | "auto") => {
     setShading(newShading);
     const enc = searchParams.get("scan");
     if (enc) {
@@ -421,12 +578,6 @@ const ResultsPage = () => {
     }
   };
 
-  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains("dark"));
-  useEffect(() => {
-    const obs = new MutationObserver(() => setIsDark(document.documentElement.classList.contains("dark")));
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    return () => obs.disconnect();
-  }, []);
 
   // Unlock state is server-authoritative: /api/payment/status reads the
   // Supabase-backed session. store.isPaid is only an optimistic in-session
@@ -462,7 +613,7 @@ const ResultsPage = () => {
           setTariff(decoded.tariff.tariffPerKwh);
           setPType(pWatt === 550 ? "premium" : "compact");
           setPCount(pCountVal);
-          setShading(decoded.panelConfig.shading || "none");
+          setShading(decoded.panelConfig.shading || "auto");
           maxPanelsRef.current = pCountVal;
 
           const centroid = calcCentroid(decoded.scanInput.roofPolygon?.[0]?.coordinates?.[0]?.map(c => ({ lat: c[1], lng: c[0] })) ?? []);
@@ -475,7 +626,12 @@ const ResultsPage = () => {
               customCapacityKw,
               panelCount: pCountVal,
               panelType: pWatt === 550 ? "premium" : "compact",
-              shading: decoded.panelConfig.shading || "none",
+              shading: decoded.panelConfig.shading || "auto",
+              pitchDegrees: decoded.scanInput.pitchDegrees,
+              exclusionAreaM2: decoded.scanInput.exclusionAreaM2 || 0,
+              computedShadingLoss: decoded.scanInput.computedShadingLoss,
+              ws10m: irradiance.ws10m,
+              t2m: irradiance.t2m,
             });
 
             const fullResult = {
@@ -491,7 +647,33 @@ const ResultsPage = () => {
             store.setScanInput(decoded.scanInput);
             store.setPanelConfig(decoded.panelConfig);
             store.setTariff(decoded.tariff);
+
+            let shadingLossVal = 0;
+            let shadingSourceVal: 'auto' | 'manual' = 'auto';
+            const shadingConfig = decoded.panelConfig.shading || "auto";
+            if (shadingConfig === 'auto') {
+              shadingLossVal = analysis.shadingLoss ?? 0;
+              shadingSourceVal = 'auto';
+            } else {
+              shadingSourceVal = 'manual';
+              if (shadingConfig === 'none') shadingLossVal = 0.0;
+              else if (shadingConfig === 'partial') shadingLossVal = 0.15;
+              else if (shadingConfig === 'heavy') shadingLossVal = 0.30;
+            }
+            store.setShadingSource(shadingSourceVal);
+            store.setShadingLoss(shadingLossVal);
+
             store.setFullAnalysis(fullResult);
+
+            // Persist the scan session to the database
+            saveScanToDb(
+              analysis.analysisId,
+              decoded.scanInput,
+              decoded.panelConfig,
+              decoded.tariff,
+              fullResult,
+              user ? user.id : null
+            );
 
             // Shared URLs never grant unlock — the server decides via
             // useUnlockStatus(analysisId). Reset any stale local flag.
@@ -517,7 +699,7 @@ const ResultsPage = () => {
       setTariff(s.tariff?.tariffPerKwh ?? 7.5);
       setPType(s.panelConfig?.panelWattage === 550 ? "premium" : "compact");
       setPCount(s.panelConfig?.panelCount ?? 15);
-      setShading(s.panelConfig?.shading || "none");
+      setShading(s.panelConfig?.shading || "auto");
       maxPanelsRef.current = s.panelConfig?.panelCount ?? 15;
       setLoading(false);
       return;
@@ -533,7 +715,7 @@ const ResultsPage = () => {
           setTariff(p.financials.electricityRateInr);
           setPType(p.panelType ?? "compact");
           setPCount(p.panelCount ?? 15);
-          setShading(p.shading || "none");
+          setShading(p.shading || "auto");
           maxPanelsRef.current = p.panelCount ?? 15;
           
           s.setScanInput({
@@ -541,7 +723,10 @@ const ResultsPage = () => {
             lat: p.location?.lat || 19.076,
             lng: p.location?.lng || 72.877,
             roofPolygon: [],
-            roofAreaM2: p.rooftop?.drawnAreaM2 || 85.5
+            roofAreaM2: p.rooftop?.drawnAreaM2 || 85.5,
+            source: p.source,
+            isExplicitlyFlat: p.isExplicitlyFlat,
+            computedShadingLoss: p.computedShadingLoss,
           });
           s.setPanelConfig({
             tiltAngle: p.tiltDeg || 15,
@@ -554,16 +739,26 @@ const ResultsPage = () => {
             systemKwp: p.energy.installedCapacityKw || 6.5
           });
           s.setTariff({ tariffPerKwh: p.financials.electricityRateInr });
+          
+          let shadingLossVal = 0;
+          let shadingSourceVal: 'auto' | 'manual' = 'auto';
+          const shadingConfig = p.shading || "auto";
+          if (shadingConfig === 'auto') {
+            shadingLossVal = p.shadingLoss ?? p.computedShadingLoss ?? 0;
+            shadingSourceVal = 'auto';
+          } else {
+            shadingSourceVal = 'manual';
+            if (shadingConfig === 'none') shadingLossVal = 0.0;
+            else if (shadingConfig === 'partial') shadingLossVal = 0.15;
+            else if (shadingConfig === 'heavy') shadingLossVal = 0.30;
+          }
+          s.setShadingSource(shadingSourceVal);
+          s.setShadingLoss(shadingLossVal);
+
           s.setFullAnalysis(p);
 
-          // Only restore paid state when a real payment id was recorded in
-          // this browser session; never unlock by default. The server unlock
-          // check (useUnlockStatus) remains the source of truth either way.
-          if (p.unlocked === true && p.paymentId) {
-            s.setIsPaid(true, p.paymentId);
-          } else {
-            s.setIsPaid(false);
-          }
+          // Reset local payment status on load to force verification from server.
+          s.setIsPaid(false);
           setNoData(false);
           setLoading(false);
           return;
@@ -578,19 +773,198 @@ const ResultsPage = () => {
   }, [searchParams, toast]);
 
   useEffect(() => {
-    if (data && !unlocked && !hasTrackedPaywall.current) { trackPaywallShown(); hasTrackedPaywall.current = true; }
+    if (unlocked && data && !pvlibData && !isPvlibLoading) {
+      setIsPvlibLoading(true);
+      
+      const enc = searchParams.get("scan");
+      let decodedPolygon = null;
+      let urlPitchDegrees = 0;
+      if (enc) {
+        try {
+          const decoded = decodeScanFromUrl(enc);
+          decodedPolygon = decoded?.scanInput?.roofPolygon;
+          urlPitchDegrees = decoded?.scanInput?.pitchDegrees ?? 0;
+        } catch {}
+      }
+
+      const centroid = calcCentroid(
+        decodedPolygon?.[0]?.coordinates?.[0]?.map((c: any) => ({ lat: c[1], lng: c[0] })) ?? 
+        store.scanInput?.roofPolygon?.[0]?.coordinates?.[0]?.map((c: any) => ({ lat: c[1], lng: c[0] })) ?? 
+        []
+      );
+      
+      const lat = data.location?.lat ?? centroid.lat;
+      const lng = data.location?.lng ?? centroid.lng;
+      const tilt = data.roof?.tilt ?? 15.0;
+      
+      const getAzimuthDeg = (az: string | number): number => {
+        if (typeof az === "number") return az;
+        const norm = String(az).toUpperCase().trim();
+        if (norm === "N") return 0;
+        if (norm === "NE") return 45;
+        if (norm === "E") return 90;
+        if (norm === "SE") return 135;
+        if (norm === "S") return 180;
+        if (norm === "SW") return 225;
+        if (norm === "W") return 270;
+        if (norm === "NW") return 315;
+        return 180;
+      };
+      
+      const azimuthDeg = getAzimuthDeg(data.roof?.azimuth || "S");
+      const shadingStr = data.shading || store.panelConfig?.shading || "none";
+      const pitchDeg = data.pitchDegrees ?? urlPitchDegrees ?? store.scanInput?.pitchDegrees ?? 0;
+      const areaVal = data.rooftop?.drawnAreaM2 ?? store.scanInput?.roofAreaM2 ?? 10.0;
+      
+      const panelW = (pType === "premium" ? 550 : 450);
+      const kw = (pCount * panelW) / 1000;
+
+      fetch("/api/pvlib-engine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lat,
+          lng,
+          tilt,
+          azimuth: azimuthDeg,
+          area_m2: areaVal,
+          shading: shadingStr,
+          pitch_degrees: pitchDeg,
+          system_size_kwp: kw,
+        }),
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error("pvlib execution failed");
+          return res.json();
+        })
+        .then((resData) => {
+          if (resData && !resData.error) {
+            setPvlibData(resData);
+          }
+        })
+        .catch((err) => {
+          console.warn("pvlib calculation failed, falling back to TypeScript values:", err);
+        })
+        .finally(() => {
+          setIsPvlibLoading(false);
+        });
+    }
+  }, [unlocked, data, store, pvlibData, isPvlibLoading, searchParams, pType, pCount]);
+
+  useEffect(() => {
+    if (data && !unlocked && !hasTrackedPaywall.current) {
+      trackPaywallShown();
+      hasTrackedPaywall.current = true;
+    }
   }, [data, unlocked]);
 
   const psh   = data?.energy.peakSunHoursDaily ?? 5.0;
-  const model = computeModel({ peakSunHours: psh, pCount, pType, tariff, escalation, discountRate, omCost, batteryStorage });
+  const model = computeModel({
+    peakSunHours: psh,
+    pCount,
+    pType,
+    tariff,
+    escalation,
+    discountRate,
+    omCost,
+    batteryStorage,
+    overrideAnnualKwh: pvlibData?.annual_yield_kwh,
+    shading,
+    computedShadingLoss: data?.computedShadingLoss,
+    windZone: data?.windZone?.zone,
+    tempDerate: data?.tempDerate
+  });
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!data) return; setDownloading(true); setDownloadError(null);
     try {
-      generatePDFReport({ ...data, energy: { ...data.energy, installedCapacityKw: model.installedKw, annualKwh: model.baseAnnualKwh }, financials: { electricityRateInr: tariff, monthlySavingsInr: Math.round(model.yearlySavings[0]/12), annualSavingsInr: Math.round(model.yearlySavings[0]), savings25yrInr: Math.round(model.cumulativeCashFlow[25]+model.netCostInr) }, panelCount: pCount, panelType: pType } as SolarAnalysis, { locationLabel: data.location?.label || "India" });
+      const cachedBrand = localStorage.getItem("solarsan-installer-brand-config");
+      let activeBrandConfig = undefined;
+      if (cachedBrand) {
+        try {
+          activeBrandConfig = JSON.parse(cachedBrand);
+        } catch {}
+      }
+
+      await generatePDFReport(
+        { ...data, energy: { ...data.energy, installedCapacityKw: model.installedKw, annualKwh: model.baseAnnualKwh }, financials: { electricityRateInr: tariff, monthlySavingsInr: Math.round(model.yearlySavings[0]/12), annualSavingsInr: Math.round(model.yearlySavings[0]), savings25yrInr: Math.round(model.cumulativeCashFlow[25]+model.netCostInr) }, panelCount: pCount, panelType: pType } as any,
+        { locationLabel: data.location?.label || "India", brandConfig: activeBrandConfig },
+        model
+      );
       toast({ title: "Report Downloaded" });
-    } catch { const msg = "Failed to generate report."; setDownloadError(msg); toast({ title: "Download Failed", description: msg, variant: "destructive" }); }
-    finally { setDownloading(false); }
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      const msg = "Failed to generate report.";
+      setDownloadError(msg);
+      toast({ title: "Download Failed", description: msg, variant: "destructive" });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [sharePhone, setSharePhone] = useState("");
+  const [sharePhoneError, setSharePhoneError] = useState("");
+  const [isSharing, setIsSharing] = useState(false);
+
+  const validatePhone = (num: string): boolean => {
+    const cleaned = num.replace(/\D/g, "");
+    if (cleaned.length !== 10) {
+      setSharePhoneError("Phone number must be exactly 10 digits.");
+      return false;
+    }
+    if (!/^[6789]/.test(cleaned)) {
+      setSharePhoneError("Indian mobile numbers must start with 6, 7, 8, or 9.");
+      return false;
+    }
+    setSharePhoneError("");
+    return true;
+  };
+
+  const handleWhatsAppShare = async () => {
+    if (!data) return;
+    if (!validatePhone(sharePhone)) return;
+
+    setIsSharing(true);
+    try {
+      const enc = searchParams.get("scan");
+      const shareUrl = `${window.location.origin}/results?scan=${enc || ""}`;
+      const shortUrl = await shortenUrl(shareUrl);
+      
+      const savings25yr = model ? (model.cumulativeCashFlow[25] + model.netCostInr) : data.financials.savings25yrInr;
+      const savingsLakh = parseFloat((savings25yr / 100000).toFixed(1));
+      
+      const rawConfidence = calcConfidenceScore({
+        source: data.source ?? "none",
+        pitchDegrees: data.pitchDegrees ?? 0,
+        isExplicitlyFlat: data.isExplicitlyFlat ?? false,
+        computedShadingLoss: data.computedShadingLoss ?? null,
+        exclusionAreaM2: data.exclusionAreaM2 ?? 0,
+        isRegionalFallback: data.irradianceSource === "REGIONAL_FALLBACK",
+        pvlibAvailable: false,
+        allExclusionZonesDrawn: (data.exclusionAreaM2 ?? 0) > 0,
+      });
+      const confidenceScore = Math.round(rawConfidence * 100);
+
+      const message = generateWhatsAppMessage({
+        address: data.location?.label || "India",
+        systemSizeKw: model.installedKw,
+        lifetimeSavingsLakh: savingsLakh,
+        paybackYears: parseFloat(model.paybackPeriod.toFixed(1)),
+        confidenceScore: confidenceScore,
+        reportUrl: shortUrl
+      });
+
+      const waUrl = generateWhatsAppUrl(sharePhone, message);
+      window.open(waUrl, "_blank");
+      setShareModalOpen(false);
+      setSharePhone("");
+    } catch (err) {
+      console.error("WhatsApp share failed:", err);
+      toast({ title: "Sharing Failed", description: "Failed to generate share link.", variant: "destructive" });
+    } finally {
+      setIsSharing(false);
+    }
   };
 
   const handleSandboxCheckout = () => {
@@ -629,6 +1003,48 @@ const ResultsPage = () => {
 
   if (!data) return null;
 
+  // Confidence score calculation
+  const scanSource = data.source ?? store.scanInput?.source ?? "none";
+  const pitchDeg = data.pitchDegrees ?? store.scanInput?.pitchDegrees ?? 0;
+  const isExplicitFlat = store.scanInput?.isExplicitlyFlat ?? false;
+  const computedShading = data.computedShadingLoss ?? store.scanInput?.computedShadingLoss;
+  const exclusionArea = data.exclusionAreaM2 ?? store.scanInput?.exclusionAreaM2 ?? 0;
+  const isFallback = data.irradianceSource === "REGIONAL_FALLBACK";
+  const pvlibAvail = !!pvlibData && !pvlibData.error;
+  const allExclusions = (store.scanInput?.exclusionZones?.length ?? 0) > 0;
+
+  const rawConfidence = calcConfidenceScore({
+    source: scanSource,
+    pitchDegrees: pitchDeg,
+    isExplicitlyFlat: isExplicitFlat,
+    computedShadingLoss: computedShading,
+    exclusionAreaM2: exclusionArea,
+    isRegionalFallback: isFallback,
+    pvlibAvailable: pvlibAvail,
+    allExclusionZonesDrawn: allExclusions,
+  });
+  const confidenceScore = Math.round(rawConfidence * 100);
+
+  let badgeText = `Lower Confidence · ${confidenceScore}%`;
+  let badgeColor = "#f97316";
+  let badgeBg = "#f9731615";
+
+  if (rawConfidence >= 0.85) {
+    badgeText = `High Confidence · ${confidenceScore}%`;
+    badgeColor = C.secondary; // #41e1b4
+    badgeBg = `${C.secondary}15`;
+  } else if (rawConfidence >= 0.65) {
+    badgeText = `Medium Confidence · ${confidenceScore}%`;
+    badgeColor = C.primary; // #ffb87b
+    badgeBg = `${C.primary}15`;
+  }
+
+  let footprintText = "Manual trace";
+  if (scanSource === "osm") footprintText = "OSM auto-detect";
+  else if (scanSource === "photo") footprintText = "Photo estimate";
+
+  const yieldText = pvlibAvail ? "pvlib high-precision" : "Standard model";
+
   const roiData     = model.cumulativeCashFlow.map((cf, y) => ({ year: y, cumulative: Math.round(cf) }));
   const yieldData   = Array.from({ length: 25 }, (_, i) => ({ year: `Yr ${i+1}`, production: Math.round(model.baseAnnualKwh * Math.pow(0.995, i)), efficiency: parseFloat((100 - i*0.5).toFixed(1)) }));
   const monthlyData = MONTH_KEYS.map((k, i) => {
@@ -637,7 +1053,78 @@ const ResultsPage = () => {
     return { label: MONTH_LABELS[i], psh: parseFloat(mPsh.toFixed(2)), generation: Math.round(model.installedKw * mPsh * days * 0.86) };
   });
   const savings25L  = Math.round((model.cumulativeCashFlow[25] + model.netCostInr) / 100000);
-  const suitability = data.suitabilityScore !== undefined ? data.suitabilityScore : Math.round(Math.min(99, 70 + data.energy.peakSunHoursDaily * 5));
+
+  // Dynamic Suitability Score Calculations
+  const lat = data.location?.lat ?? 19.0;
+  const lng = data.location?.lng ?? 73.0;
+
+  // 1. Solar Orientation suitability
+  // South alignment gets a higher score. Optimal tilt is close to latitude.
+  const optimalTilt = Math.max(10, Math.min(30, Math.round(lat)));
+  const tiltDiff = Math.abs((store.panelConfig?.tiltAngle ?? 15) - optimalTilt);
+  const tiltScore = Math.max(0, 10 - tiltDiff * 0.5);
+  const isSouth = store.panelConfig?.rowAlignment === "geographical_south";
+  const pshFactor = Math.max(0, Math.min(10, (data.energy.peakSunHoursDaily - 3.5) * 5));
+  const orientationScore = Math.round(Math.max(50, Math.min(99, 80 + (isSouth ? 10 : 0) + tiltScore + pshFactor)));
+
+  // 2. Roof Area suitability
+  const roofArea = data.rooftop.drawnAreaM2;
+  let areaScore = 85;
+  if (roofArea < 20) {
+    areaScore = 55 + (roofArea / 20) * 15;
+  } else if (roofArea < 50) {
+    areaScore = 70 + ((roofArea - 20) / 30) * 15;
+  } else if (roofArea < 150) {
+    areaScore = 85 + ((roofArea - 50) / 100) * 13;
+  } else {
+    areaScore = 98 + Math.min(1, (roofArea - 150) / 1000);
+  }
+  areaScore = Math.round(Math.max(40, Math.min(99, areaScore)));
+
+  // 3. Shading Loss suitability (based directly on user selection or auto estimation)
+  const shadingSeed = Math.abs(Math.sin(lat) * 1000) % 3;
+  let shadingScore = 96;
+  const activeShading = shading === "auto"
+    ? (data?.computedShadingLoss !== undefined && data.computedShadingLoss !== null
+        ? (data.computedShadingLoss > 0.15 ? "heavy" : data.computedShadingLoss > 0 ? "partial" : "none")
+        : "none")
+    : shading;
+
+  if (activeShading === "none") {
+    shadingScore = Math.round(96 + shadingSeed);
+  } else if (activeShading === "partial") {
+    shadingScore = Math.round(78 + shadingSeed);
+  } else { // heavy
+    shadingScore = Math.round(52 + shadingSeed);
+  }
+  shadingScore = Math.max(10, Math.min(99, shadingScore));
+
+  // 4. Structural suitability
+  const structSeed = Math.abs(Math.cos(lng) * 1000) % 3;
+  let structuralScore = 94;
+  if ((store.panelConfig?.tiltAngle ?? 15) > 20) {
+    structuralScore -= ((store.panelConfig?.tiltAngle ?? 15) - 20) * 0.8;
+  }
+  if ((store.panelConfig?.walkwayM ?? 0) > 0) {
+    structuralScore += 4;
+  } else {
+    structuralScore -= 2;
+  }
+  if ((store.panelConfig?.panelCount ?? 15) > 50) {
+    structuralScore -= 3;
+  }
+  structuralScore = Math.round(Math.max(60, Math.min(99, structuralScore + structSeed)));
+
+  // Weighted suitability score
+  const suitability = data.suitabilityScore !== undefined 
+    ? data.suitabilityScore 
+    : Math.round(
+        orientationScore * 0.30 +
+        areaScore * 0.20 +
+        shadingScore * 0.35 +
+        structuralScore * 0.15
+      );
+
   const circumference = 2 * Math.PI * 45;
   const dashOffset  = circumference * (1 - suitability / 100);
   const roofUsable  = Math.round(Math.min(75, 50 + data.energy.peakSunHoursDaily * 4));
@@ -649,75 +1136,173 @@ const ResultsPage = () => {
 
   return (
     <>
-      {/* ── Global styles ────────────────────────── */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600&family=Inter:wght@400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
 
         .sp-page * { box-sizing: border-box; }
-        .sp-page { font-family: 'Inter', sans-serif; }
+        .sp-page { font-family: 'Inter', system-ui, sans-serif; }
 
-        @keyframes sp-fade-up   { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:none; } }
-        @keyframes sp-fade-in   { from { opacity:0; } to { opacity:1; } }
-        @keyframes sp-spin      { to { transform:rotate(360deg); } }
-        @keyframes sp-scan-line { 0%{top:0%;opacity:.6} 100%{top:100%;opacity:0} }
-        @keyframes sp-glow-pulse{ 0%,100%{box-shadow:0 0 0 0 ${C.secondary}30} 50%{box-shadow:0 0 0 8px ${C.secondary}00} }
-        @keyframes sp-float     { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
-        @keyframes sp-bar-grow  { from { height:0; } }
-        @keyframes sp-border-glow { 0%,100%{border-color:${C.outlineVariant}} 50%{border-color:${C.secondary}60} }
-        @keyframes sp-shimmer   { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-        @keyframes sp-count-in  { from{opacity:0;transform:scale(.85)} to{opacity:1;transform:scale(1)} }
-
-        .sp-fade-up   { animation: sp-fade-up .65s cubic-bezier(.16,1,.3,1) both; }
-        .sp-fade-up-1 { animation: sp-fade-up .65s cubic-bezier(.16,1,.3,1) .05s both; }
-        .sp-fade-up-2 { animation: sp-fade-up .65s cubic-bezier(.16,1,.3,1) .15s both; }
-        .sp-fade-up-3 { animation: sp-fade-up .65s cubic-bezier(.16,1,.3,1) .25s both; }
-        .sp-fade-up-4 { animation: sp-fade-up .65s cubic-bezier(.16,1,.3,1) .35s both; }
-        .sp-fade-up-5 { animation: sp-fade-up .65s cubic-bezier(.16,1,.3,1) .45s both; }
-        .sp-fade-in   { animation: sp-fade-in .5s ease both; }
-        .sp-spin      { animation: sp-spin .9s linear infinite; }
-        .sp-float     { animation: sp-float 4s ease-in-out infinite; }
-        .sp-glow-pulse{ animation: sp-glow-pulse 2.5s ease-in-out infinite; }
-        .sp-border-glow { animation: sp-border-glow 3s ease-in-out infinite; }
-        .sp-count-in  { animation: sp-count-in .5s cubic-bezier(.16,1,.3,1) .3s both; }
-
-        .sp-gauge-ring { animation: sp-gauge-draw 1.5s cubic-bezier(.16,1,.3,1) .5s both; }
+        /* ── Animations (minimal — institutional) ── */
+        @keyframes sp-fade-up  { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
+        @keyframes sp-fade-in  { from { opacity:0; } to { opacity:1; } }
+        @keyframes sp-spin     { to { transform:rotate(360deg); } }
+        @keyframes sp-bar-grow { from { height:0; } }
+        @keyframes sp-count-in { from{opacity:0;transform:scale(.96)} to{opacity:1;transform:scale(1)} }
         @keyframes sp-gauge-draw {
           from { stroke-dashoffset: ${circumference}; }
           to   { stroke-dashoffset: ${dashOffset}; }
         }
 
-        .sp-lbar-1 { height:20%; animation: sp-bar-grow .7s ease .4s both; }
-        .sp-lbar-2 { height:40%; animation: sp-bar-grow .7s ease .55s both; }
-        .sp-lbar-3 { height:70%; animation: sp-bar-grow .7s ease .7s both; }
-        .sp-lbar-4 { height:90%; animation: sp-bar-grow .7s ease .85s both; }
-        .sp-lbar-5 { height:100%; animation: sp-bar-grow .7s ease 1s both; }
+        .sp-fade-up   { animation: sp-fade-up .5s cubic-bezier(.2,.8,.4,1) both; }
+        .sp-fade-up-1 { animation: sp-fade-up .5s cubic-bezier(.2,.8,.4,1) .06s both; }
+        .sp-fade-up-2 { animation: sp-fade-up .5s cubic-bezier(.2,.8,.4,1) .12s both; }
+        .sp-fade-up-3 { animation: sp-fade-up .5s cubic-bezier(.2,.8,.4,1) .18s both; }
+        .sp-fade-up-4 { animation: sp-fade-up .5s cubic-bezier(.2,.8,.4,1) .24s both; }
+        .sp-fade-up-5 { animation: sp-fade-up .5s cubic-bezier(.2,.8,.4,1) .30s both; }
+        .sp-fade-in   { animation: sp-fade-in .4s ease both; }
+        .sp-spin      { animation: sp-spin .9s linear infinite; }
+        .sp-count-in  { animation: sp-count-in .4s cubic-bezier(.2,.8,.4,1) .2s both; }
+        .sp-gauge-ring { animation: sp-gauge-draw 1.2s cubic-bezier(.2,.8,.4,1) .4s both; }
 
-        .sp-terminal { position:relative; overflow:hidden; }
-        .sp-terminal::before {
-          content:''; position:absolute; left:0; right:0; height:2px;
-          background:linear-gradient(to right, transparent, ${C.secondary}, transparent);
-          animation: sp-scan-line 2.5s ease-in-out infinite;
+        .sp-lbar-1 { height:20%; animation: sp-bar-grow .6s ease .3s both; }
+        .sp-lbar-2 { height:40%; animation: sp-bar-grow .6s ease .45s both; }
+        .sp-lbar-3 { height:70%; animation: sp-bar-grow .6s ease .6s both; }
+        .sp-lbar-4 { height:90%; animation: sp-bar-grow .6s ease .75s both; }
+        .sp-lbar-5 { height:100%; animation: sp-bar-grow .6s ease .9s both; }
+
+        /* ── Navigation ── */
+        .sp-nav {
+          background: ${C.background}f4;
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
         }
 
-        .sp-card { transition: border-color .2s, transform .2s; }
-        .sp-card:hover { border-color: ${C.outline} !important; transform: translateY(-1px); }
-        .sp-row:hover td { background: ${C.charcoal} !important; }
-        .sp-nav { background: ${C.background}f0; backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); }
+        /* ── Cards ── */
+        .sp-card { transition: border-color .18s; }
+        .sp-card:hover { border-color: ${C.outline} !important; }
+        .sp-row:hover td { background: ${C.surfaceVariant} !important; }
 
-        .sp-toggle { border:1px solid ${C.outlineVariant}; background:transparent; color:${C.mutedSand}; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; padding:6px 12px; cursor:pointer; transition:all .15s; font-family:Inter,monospace; border-radius: 8px; }
-        .sp-toggle.on { background:${C.primaryContainer}20; border-color:${C.primaryContainer}; color:${C.primary}; }
-        .sp-toggle:hover:not(.on) { background:${C.surfaceVariant}30; border-color:${C.outline}; color:${C.onSurface}; }
+        /* ── Module toggle buttons ── */
+        .sp-toggle {
+          border: 1px solid ${C.outlineVariant};
+          background: transparent;
+          color: ${C.mutedSand};
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: .06em;
+          padding: 6px 14px;
+          cursor: pointer;
+          transition: all .15s;
+          font-family: 'JetBrains Mono', monospace;
+          border-radius: 4px;
+        }
+        .sp-toggle.on {
+          background: ${C.primaryContainer}18;
+          border-color: ${C.primary}60;
+          color: ${C.primary};
+        }
+        .sp-toggle:hover:not(.on) {
+          background: ${C.surfaceVariant};
+          border-color: ${C.outline};
+          color: ${C.onSurface};
+        }
 
-        .sp-tab { background:transparent; border:none; color:${C.mutedSand}; font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; padding:4px 12px; cursor:pointer; transition:all .15s; font-family:Inter,monospace; }
-        .sp-tab.on { background:${C.primaryContainer}; color:${C.onPrimary}; }
-        .sp-tab:hover:not(.on) { color:${C.onSurface}; }
+        /* ── Chart tab buttons ── */
+        .sp-tab {
+          background: transparent;
+          border: none;
+          color: ${C.mutedSand};
+          font-size: 9px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: .06em;
+          padding: 5px 14px;
+          cursor: pointer;
+          transition: all .15s;
+          font-family: 'JetBrains Mono', monospace;
+        }
+        .sp-tab.on { background: ${C.primary}; color: ${C.onPrimary}; }
+        .sp-tab:hover:not(.on) { color: ${C.onSurface}; }
 
-        .sp-tip { background:${C.surfaceContainerHigh}; border:1px solid ${C.outlineVariant}; padding:8px 12px; font-family:Inter,monospace; font-size:10px; }
+        /* ── Tooltip ── */
+        .sp-tip {
+          background: ${C.surfaceContainerHigh};
+          border: 1px solid ${C.outlineVariant};
+          padding: 8px 12px;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 10px;
+          border-radius: 3px;
+        }
 
-        .tabular-nums { font-variant-numeric:tabular-nums; }
-        .material-symbols-outlined { font-family:'Material Symbols Outlined'; font-style:normal; line-height:1; text-transform:none; white-space:nowrap; word-wrap:normal; direction:ltr; -webkit-font-smoothing:antialiased; }
-        .sp-breakeven-fill { transition: width 1.2s cubic-bezier(.16,1,.3,1); }
+        /* ── Typography utilities ── */
+        .tabular-nums { font-variant-numeric: tabular-nums; }
+        .sp-serif { font-family: 'DM Serif Display', Georgia, serif; }
+        .sp-mono  { font-family: 'JetBrains Mono', monospace; }
+        .material-symbols-outlined {
+          font-family: 'Material Symbols Outlined';
+          font-style: normal;
+          line-height: 1;
+          text-transform: none;
+          white-space: nowrap;
+          word-wrap: normal;
+          direction: ltr;
+          -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── Section header label ── */
+        .sp-section-label {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 9px;
+          font-weight: 600;
+          letter-spacing: .1em;
+          text-transform: uppercase;
+          color: ${C.mutedSand};
+        }
+
+        /* ── Metric value (large number) ── */
+        .sp-metric-value {
+          font-family: 'DM Serif Display', Georgia, serif;
+          font-size: 26px;
+          line-height: 1.1;
+          font-variant-numeric: tabular-nums;
+          color: ${C.onSurface};
+        }
+
+        /* ── Table ── */
+        .sp-table-header th {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 9px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: .08em;
+          color: ${C.mutedSand};
+          padding: 10px 12px;
+          background: ${C.surfaceVariant};
+          text-align: right;
+        }
+        .sp-table-header th:first-child { text-align: left; }
+        .sp-table-body td {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 11px;
+          font-variant-numeric: tabular-nums;
+          padding: 8px 12px;
+          text-align: right;
+          border-bottom: 1px solid ${C.outlineVariant}50;
+        }
+        .sp-table-body td:first-child { text-align: left; color: ${C.mutedSand}; font-size: 10px; }
+        .sp-table-body tr:nth-child(even) td { background: ${C.surfaceVariant}30; }
+        .sp-table-body tr:hover td { background: ${C.surfaceVariant} !important; }
+
+        /* ── Print / PDF optimisation ── */
+        @media print {
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          .sp-nav, .no-print { display: none !important; }
+          .sp-page { background: #0E0E0F !important; }
+          section, .sp-card { break-inside: avoid; page-break-inside: avoid; }
+          .sp-page-break { page-break-before: always; }
+        }
       `}</style>
 
       <div className="sp-page min-h-screen" style={{ background: C.background, color: C.onSurface }}>
@@ -725,16 +1310,27 @@ const ResultsPage = () => {
         {/* ── Header ──────────────────────────────────────────── */}
         <header className="sp-nav sticky top-0 z-50" style={{ borderBottom: `1px solid ${C.outlineVariant}` }}>
           <div className="flex justify-between items-center px-4 md:px-16 py-3 mx-auto max-w-[1280px]">
-            <div style={{ fontFamily: "Sora, sans-serif", color: C.mutedSand, fontSize: "20px", fontWeight: 500, letterSpacing: "-0.01em" }}>
-              SUNPOWER LINK
-            </div>
-            <nav className="hidden md:flex gap-6">
+            <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} className="flex items-center gap-2 group cursor-pointer">
+              <img src="/logo.png" alt="SUNPOWER LINK Logo" className="w-10 h-10 object-contain transition-all duration-300 group-hover:scale-105" />
+              <div style={{ fontFamily: "Sora, sans-serif", color: C.mutedSand, fontSize: "20px", fontWeight: 500, letterSpacing: "-0.01em" }}>
+                SUNPOWER <span style={{ fontStyle: "italic", fontWeight: 300 }}>LINK</span>
+              </div>
+            </a>
+            <nav className="hidden md:flex gap-6 items-center">
               <a style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/")}>Home</a>
               <a style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/market-insights")}>Market Insights</a>
               <a style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/policy-tracker")}>Policy Tracker</a>
+              {user ? (
+                <>
+                  <a style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/my-scans")}>My Scans</a>
+                  <a style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/settings")}>Settings</a>
+                  <a style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-red-400 transition-colors cursor-pointer" onClick={signOut}>Sign Out</a>
+                </>
+              ) : (
+                <a style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/auth/signin")}>Sign In</a>
+              )}
             </nav>
             <div className="flex items-center gap-2 md:gap-3">
-              <AnimatedThemeToggleButton type="vertical" />
               <button onClick={() => navigate("/map")}
                 aria-label="Go back to map"
                 style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
@@ -742,11 +1338,19 @@ const ResultsPage = () => {
                 <ArrowLeft className="w-3 h-3" /> Back
               </button>
               {unlocked && (
-                <button onClick={handleDownload} disabled={downloading}
-                  style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                  className="hidden md:flex items-center gap-1.5 px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity disabled:opacity-40 cursor-pointer rounded-lg">
-                  <Download className="w-3 h-3" /> {downloading ? "Generating..." : "Download PDF"}
-                </button>
+                <>
+                  <button onClick={handleDownload} disabled={downloading}
+                    style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+                    className="hidden md:flex items-center gap-1.5 px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity disabled:opacity-40 cursor-pointer rounded-lg">
+                    {downloading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                    {downloading ? "Generating..." : "Download PDF"}
+                  </button>
+                  <button onClick={() => setShareModalOpen(true)}
+                    style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+                    className="hidden md:flex items-center gap-1.5 px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-lg">
+                    <span>📱</span> Share on WhatsApp
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -762,39 +1366,42 @@ const ResultsPage = () => {
             </div>
           )}
 
-          {/* ── Document Header ──────────────────────────────── */}
-          <section style={{ borderBottom: `1px solid ${C.outlineVariant}` }} className="pb-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-4 sp-fade-up">
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider mb-2 font-mono" style={{ color: C.mutedSand }}>
-                Technical Prospectus · Site ID: {data.analysisId?.slice(-6).toUpperCase() ?? "8492-B"}
+          {/* ── Section A: Document Header (Report Identity) ──────────────── */}
+          <section className="pb-4 sp-fade-up border-b" style={{ borderColor: C.outlineVariant }}>
+            <div className="flex flex-col md:flex-row justify-between items-baseline gap-2 mb-3">
+              <div className="text-lg font-semibold tracking-wider sp-mono text-[#F0EEE9]">
+                SUNPOWER LINK
               </div>
-              <h1 style={{ fontFamily: "Sora, sans-serif", color: C.onSurface, fontSize: "clamp(24px,4vw,36px)", fontWeight: 500, lineHeight: 1.1, letterSpacing: "-0.01em" }} className="mb-2">
-                {data.location?.label ? data.location.label.split(",")[0] : "Premium Solar Analysis"}
-              </h1>
-              {data.location?.label && (
-                <p className="text-xs flex items-center gap-1.5" style={{ color: C.mutedSand }}>
-                  <MapPin className="w-3 h-3 shrink-0" /> {data.location.label}
-                </p>
-              )}
-              <p style={{ color: C.mutedSand, fontSize: "13px" }} className="max-w-2xl mt-2">
-                Detailed financial intelligence and operational projections based on geospatial irradiance modeling and localized tariff structures.
-              </p>
+              <div className="text-[10px] font-semibold tracking-widest sp-mono text-neutral-500 uppercase flex gap-4">
+                <span>TECHNICAL PROSPECTUS</span>
+                <span>Q3 2026</span>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2 shrink-0">
-              <div style={{ background: `${C.secondary}15`, border: `1px solid ${C.secondary}`, color: C.secondary }} className="flex items-center gap-2 px-4 py-2 sp-glow-pulse rounded-lg">
-                <CheckCircle2 className="w-4 h-4" />
-                <span className="text-[10px] font-bold uppercase tracking-wider">Investment Grade: A+</span>
-              </div>
-              {data.windZoneLabel && (
-                <div style={{ 
-                  background: data.highWindWarning ? `${C.error}15` : `${C.secondary}15`, 
-                  border: `1px solid ${data.highWindWarning ? C.error : C.secondary}`, 
-                  color: data.highWindWarning ? C.error : C.secondary 
-                }} className="flex items-center gap-2 px-4 py-2 rounded-lg">
-                  <span className="material-symbols-outlined text-[14px]">windpower</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Wind: {data.windZoneLabel}</span>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t" style={{ borderColor: C.outlineVariant }}>
+              <div className="space-y-1">
+                <div className="text-[11px] sp-mono text-[#8A8A99]">
+                  Site ID: <span className="text-[#F0EEE9] font-medium">{data.analysisId?.slice(-6).toUpperCase() ?? "DV3ZEF"}</span>
                 </div>
-              )}
+                <div className="text-[11px] text-neutral-400">
+                  Location: <span className="sp-mono text-[#F0EEE9]">{data.location?.label ? data.location.label.split(",").slice(0,2).join(",") : "20.8251, 77.3409"}</span>
+                </div>
+              </div>
+              
+              <div className="flex flex-col md:items-end justify-between gap-1">
+                <div className="text-[11px] text-neutral-400">
+                  Generated: <span className="sp-mono text-[#F0EEE9]">17 July 2026</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-neutral-400">Confidence:</span>
+                  <div
+                    style={{ background: badgeBg, border: `1px solid ${badgeColor}`, color: badgeColor }}
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider font-mono"
+                  >
+                    {confidenceScore}%
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -803,94 +1410,501 @@ const ResultsPage = () => {
                UNLOCKED STATE
             ================================================================ */
             <>
-              {/* Executive Highlights Bar */}
-              <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="sp-fade-up-1 rounded-2xl overflow-hidden">
-                <div className="py-4 px-6 grid grid-cols-2 md:grid-cols-5 gap-4" style={{ borderBottom: `1px solid ${C.outlineVariant}` }}>
-                  {[
-                    { label: "IRR",             value: `${model.irr.toFixed(1)}%`,              color: C.onSurface },
-                    { label: "Payback Period",  value: `${model.paybackPeriod.toFixed(1)} Yrs`, color: C.onSurface },
-                    { label: "LCOE",            value: `₹${model.lcoe.toFixed(2)}`, sub: "/ kWh", color: C.onSurface },
-                    { label: "Lifetime Savings",value: `₹${savings25L}L`,                       color: C.secondary },
-                    { label: "System Size",     value: `${model.installedKw.toFixed(1)} kWp`,   color: C.onSurface },
-                  ].map((item, i) => (
-                    <div key={i} style={{ borderLeft: i > 0 ? `1px solid ${C.outlineVariant}` : "none", paddingLeft: i > 0 ? "16px" : "0" }} className="animate-slide-up">
-                      <div className="text-[10px] font-bold uppercase tracking-wider mb-1 font-mono" style={{ color: C.mutedSand }}>{item.label}</div>
-                      <div className="tabular-nums font-semibold sp-count-in" style={{ fontFamily: "Sora, sans-serif", fontSize: "20px", lineHeight: 1.3, color: item.color }}>
-                        {item.value}{item.sub && <span className="text-xs ml-1" style={{ color: C.mutedSand }}>{item.sub}</span>}
-                      </div>
+              {/* ── Section B: Executive Summary Metric Grid ──────────────── */}
+              <section className="sp-fade-up-1 grid grid-cols-1 md:grid-cols-4 border-l border-t" style={{ borderColor: C.outlineVariant }}>
+                {/* 1. System Size */}
+                <div className="p-5 border-r border-b flex flex-col justify-between h-36" style={{ borderColor: C.outlineVariant }}>
+                  <div>
+                    <div className="sp-section-label mb-1">System Size</div>
+                    <div className="sp-metric-value">{model.installedKw.toFixed(1)} <span className="text-sm font-sans font-normal text-neutral-400">kWp</span></div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-[9px] sp-mono text-neutral-500 mb-1">
+                      <span>Roof Utilization</span>
+                      <span>{Math.round((pCount / maxPanelsRef.current) * 100)}%</span>
                     </div>
-                  ))}
+                    <div className="h-1 w-full bg-neutral-800 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(pCount / maxPanelsRef.current) * 100}%`, background: C.secondary }} />
+                    </div>
+                  </div>
                 </div>
-                <div className="py-4 px-6 grid grid-cols-2 md:grid-cols-3 gap-4" style={{ background: `${C.surfaceVariant}22` }}>
-                  {[
-                    { label: "Net Present Value (NPV)", value: `${model.npv >= 0 ? "+" : ""}₹${Math.round(Math.abs(model.npv)/1000)}k`, color: model.npv >= 0 ? C.onSurface : C.error },
-                    { label: "Return on Equity (ROE)",  value: `${(model.irr * 1.1).toFixed(1)}%`,                                      color: C.onSurface },
-                    { label: "PM Surya Subsidy",        value: `₹${model.subsidyInr.toLocaleString()}`,                                 color: C.primary },
-                  ].map((item, i) => (
-                    <div key={i} style={{ borderLeft: i > 0 ? `1px solid ${C.outlineVariant}` : "none", paddingLeft: i > 0 ? "16px" : "0" }}>
-                      <div className="text-[10px] font-bold uppercase tracking-wider mb-1 font-mono" style={{ color: C.mutedSand }}>{item.label}</div>
-                      <div className="tabular-nums font-semibold sp-count-in" style={{ fontFamily: "Sora, sans-serif", fontSize: "20px", color: item.color }}>{item.value}</div>
+
+                {/* 2. Annual Production */}
+                <div className="p-5 border-r border-b flex flex-col justify-between h-36" style={{ borderColor: C.outlineVariant }}>
+                  <div>
+                    <div className="sp-section-label mb-1">Annual Prod</div>
+                    <div className="sp-metric-value">{Math.round(model.baseAnnualKwh).toLocaleString()} <span className="text-sm font-sans font-normal text-neutral-400">kWh</span></div>
+                  </div>
+                  <div className="flex items-end justify-between gap-2">
+                    <span className="text-[9px] sp-mono text-neutral-500">25-Yr Decline</span>
+                    <svg className="w-24 h-6 opacity-60" viewBox="0 0 100 20">
+                      <path
+                        d="M0,2 L10,3 L20,4 L30,5 L40,5 L50,6 L60,7 L70,8 L80,9 L90,10 L100,11"
+                        fill="none"
+                        stroke={C.secondary}
+                        strokeWidth="1.5"
+                      />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* 3. Payback Period */}
+                <div className="p-5 border-r border-b flex flex-col justify-between h-36" style={{ borderColor: C.outlineVariant }}>
+                  <div>
+                    <div className="sp-section-label mb-1">Payback Period</div>
+                    <div className="sp-metric-value">{model.paybackPeriod.toFixed(1)} <span className="text-sm font-sans font-normal text-neutral-400">Years</span></div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-[9px] sp-mono text-neutral-500 mb-1">
+                      <span>ROI Threshold</span>
+                      <span>{model.paybackPeriod.toFixed(1)} / 25 Yrs</span>
                     </div>
-                  ))}
+                    <div className="h-1 w-full bg-neutral-800 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, (model.paybackPeriod / 25) * 100)}%`, background: C.primary }} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Lifetime Savings */}
+                <div className="p-5 border-r border-b flex flex-col justify-between h-36" style={{ borderColor: C.outlineVariant }}>
+                  <div>
+                    <div className="sp-section-label mb-1 text-[#E8A020]">Lifetime Savings</div>
+                    <div className="sp-metric-value text-[#E8A020]">₹{savings25L} <span className="text-sm font-sans font-normal text-[#E8A020]/75">Lakhs</span></div>
+                  </div>
+                  <div className="flex items-end justify-between">
+                    <span className="text-[9px] sp-mono text-neutral-500">Waterfall Trend</span>
+                    <div className="flex items-end gap-1.5 h-6">
+                      <div className="w-2.5 bg-red-500/80 rounded-sm" style={{ height: "40%" }} />
+                      <div className="w-2.5 bg-emerald-500/80 rounded-sm" style={{ height: "20%" }} />
+                      <div className="w-2.5 bg-emerald-500/80 rounded-sm" style={{ height: "45%" }} />
+                      <div className="w-2.5 bg-emerald-500/80 rounded-sm" style={{ height: "70%" }} />
+                      <div className="w-2.5 bg-emerald-500/80 rounded-sm" style={{ height: "95%" }} />
+                    </div>
+                  </div>
                 </div>
               </section>
 
-              {/* Suitability & Roof Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sp-fade-up-2">
-                {/* Suitability Score Gauge */}
-                <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 flex flex-col items-center justify-center relative sp-card rounded-2xl">
-                  <div className="absolute top-4 left-4 text-[10px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>Suitability Score</div>
-                  <div className="relative w-40 h-40 flex items-center justify-center mt-4">
-                    <svg className="w-full h-full" style={{ transform: "rotate(-90deg)" }} viewBox="0 0 100 100">
-                      <circle cx="50" cy="50" r="45" fill="none" stroke={C.surfaceVariant} strokeWidth="4" />
-                      <circle cx="50" cy="50" r="45" fill="none" stroke={C.secondary} strokeWidth="4"
-                        strokeDasharray={circumference} strokeDashoffset={dashOffset}
-                        className="sp-gauge-ring" style={{ strokeLinecap: "round" }} />
-                    </svg>
-                    <div className="absolute flex flex-col items-center sp-count-in">
-                      <span style={{ fontFamily: "Sora, sans-serif", fontSize: "36px", fontWeight: 500, color: C.onSurface }} className="tabular-nums">{suitability}</span>
-                      <span className="text-[10px] font-bold" style={{ color: C.mutedSand }}>/ 100</span>
-                    </div>
+              {/* Auxiliary Financial Highlight strip */}
+              <section className="py-3 px-5 sp-fade-up-1 grid grid-cols-3 gap-4 border-l border-r border-b" style={{ background: `${C.surfaceVariant}22`, borderColor: C.outlineVariant }}>
+                {[
+                  { label: "Net Capital Outlay", value: `₹${Math.round(model.netCostInr).toLocaleString()}`, color: C.onSurface },
+                  { label: "Net Present Value (NPV)", value: `${model.npv >= 0 ? "+" : ""}₹${Math.round(model.npv).toLocaleString()}`, color: model.npv >= 0 ? C.secondary : C.error },
+                  { label: "PM Surya Ghar Subsidy", value: `₹${model.subsidyInr.toLocaleString()}`, color: C.primary },
+                ].map((item, i) => (
+                  <div key={i} className="flex flex-col justify-center">
+                    <div className="text-[9px] font-bold uppercase tracking-wider mb-0.5 font-mono text-neutral-500">{item.label}</div>
+                    <div className="tabular-nums font-semibold text-sm sp-mono" style={{ color: item.color }}>{item.value}</div>
                   </div>
-                  <p className="mt-4 text-center text-xs" style={{ color: C.mutedSand }}>
-                    Excellent solar potential based on roof orientation and shading analysis.
+                ))}
+              </section>
+
+              {/* Competitive Differentiators: Wind & Temp Derating */}
+              {(() => {
+                const isIndia = !!data?.location && (
+                  data.location.label?.toLowerCase().includes("india") ||
+                  (data.location.lat >= 8 && data.location.lat <= 38 && data.location.lng >= 68 && data.location.lng <= 98)
+                );
+                return (
+                  <section className="sp-fade-up-1 grid grid-cols-1 md:grid-cols-2 border-l border-r border-b" style={{ borderColor: C.outlineVariant }}>
+                    {/* Wind Zone Classification Card */}
+                    <div className="p-5 border-r border-b md:border-b-0 flex flex-col justify-between h-36" style={{ borderColor: C.outlineVariant }}>
+                      <div>
+                        <div className="sp-section-label mb-1.5">Wind Zone Classification</div>
+                        {isIndia ? (
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider font-mono bg-[#E8A020]10 text-[#E8A020] border border-[#E8A020]20">
+                                {data.windZone?.label ?? "Low Wind Zone"}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-neutral-400 font-mono mt-1">
+                              IS 875 Part 3 Structures
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider font-mono bg-neutral-800 text-neutral-400">
+                            N/A (Non-India)
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-[9px] sp-mono text-neutral-500 mb-0.5">
+                          {data.ws10m ? `Average Wind Speed (10m): ${data.ws10m.toFixed(2)} m/s` : "No wind data available"}
+                        </div>
+                        {isIndia && (
+                          <div className="text-xs font-semibold font-mono" style={{ color: C.primary }}>
+                            Cost Adder: {data.windZone ? `₹${calcWindCostAdder(data.windZone?.zone).toLocaleString()}/kWp` : "₹0/kWp"}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Temperature Adjusted Card */}
+                    <div className="p-5 flex flex-col justify-between h-36" style={{ borderColor: C.outlineVariant }}>
+                      <div>
+                        <div className="sp-section-label mb-1.5">Temperature Adjusted Yield</div>
+                        <div className="sp-metric-value text-red-400" style={{ color: C.error }}>
+                          {data.tempDerate ? `-${Math.round((1 - data.tempDerate) * 100)}%` : "0%"} <span className="text-sm font-sans font-normal text-neutral-400">output loss</span>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] sp-mono text-neutral-500 mb-0.5">
+                          Cell temp: {data.t2m ? `${(data.t2m + 28).toFixed(1)}°C` : "N/A"} (ambient: {data.t2m ? `${data.t2m.toFixed(1)}°C` : "N/A"})
+                        </div>
+                        <div className="text-xs font-semibold font-mono text-red-400" style={{ color: C.error }}>
+                          Temp Coefficient: -0.35% / °C above 25°C
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                );
+              })()}
+
+              {/* PM-Surya Ghar Subsidy Eligibility Checker */}
+              {(() => {
+                const isIndia = !!data?.location && (
+                  data.location.label?.toLowerCase().includes("india") ||
+                  (data.location.lat >= 8 && data.location.lat <= 38 && data.location.lng >= 68 && data.location.lng <= 98)
+                );
+                if (!isIndia) return null;
+
+                const hasNeStateIneligibility = !isEligible(eligibilityState, eligibilityConnectionType);
+                const isSystemSizeTooLarge = model.installedKw > 10;
+                
+                // Eligibility conditions
+                const isEligibleForSubsidy = 
+                  checklistResidential && 
+                  checklistGridConnected && 
+                  !hasNeStateIneligibility && 
+                  !isSystemSizeTooLarge;
+
+                const subsidyAmt = isEligibleForSubsidy ? calcPMSuryaSubsidy(model.installedKw) : 0;
+                
+                const reasons: string[] = [];
+                if (!checklistResidential) reasons.push("Property must be residential (domestic connection)");
+                if (!checklistGridConnected) reasons.push("Must be a grid-connected system");
+                if (hasNeStateIneligibility) reasons.push("Standard central subsidies do not apply or require special rates in NE states");
+                if (isSystemSizeTooLarge) reasons.push("System size exceeds 10 kWp limit for standard PM-Surya Ghar scheme");
+
+                return (
+                  <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 sp-card rounded-[4px] sp-fade-up-1">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h3 style={{ color: C.onSurface }} className="text-xs font-bold uppercase tracking-wider font-mono">
+                          PM-Surya Ghar Subsidy Eligibility
+                        </h3>
+                        <p style={{ color: C.mutedSand }} className="text-[11px] mt-1 font-sans">
+                          Verify your eligibility under the central government PM-Surya Ghar Muft Bijli Yojana rooftop solar scheme.
+                        </p>
+                      </div>
+                      {isEligibleForSubsidy ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          Eligible
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider font-mono bg-red-500/10 text-red-400 border border-red-500/20">
+                          Ineligible
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                      {/* Left: Interactive Checklist */}
+                      <div className="space-y-3">
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={checklistResidential}
+                            onChange={(e) => {
+                              setChecklistResidential(e.target.checked);
+                              setEligibilityConnectionType(e.target.checked ? "domestic" : "commercial");
+                            }}
+                            className="w-3.5 h-3.5 rounded border-neutral-600 bg-neutral-900 text-[#E8A020] focus:ring-0 focus:ring-offset-0"
+                          />
+                          <span style={{ color: C.onSurface }} className="text-xs font-mono">Residential Property (Domestic)</span>
+                        </label>
+
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={checklistGridConnected}
+                            onChange={(e) => setChecklistGridConnected(e.target.checked)}
+                            className="w-3.5 h-3.5 rounded border-neutral-600 bg-neutral-900 text-[#E8A020] focus:ring-0 focus:ring-offset-0"
+                          />
+                          <span style={{ color: C.onSurface }} className="text-xs font-mono">Grid-Connected System</span>
+                        </label>
+
+                        {/* State selector */}
+                        <div className="flex flex-col gap-1.5">
+                          <label style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono">
+                            Select State
+                          </label>
+                          <select
+                            value={eligibilityState}
+                            onChange={(e) => setEligibilityState(e.target.value)}
+                            style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+                            className="px-2 py-1.5 rounded text-xs focus:outline-none font-mono w-full"
+                          >
+                            {INDIAN_STATES.map(s => (
+                              <option key={s} value={s}>{s}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* System size check */}
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={!isSystemSizeTooLarge}
+                            readOnly
+                            className="w-3.5 h-3.5 rounded border-neutral-600 bg-neutral-900 text-[#E8A020] focus:ring-0 focus:ring-offset-0 opacity-80 cursor-not-allowed"
+                          />
+                          <span style={{ color: C.onSurface }} className="text-xs font-mono">
+                            System Size ({model.installedKw.toFixed(2)} kWp) ≤ 10 kWp
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Right: Subsidy Result Output */}
+                      <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 rounded-[4px] flex flex-col justify-between">
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-wider font-mono text-neutral-400">
+                            Calculation Output
+                          </div>
+                          
+                          {isEligibleForSubsidy ? (
+                            <div className="mt-3">
+                              <div className="text-2xl font-bold font-mono text-emerald-400" style={{ color: C.secondary }}>
+                                ₹{subsidyAmt.toLocaleString()}
+                              </div>
+                              <p className="text-[10px] text-neutral-400 font-sans mt-1">
+                                Eligible for direct central government subsidy under PM-Surya Ghar Scheme guidelines.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="mt-3">
+                              <div className="text-xs font-bold text-red-400 uppercase font-mono" style={{ color: C.error }}>
+                                Not Eligible
+                              </div>
+                              <ul className="text-[10px] text-neutral-400 list-disc pl-4 mt-2 space-y-1 font-mono">
+                                {reasons.map((r, i) => (
+                                  <li key={i}>{r}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Pre-fill Form Button */}
+                        {isEligibleForSubsidy && (
+                          <button
+                            onClick={() => {
+                              generatePMSuryaApplicationPDF({
+                                name: user?.email ? user.email.split("@")[0] : "Applicant Name",
+                                phone: "9876543210",
+                                systemSizeKw: model.installedKw,
+                                estimatedCost: model.grossCost,
+                                subsidyAmount: subsidyAmt,
+                                state: eligibilityState
+                              });
+                              toast({ title: "Application Form Pre-Filled", description: "Downloaded pre-filled PDF application form." });
+                            }}
+                            style={{ background: C.secondary, color: C.onSecondary }}
+                            className="mt-4 w-full py-2.5 text-[10px] font-bold uppercase tracking-wider rounded-[3px] hover:opacity-90 transition-opacity font-mono cursor-pointer flex items-center justify-center gap-1.5 border-none"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            Download Pre-filled Application Form
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+                );
+              })()}
+
+              {/* Referral & Viral Sharing Section */}
+              {(() => {
+                const shareDetails = getReferralShareContent(referralState.referralCode, data?.location?.label || "my roof");
+                
+                return (
+                  <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 mt-4 sp-card rounded-[4px] sp-fade-up-1">
+                    <div className="flex flex-col md:flex-row justify-between items-start gap-6">
+                      
+                      {/* Left: Share Details & Actions */}
+                      <div className="flex-1 space-y-4 w-full">
+                        <div>
+                          <h3 style={{ color: C.onSurface }} className="text-xs font-bold uppercase tracking-wider font-mono">
+                            Share Solar Potential & Earn
+                          </h3>
+                          <p style={{ color: C.mutedSand }} className="text-[11px] mt-1 font-sans">
+                            Refer your friends or neighbours to SolarScan. You earn <span className="font-bold text-[#E8A020]">₹50 cashback</span> for every paid report they unlock, and they get <span className="font-bold text-emerald-400">₹20 off</span> their first scan.
+                          </p>
+                        </div>
+
+                        {/* Stats indicator */}
+                        <div className="grid grid-cols-3 gap-3">
+                          <div style={{ background: C.background, border: `1px solid ${C.outlineVariant}` }} className="p-2.5 rounded text-center">
+                            <span style={{ color: C.mutedSand }} className="text-[9px] font-bold block uppercase font-mono">My Code</span>
+                            <span style={{ color: C.primary }} className="text-xs font-bold font-mono block mt-0.5">{referralState.referralCode}</span>
+                          </div>
+                          <div style={{ background: C.background, border: `1px solid ${C.outlineVariant}` }} className="p-2.5 rounded text-center">
+                            <span style={{ color: C.mutedSand }} className="text-[9px] font-bold block uppercase font-mono">Referred Scans</span>
+                            <span style={{ color: C.onSurface }} className="text-xs font-bold font-mono block mt-0.5">{referralState.referredScansCount}</span>
+                          </div>
+                          <div style={{ background: C.background, border: `1px solid ${C.outlineVariant}` }} className="p-2.5 rounded text-center">
+                            <span style={{ color: C.mutedSand }} className="text-[9px] font-bold block uppercase font-mono">Cashback Earned</span>
+                            <span style={{ color: C.secondary }} className="text-xs font-bold font-mono block mt-0.5">₹{referralState.cashbackEarnedInr}</span>
+                          </div>
+                        </div>
+
+                        {/* Referral Link & Copy */}
+                        <div className="flex flex-col gap-1.5">
+                          <span style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono">My Referral Link</span>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              readOnly
+                              value={shareDetails.referralLink}
+                              style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+                              className="px-3 py-1.5 rounded text-xs focus:outline-none font-mono flex-1 min-w-0"
+                            />
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(shareDetails.referralLink);
+                                toast({ title: "Link Copied", description: "Referral URL copied to clipboard." });
+                              }}
+                              style={{ border: `1px solid ${C.outlineVariant}`, color: C.onSurface, background: "transparent" }}
+                              className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-[3px] hover:bg-neutral-800 transition-colors cursor-pointer font-mono border"
+                            >
+                              Copy
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Viral Sharing Buttons */}
+                        <div className="flex flex-wrap gap-2.5">
+                          <a
+                            href={shareDetails.whatsappUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ background: "#25D366", color: "#075E54" }}
+                            className="flex-1 min-w-[120px] py-2 text-[10px] font-bold uppercase tracking-wider rounded-[3px] text-center hover:opacity-90 transition-opacity font-mono flex items-center justify-center gap-1.5 cursor-pointer decoration-none"
+                          >
+                            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.625 1.451 5.403.002 9.792-4.382 9.795-9.79.001-2.621-1.013-5.086-2.856-6.93C16.328 2.05 13.87 1.037 11.26 1.036c-5.4.001-9.791 4.384-9.793 9.793-.001 1.543.41 3.05 1.194 4.376l-1.018 3.722 3.834-.997c1.3.7 2.6 1.07 4.17 1.026z"/></svg>
+                            Share on WhatsApp
+                          </a>
+                          
+                          <a
+                            href={shareDetails.twitterUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ background: "#1DA1F2", color: "#FFFFFF" }}
+                            className="flex-1 min-w-[120px] py-2 text-[10px] font-bold uppercase tracking-wider rounded-[3px] text-center hover:opacity-90 transition-opacity font-mono flex items-center justify-center gap-1.5 cursor-pointer decoration-none"
+                          >
+                            Share on X
+                          </a>
+                          
+                          <a
+                            href={shareDetails.facebookUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ background: "#1877F2", color: "#FFFFFF" }}
+                            className="flex-1 min-w-[120px] py-2 text-[10px] font-bold uppercase tracking-wider rounded-[3px] text-center hover:opacity-90 transition-opacity font-mono flex items-center justify-center gap-1.5 cursor-pointer decoration-none"
+                          >
+                            Share on Facebook
+                          </a>
+                        </div>
+                      </div>
+
+                      {/* Right: Leaderboard */}
+                      <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 rounded-[4px] w-full md:w-80 shrink-0">
+                        <div className="text-[10px] font-bold uppercase tracking-wider font-mono text-neutral-400 border-b border-neutral-800 pb-2 mb-2 flex justify-between">
+                          <span>Leaderboard Standing</span>
+                          <span style={{ color: C.secondary }}>Monthly Prizes</span>
+                        </div>
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                          {MONTHLY_LEADERBOARD.map((item) => (
+                            <div key={item.rank} className="flex justify-between items-center text-[10px] font-mono py-1 border-b border-neutral-900 last:border-0">
+                              <div className="flex items-center gap-2">
+                                <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold ${item.rank <= 3 ? "bg-[#E8A020] text-black" : "bg-neutral-800 text-neutral-400"}`}>
+                                  {item.rank}
+                                </span>
+                                <span style={{ color: C.onSurface }} className="truncate max-w-[90px]">{item.name}</span>
+                              </div>
+                              <span style={{ color: C.mutedSand }}>{item.referrals} refs</span>
+                              <span style={{ color: C.secondary }} className="text-[8px] font-bold truncate max-w-[90px] text-right">{item.prize}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                    </div>
+                  </section>
+                );
+              })()}
+
+              {/* ── Section C: Suitability & Roof Grid ──────────────── */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sp-fade-up-2">
+                {/* Suitability Score Gauge */}
+                <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 flex flex-col items-center justify-center relative sp-card rounded-[4px]">
+                  <div className="absolute top-4 left-4 text-[9px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>Suitability Score</div>
+                  <div className="mt-4 flex items-center justify-center">
+                    <Gauge
+                      value={suitability}
+                      centerValue={suitability}
+                      defaultLabel="Suitability"
+                      suffix="/100"
+                      totalNotches={36}
+                      spacing={22}
+                      useGradient
+                      activeGradient={suitability >= 80 ? ["#FF6600", "#10B981"] : ["#FF6600", "#F59E0B"]}
+                      width={170}
+                      height={170}
+                    />
+                  </div>
+                  <p className="mt-2 text-center text-[11px] leading-relaxed text-neutral-400">
+                    {suitability >= 90
+                      ? "Excellent solar potential based on roof orientation and shading analysis."
+                      : suitability >= 75
+                      ? "Good solar potential with minor optimization recommended for shading/orientation."
+                      : "Moderate solar potential. Shading or roof structural constraints may limit overall efficiency."}
                   </p>
                 </section>
 
                 {/* Factor Breakdown */}
-                <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 flex flex-col sp-card rounded-2xl">
-                  <div className="text-[10px] font-bold uppercase tracking-wider mb-4 font-mono" style={{ color: C.mutedSand }}>Factor Breakdown</div>
-                  <div className="flex flex-col gap-3 flex-1 justify-center">
+                <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 flex flex-col sp-card rounded-[4px] justify-between">
+                  <div className="text-[9px] font-bold uppercase tracking-wider font-mono mb-4" style={{ color: C.mutedSand }}>Factor Breakdown</div>
+                  <div className="flex flex-col gap-3.5 my-auto">
                     {[
-                      { label: "Solar Orientation", pct: 94 },
-                      { label: "Roof Area",          pct: 88 },
-                      { label: "Shading Loss",       pct: suitability },
-                      { label: "Structural",         pct: 96 },
+                      { label: "Solar Orientation", pct: orientationScore },
+                      { label: "Roof Area",          pct: areaScore },
+                      { label: "Shading Loss",       pct: shadingScore },
+                      { label: "Structural",         pct: structuralScore },
                     ].map((f) => (
                       <div key={f.label} className="flex items-center gap-3">
-                        <span className="text-xs font-mono shrink-0 text-left" style={{ color: C.mutedSand, width: 110 }}>{f.label}</span>
-                        <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: C.surfaceVariant }}>
-                          <div style={{ width: `${f.pct}%`, background: C.secondary, height: "100%", borderRadius: "9999px", transition: "width 1.2s cubic-bezier(.16,1,.3,1)" }} />
+                        <span className="text-[11px] font-mono shrink-0 text-left" style={{ color: C.mutedSand, width: 115 }}>{f.label}</span>
+                        <div className="flex-1 h-1 bg-neutral-800 rounded-none overflow-hidden">
+                          <div style={{ width: `${f.pct}%`, background: C.secondary, height: "100%", transition: "width 1.2s cubic-bezier(.2,.8,.4,1)" }} />
                         </div>
-                        <span className="text-[10px] font-mono tabular-nums" style={{ color: C.secondary }}>{f.pct}%</span>
+                        <span className="text-[11px] font-mono tabular-nums w-8 text-right" style={{ color: C.secondary }}>{f.pct}%</span>
                       </div>
                     ))}
                   </div>
                 </section>
 
                 {/* Roof Utilization */}
-                <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 flex flex-col sp-card rounded-2xl">
-                  <div className="text-[10px] font-bold uppercase tracking-wider mb-4 font-mono" style={{ color: C.mutedSand }}>Roof Utilization</div>
+                <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 flex flex-col sp-card rounded-[4px] justify-between">
+                  <div className="text-[9px] font-bold uppercase tracking-wider font-mono mb-4" style={{ color: C.mutedSand }}>Roof Utilization</div>
                   <div className="flex flex-col gap-4 mt-auto">
-                    <div className="w-full h-8 flex overflow-hidden rounded-lg">
+                    <div className="w-full h-6 flex overflow-hidden rounded-none">
                       <div style={{ background: C.secondary,       width: `${roofUsable}%`,  transition: "width 1.2s ease" }} />
-                      <div style={{ background: C.surfaceVariant,  width: `${roofObst}%`,    transition: "width 1.2s ease .1s" }} />
-                      <div style={{ background: C.primaryContainer,width: `${roofAccess}%`,  transition: "width 1.2s ease .2s" }} />
+                      <div style={{ background: C.outline,         width: `${roofObst}%`,    transition: "width 1.2s ease .1s" }} />
+                      <div style={{ background: C.primary,         width: `${roofAccess}%`,  transition: "width 1.2s ease .2s" }} />
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs font-mono" style={{ color: C.mutedSand }}>
-                      <div className="flex items-center gap-1.5"><div style={{ background: C.secondary,       width: 8, height: 8 }} className="rounded-sm" /> {roofUsable}% Usable</div>
-                      <div className="flex items-center gap-1.5"><div style={{ background: C.surfaceVariant,  width: 8, height: 8 }} className="rounded-sm" /> {roofObst}% Obstr.</div>
-                      <div className="flex items-center gap-1.5"><div style={{ background: C.primaryContainer,width: 8, height: 8 }} className="rounded-sm" /> {roofAccess}% Access</div>
+                    <div className="grid grid-cols-3 gap-1 text-[10px] font-mono" style={{ color: C.mutedSand }}>
+                      <div className="flex items-center gap-1"><div style={{ background: C.secondary,       width: 6, height: 6 }} className="rounded-none" /> {roofUsable}% Use</div>
+                      <div className="flex items-center gap-1"><div style={{ background: C.outline,         width: 6, height: 6 }} className="rounded-none" /> {roofObst}% Obs</div>
+                      <div className="flex items-center gap-1"><div style={{ background: C.primary,         width: 6, height: 6 }} className="rounded-none" /> {roofAccess}% Acc</div>
                     </div>
                   </div>
                 </section>
@@ -960,10 +1974,10 @@ const ResultsPage = () => {
                   {/* ROI Tuning Console */}
                   <section>
                     <div style={{ borderBottom: `1px solid ${C.outlineVariant}` }} className="flex justify-between items-baseline pb-2 mb-4">
-                      <h2 style={{ fontFamily: "Sora, sans-serif", color: C.onSurface, fontSize: "18px", fontWeight: 500 }}>ROI Tuning Console</h2>
-                      <span className="text-[10px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>Live Recalculation</span>
+                      <h2 className="sp-serif text-[#F0EEE9] text-lg font-bold">ROI Tuning Console</h2>
+                      <span className="text-[10px] font-bold uppercase tracking-wider font-mono text-[#8A8A99]">Live Recalculation</span>
                     </div>
-                    <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 rounded-2xl">
+                    <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 rounded-[4px]">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-2">
                         <SnappySlider values={[3,5,7.5,10,12,15]} defaultValue={7.5} value={tariff} min={3} max={15} step={0.5} onChange={setTariff} label="Electricity Tariff" prefix="₹" suffix=" / kWh" />
                         <SnappySlider values={[1,5,10,15,maxPanelsRef.current]} defaultValue={15} value={pCount} min={1} max={maxPanelsRef.current} step={1} onChange={setPCount} label="Active Panels" suffix={` / ${maxPanelsRef.current}`} />
@@ -972,102 +1986,94 @@ const ResultsPage = () => {
                         <SnappySlider values={[0,1,2.5,5]} defaultValue={1} value={omCost} min={0} max={5} step={0.5} onChange={setOmCost} label="Annual O&M Inflation" suffix="%" />
                         <div className="flex flex-col gap-3 pb-4">
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-wider mb-1.5 font-mono" style={{ color: C.mutedSand }}>Module Grade</div>
+                            <div className="text-[10px] font-bold uppercase tracking-wider mb-1.5 font-mono text-[#8A8A99]">Module Grade</div>
                             <div className="flex gap-1.5">
                               <button onClick={() => setPType("compact")} className={cn("sp-toggle flex-1 cursor-pointer", pType === "compact" && "on")}>450W Compact</button>
                               <button onClick={() => setPType("premium")} className={cn("sp-toggle flex-1 cursor-pointer", pType === "premium" && "on")}>550W Premium</button>
                             </div>
                           </div>
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-wider mb-1.5 font-mono" style={{ color: C.mutedSand }}>BESS Storage</div>
+                            <div className="text-[10px] font-bold uppercase tracking-wider mb-1.5 font-mono text-[#8A8A99]">BESS Storage</div>
                             <button onClick={() => setBatteryStorage(!batteryStorage)} className={cn("sp-toggle w-full flex items-center justify-between px-3 cursor-pointer", batteryStorage && "on")}>
                               <span>Hybrid Battery (+₹85k CapEx)</span>
                               <span style={{ width: 10, height: 10, borderRadius: "50%", border: `2px solid ${batteryStorage ? C.primaryContainer : C.outlineVariant}`, background: batteryStorage ? C.primaryContainer : "transparent", display: "inline-block", transition: "all .15s" }} />
                             </button>
                           </div>
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-wider mb-1.5 font-mono" style={{ color: C.mutedSand }}>Roof Shading</div>
+                            <div className="text-[10px] font-bold uppercase tracking-wider mb-1.5 font-mono text-[#8A8A99]">Shading Estimate</div>
                             <select
                               value={shading}
-                              onChange={(e) => handleShadingChange(e.target.value as "none" | "partial" | "heavy")}
+                              onChange={(e) => handleShadingChange(e.target.value as any)}
                               style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                              className="w-full px-3 py-2 text-xs focus:outline-none font-mono cursor-pointer rounded-lg"
+                              className="w-full px-3 py-2 text-xs focus:outline-none font-mono cursor-pointer rounded-[4px]"
                             >
-                              <option value="none" className="bg-[#171210]">None</option>
-                              <option value="partial" className="bg-[#171210]">Partial</option>
-                              <option value="heavy" className="bg-[#171210]">Heavy</option>
+                              <option value="auto" className="bg-[#0E0E0F]">Auto-detected from nearby buildings</option>
+                              <option value="none" className="bg-[#0E0E0F]">None — full sun</option>
+                              <option value="partial" className="bg-[#0E0E0F]">Partial — moderate shade</option>
+                              <option value="heavy" className="bg-[#0E0E0F]">Heavy — significant shade</option>
                             </select>
+                            <div className="text-xs font-bold font-mono mt-1.5" style={{ color: C.onSurface }}>
+                              Shading Loss: {Math.round(model.shadingLoss * 100)}%
+                            </div>
+                            <div className="text-[10px] text-muted-foreground mt-0.5 font-mono">
+                              {shading === "auto" || !shading
+                                ? `Estimated from ${store.scanInput?.nearbyStructuresCount ?? 0} nearby structures`
+                                : "User-selected estimate"}
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
                   </section>
 
+                  {/* Solar Simulator */}
+                  <section className="mb-8">
+                    <div style={{ borderBottom: `1px solid ${C.outlineVariant}` }} className="flex justify-between items-baseline pb-2 mb-4">
+                      <h2 className="sp-serif text-[#F0EEE9] text-lg font-bold">Interactive Solar Simulator</h2>
+                      <span className="text-[10px] font-bold uppercase tracking-wider font-mono text-[#8A8A99]">Simulate Cash Flow</span>
+                    </div>
+                    <SolarSimulator />
+                  </section>
+
                   {/* Financial Forecasts charts */}
                   <section>
                     <div style={{ borderBottom: `1px solid ${C.outlineVariant}` }} className="flex justify-between items-baseline pb-2 mb-4">
-                      <h2 style={{ fontFamily: "Sora, sans-serif", color: C.onSurface, fontSize: "18px", fontWeight: 500 }}>Financial Forecasts</h2>
-                      <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="flex rounded-lg overflow-hidden">
+                      <h2 className="sp-serif text-[#F0EEE9] text-lg font-bold">Financial Forecasts</h2>
+                      <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="flex rounded-none overflow-hidden border">
                         {[{ k: "roi", l: "Cumulative ROI" }, { k: "yield", l: "Degradation" }, { k: "monthly", l: "Climatology" }].map(t => (
                           <button key={t.k} onClick={() => setActiveTab(t.k as any)} className={cn("sp-tab", activeTab === t.k && "on")}>{t.l}</button>
                         ))}
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="h-64 p-4 rounded-2xl">
-                        <ResponsiveContainer width="100%" height="100%">
-                          {activeTab === "roi" ? (
-                            <AreaChart data={roiData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                              <defs>
-                                <linearGradient id="rGrad" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor={C.secondary} stopOpacity={0.15} />
-                                  <stop offset="100%" stopColor={C.secondary} stopOpacity={0} />
-                                </linearGradient>
-                              </defs>
-                              <CartesianGrid strokeDasharray="3 6" stroke={C.outlineVariant} vertical={false} />
-                              <XAxis dataKey="year" tick={{ fill: C.mutedSand, fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={v => v===0?"Yr 0":v%5===0?`Yr ${v}`:""} />
-                              <YAxis tick={{ fill: C.mutedSand, fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={v => v>=100000?`₹${(v/100000).toFixed(0)}L`:v<=-100000?`-₹${(Math.abs(v)/100000).toFixed(0)}L`:`₹${(v/1000).toFixed(0)}k`} />
-                              <Tooltip content={({ active, payload }) => {
-                                if (!active || !payload?.length) return null;
-                                const val = payload[0].value as number;
-                                return <div className="sp-tip rounded-lg"><div style={{ color: C.mutedSand }}>Year {payload[0].payload.year}</div><div style={{ color: val >= 0 ? C.secondary : C.error, fontWeight: 700, fontSize: 13 }}>{val >= 0 ? "+" : "-"}₹{Math.abs(val).toLocaleString()}</div></div>;
-                              }} />
-                              <ReferenceLine y={0} stroke={C.outlineVariant} strokeDasharray="3 3" />
-                              {model.breakEvenFound && <ReferenceLine x={model.breakEvenYr} stroke={C.secondary} strokeOpacity={0.4} strokeDasharray="3 3" label={{ value: `Break-even Yr ${model.breakEvenYr}`, fill: C.secondary, fontSize: 8, position: "insideTopLeft" }} />}
-                              <Area type="monotone" dataKey="cumulative" stroke={C.secondary} strokeWidth={2} fill="url(#rGrad)" animationDuration={800} />
-                            </AreaChart>
-                          ) : activeTab === "yield" ? (
-                            <ComposedChart data={yieldData} margin={{ top: 10, right: -10, left: -20, bottom: 0 }}>
-                              <CartesianGrid strokeDasharray="3 6" stroke={C.outlineVariant} vertical={false} />
-                              <XAxis dataKey="year" tick={{ fill: C.mutedSand, fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={(v,i)=>i%5===0?v:""} />
-                              <YAxis yAxisId="l" tick={{ fill: C.mutedSand, fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={v=>`${(v/1000).toFixed(0)}k`} />
-                              <YAxis yAxisId="r" orientation="right" domain={[80,100]} tick={{ fill: C.mutedSand, fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={v=>`${v}%`} />
-                              <Tooltip content={({ active, payload }) => !active||!payload?.length?null:(
-                                <div className="sp-tip rounded-lg"><div style={{ color: C.onSurface, fontWeight:700 }}>{payload[0]?.payload.year}</div><div style={{ color: C.secondary }}>Production: {(payload[0]?.value as number)?.toLocaleString()} kWh</div><div style={{ color: C.primary }}>Efficiency: {payload[1]?.value}%</div></div>
-                              )} />
-                              <Bar yAxisId="l" dataKey="production" fill={C.secondary} opacity={0.55} radius={[2,2,0,0]} />
-                              <Line yAxisId="r" type="monotone" dataKey="efficiency" stroke={C.primary} strokeWidth={2} dot={false} />
-                            </ComposedChart>
-                          ) : (
-                            <ComposedChart data={monthlyData} margin={{ top: 10, right: -10, left: -20, bottom: 0 }}>
-                              <defs>
-                                <linearGradient id="pGrad" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor={C.primary} stopOpacity={0.15} />
-                                  <stop offset="100%" stopColor={C.primary} stopOpacity={0} />
-                                </linearGradient>
-                              </defs>
-                              <CartesianGrid strokeDasharray="3 6" stroke={C.outlineVariant} vertical={false} />
-                              <XAxis dataKey="label" tick={{ fill: C.mutedSand, fontSize: 9 }} tickLine={false} axisLine={false} />
-                              <YAxis yAxisId="l" tick={{ fill: C.mutedSand, fontSize: 9 }} tickLine={false} axisLine={false} />
-                              <YAxis yAxisId="r" orientation="right" domain={[0,8]} tick={{ fill: C.mutedSand, fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={v=>`${v}h`} />
-                              <Tooltip content={({ active, payload }) => !active||!payload?.length?null:(
-                                <div className="sp-tip rounded-lg"><div style={{ color: C.onSurface, fontWeight:700 }}>{payload[0]?.payload.label} Solar Stats</div><div style={{ color: C.secondary }}>Yield: {(payload[0]?.value as number)?.toLocaleString()} kWh</div><div style={{ color: C.primary }}>Peak Sun: {payload[1]?.value} hrs</div></div>
-                              )} />
-                              <Bar yAxisId="l" dataKey="generation" fill={C.secondary} opacity={0.6} radius={[2,2,0,0]} />
-                              <Area yAxisId="r" type="monotone" dataKey="psh" stroke={C.primary} fill="url(#pGrad)" strokeWidth={1.5} />
-                            </ComposedChart>
-                          )}
-                        </ResponsiveContainer>
+                      <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="h-64 p-4 rounded-[4px]">
+                        {activeTab === "roi" ? (
+                          <AreaChart data={roiData} xDataKey="year" margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <CartesianGrid />
+                            <XAxis tickFormatter={v => Number(v)===0?"Yr 0":Number(v)%5===0?`Yr ${v}`:""} />
+                            <YAxis tickFormatter={v => v>=100000?`₹${(v/100000).toFixed(0)}L`:v<=-100000?`-₹${(Math.abs(v)/100000).toFixed(0)}L`:`₹${(v/1000).toFixed(0)}k`} />
+                            <ReferenceLine y={0} stroke={C.outlineVariant} />
+                            {model.breakEvenFound && <ReferenceLine x={model.breakEvenYr} stroke={C.primary} />}
+                            <Area dataKey="cumulative" stroke={C.secondary} fill={C.secondary} fillOpacity={0.12} strokeWidth={2} />
+                            <ChartTooltip dataKeys={["cumulative"]} colors={[C.secondary]} formatter={(v, _k) => [`₹${Math.abs(Number(v)).toLocaleString()}`, Number(v) >= 0 ? "Cumulative ROI" : "Net Investment"]} />
+                          </AreaChart>
+                        ) : activeTab === "yield" ? (
+                          <ComposedChart data={yieldData} xDataKey="year" margin={{ top: 10, right: -10, left: -20, bottom: 0 }}>
+                            <CartesianGrid />
+                            <XAxis tickFormatter={(v, _i) => Number(v)%5===0?v:""} />
+                            <YAxis tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
+                            <Bar dataKey="production" fill={C.secondary} opacity={0.35} radius={[2, 2, 0, 0]} />
+                            <Line dataKey="efficiency" stroke={C.primary} strokeWidth={2} dot={false} />
+                          </ComposedChart>
+                        ) : (
+                          <ComposedChart data={monthlyData} xDataKey="label" margin={{ top: 10, right: -10, left: -20, bottom: 0 }}>
+                            <CartesianGrid />
+                            <XAxis />
+                            <YAxis />
+                            <Bar dataKey="generation" fill={C.secondary} opacity={0.4} radius={[2, 2, 0, 0]} />
+                            <Line dataKey="psh" stroke={C.primary} strokeWidth={1.5} dot={false} />
+                          </ComposedChart>
+                        )}
                       </div>
                       {/* Cashflow Waterfall SVG infographic */}
                       {(() => {
@@ -1101,7 +2107,7 @@ const ResultsPage = () => {
                         const breakEvenYr = model.breakEvenYr;
 
                         return (
-                          <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-5 flex flex-col sp-card rounded-2xl">
+                          <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-5 flex flex-col sp-card rounded-[4px]">
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-sm font-bold uppercase tracking-widest font-mono" style={{ color: C.onSurface }}>Cashflow Waterfall</span>
                               <span className="text-xs font-mono" style={{ color: C.mutedSand }}>Yr 0 – Yr 12 · Net annual + cumulative</span>
@@ -1109,15 +2115,15 @@ const ResultsPage = () => {
 
                             <div className="flex items-center gap-4 flex-wrap mb-3">
                               <div className="flex items-center gap-1.5">
-                                <span style={{ width: 10, height: 10, background: C.secondary }} className="rounded-sm inline-block" />
+                                <span style={{ width: 10, height: 10, background: C.secondary }} className="rounded-none inline-block" />
                                 <span className="text-[10px] font-mono font-semibold" style={{ color: C.secondary }}>Annual Savings</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span style={{ width: 10, height: 10, background: C.error }} className="rounded-sm inline-block" />
+                                <span style={{ width: 10, height: 10, background: C.error }} className="rounded-none inline-block" />
                                 <span className="text-[10px] font-mono font-semibold" style={{ color: C.error }}>CapEx / Outflow</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span style={{ width: 20, height: 2, background: C.primary }} className="rounded-sm inline-block" />
+                                <span style={{ width: 20, height: 2, background: C.primary }} className="rounded-none inline-block" />
                                 <span className="text-[10px] font-mono font-semibold" style={{ color: C.primary }}>Cumulative</span>
                               </div>
                               {model.breakEvenFound && (
@@ -1231,25 +2237,33 @@ const ResultsPage = () => {
                   </section>
 
                   {/* Cash Flow Table */}
-                  <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 rounded-2xl">
-                    <h3 style={{ fontFamily: "Sora, sans-serif", color: C.onSurface, fontSize: "16px", fontWeight: 500 }} className="mb-4">25-Year Operational Balance Sheet</h3>
+                  <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 rounded-[4px]">
+                    <div className="flex flex-col sm:flex-row justify-between items-baseline gap-2 mb-4">
+                      <h3 className="sp-serif text-[#F0EEE9] text-base font-bold">25-Year Operational Balance Sheet</h3>
+                      <button
+                        onClick={() => setShowAllYears(!showAllYears)}
+                        style={{ border: `1px solid ${C.outlineVariant}`, background: C.surfaceVariant, color: C.onSurface }}
+                        className="px-3 py-1.5 text-[9px] font-bold tracking-wider sp-mono uppercase hover:opacity-80 transition-opacity rounded-[3px]"
+                      >
+                        {showAllYears ? "Show Key Years Only" : "Expand Full 25-Year Ledger"}
+                      </button>
+                    </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs text-left font-mono">
                         <thead>
-                          <tr style={{ borderBottom: `1.5px solid ${C.outline}` }} className="text-neutral-400">
-                            <th className="py-2 px-3">Year</th>
-                            <th className="py-2 px-3">Yield (kWh)</th>
-                            <th className="py-2 px-3">Savings</th>
-                            <th className="py-2 px-3">O&M Cost</th>
-                            <th className="py-2 px-3">Maint. Res</th>
-                            <th className="py-2 px-3">Tax Benefit</th>
-                            <th className="py-2 px-3">Net Cashflow</th>
-                            <th className="py-2 px-3">Cumulative</th>
+                          <tr className="sp-table-header">
+                            <th className="py-2.5 px-3 rounded-none text-left" style={{ background: "#0F172A", color: "#FFFFFF" }}>Yr</th>
+                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: "#0F172A", color: "#FFFFFF" }}>Yield (kWh)</th>
+                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: "#0F172A", color: "#FFFFFF" }}>Savings</th>
+                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: "#0F172A", color: "#FFFFFF" }}>O&M Cost</th>
+                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: "#0F172A", color: "#FFFFFF" }}>Maint. Res</th>
+                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: "#0F172A", color: "#FFFFFF" }}>Tax Benefit</th>
+                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: "#0F172A", color: "#FFFFFF" }}>Net Cashflow</th>
+                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: "#0F172A", color: "#FFFFFF" }}>Cumulative</th>
                           </tr>
                         </thead>
-                        <tbody>
-                          {Array.from({ length: 25 }, (_, i) => {
-                            const yr = i + 1;
+                        <tbody className="sp-table-body">
+                          {(showAllYears ? Array.from({ length: 25 }, (_, i) => i + 1) : [1, 5, 10, 15, 20, 25]).map((yr) => {
                             const prod = model.baseAnnualKwh * Math.pow(0.995, yr - 1);
                             const savings = model.yearlySavings[yr - 1];
                             const om = model.yearlyOm[yr - 1];
@@ -1258,15 +2272,19 @@ const ResultsPage = () => {
                             const net = savings - om - maintRes + taxBenefit;
                             const cumNpv = model.cumulativeCashFlow[yr];
                             return (
-                              <tr key={yr} className="sp-row" style={{ borderBottom: `1px solid ${C.outlineVariant}50` }}>
-                                <td className="py-2 px-3" style={{ color: C.mutedSand }}>{yr}</td>
-                                <td className="py-2 px-3" style={{ color: C.onSurface }}>{Math.round(prod).toLocaleString()}</td>
-                                <td className="py-2 px-3" style={{ color: C.onSurface }}>₹{Math.round(savings).toLocaleString()}</td>
-                                <td className="py-2 px-3" style={{ color: C.error }}>₹({Math.round(om).toLocaleString()})</td>
-                                <td className="py-2 px-3" style={{ color: C.error }}>₹({Math.round(maintRes).toLocaleString()})</td>
-                                <td className="py-2 px-3" style={{ color: C.secondary }}>₹{Math.round(taxBenefit).toLocaleString()}</td>
-                                <td className="py-2 px-3" style={{ color: net > 0 ? C.secondary : C.error }}>₹{Math.round(net).toLocaleString()}</td>
-                                <td className="py-2 px-3" style={{ color: C.onSurface }}>₹{Math.round(cumNpv).toLocaleString()}</td>
+                              <tr key={yr} className="sp-row border-b" style={{ borderColor: `${C.outlineVariant}50` }}>
+                                <td className="py-2 px-3 text-left font-bold" style={{ color: C.mutedSand }}>{yr}</td>
+                                <td className="py-2 px-3 text-right" style={{ color: C.onSurface }}>{Math.round(prod).toLocaleString()}</td>
+                                <td className="py-2 px-3 text-right" style={{ color: C.secondary }}>{formatLakhsCr(savings)}</td>
+                                <td className="py-2 px-3 text-right animate-in fade-in" style={{ color: C.error }}>({formatLakhsCr(om)})</td>
+                                <td className="py-2 px-3 text-right" style={{ color: C.error }}>{maintRes > 0 ? `(${formatLakhsCr(maintRes)})` : "—"}</td>
+                                <td className="py-2 px-3 text-right text-neutral-500">—</td>
+                                <td className="py-2 px-3 text-right font-medium" style={{ color: net > 0 ? C.secondary : C.error }}>
+                                  {net > 0 ? "+" : ""}{formatLakhsCr(net)}
+                                </td>
+                                <td className="py-2 px-3 text-right font-semibold" style={{ color: cumNpv >= 0 ? C.onSurface : C.error }}>
+                                  {cumNpv >= 0 ? "+" : ""}{formatLakhsCr(cumNpv)}
+                                </td>
                               </tr>
                             );
                           })}
@@ -1275,26 +2293,27 @@ const ResultsPage = () => {
                     </div>
                   </section>
 
-                  {/* Remote lead CTA card */}
-                  <div className="bg-gradient-to-br from-primaryContainer to-orange-600 rounded-3xl p-6 sm:p-8 shadow-float text-center text-white sp-fade-up-4">
+                  {/* Lead capture CTA card */}
+                  <div className="border p-6 sm:p-8 text-center sp-fade-up-4 rounded-[4px]" style={{ background: C.charcoal, borderColor: C.outlineVariant }}>
                     <div className="max-w-xl mx-auto">
-                      <div className="inline-flex items-center gap-2 bg-white/15 px-3 py-1 rounded-full text-[10px] font-medium mb-3">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-primary" /> Verified MNRE solar installers
+                      <div className="inline-flex items-center gap-2 bg-neutral-800/40 px-3 py-1 rounded-[3px] text-[10px] font-bold uppercase tracking-widest sp-mono text-neutral-400 mb-3">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-[#2BD4A0]" /> Verified MNRE installers active
                       </div>
-                      <h2 className="font-display text-2xl sm:text-3xl mb-2 font-bold leading-tight" style={{ fontFamily: "Sora, sans-serif" }}>
+                      <h2 className="sp-serif text-2xl sm:text-3xl mb-2 font-bold leading-tight text-[#F0EEE9]">
                         Ready to install? Get a free quote.
                       </h2>
-                      <p className="text-xs sm:text-sm text-white/95 mb-5 max-w-md mx-auto">
+                      <p className="text-xs text-neutral-400 mb-5 max-w-md mx-auto leading-relaxed">
                         An authorized solar installer in your city will contact you within 24 hours with a custom structural quote and PM Surya Ghar paperwork.
                       </p>
                       <button
                         onClick={() => setLeadFormOpen(true)}
-                        className="inline-flex items-center gap-2 bg-white text-primaryContainer font-extrabold px-6 py-3 rounded-full hover:bg-white/95 active:scale-95 transition-all shadow-lg text-xs uppercase cursor-pointer"
+                        style={{ background: C.primary, color: C.onPrimary }}
+                        className="inline-flex items-center gap-2 font-bold px-6 py-2.5 rounded-[3px] hover:opacity-90 active:scale-95 transition-all text-xs uppercase cursor-pointer tracking-wider sp-mono"
                       >
                         <PhoneCall className="w-4 h-4" />
-                        Talk to an installer →
+                        Talk to an installer
                       </button>
-                      <div className="text-[10px] text-white/70 mt-3">No spam · No obligation · Your number stays private</div>
+                      <div className="text-[9px] sp-mono text-neutral-500 mt-3">No spam · No obligation · Your number stays private</div>
                     </div>
                   </div>
 
@@ -1307,21 +2326,25 @@ const ResultsPage = () => {
                   </div>
 
                   {/* Closing CTA */}
-                  <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-8 text-center flex flex-col items-center rounded-2xl">
-                    <span className="material-symbols-outlined text-4xl mb-4" style={{ color: C.secondary }}>solar_power</span>
-                    <h2 style={{ fontFamily: "Sora, sans-serif", color: C.onSurface, fontSize: "24px", fontWeight: 500, lineHeight: 1.2 }} className="mb-2">Ready to Secure Your Energy Future?</h2>
-                    <p style={{ color: C.mutedSand, fontSize: "14px" }} className="max-w-2xl mb-8">Take the next step in realizing your projected ₹{savings25L}L in lifetime savings. Our experts are ready to finalize your system engineering.</p>
-                    <div className="flex flex-wrap justify-center gap-4">
-                      <button onClick={() => setLeadFormOpen(true)} style={{ background: C.secondary, color: C.onSecondary }} className="flex items-center gap-2 px-6 py-3 text-[10px] font-bold uppercase tracking-wider hover:opacity-90 transition-opacity cursor-pointer rounded-lg font-mono">
+                  <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-8 text-center flex flex-col items-center rounded-[4px]">
+                    <span className="material-symbols-outlined text-4xl mb-3 text-neutral-400">solar_power</span>
+                    <h2 className="sp-serif text-[#F0EEE9] text-2xl font-bold mb-2">Get 3 Verified Installer Quotes</h2>
+                    <p style={{ color: C.mutedSand }} className="text-xs max-w-2xl mb-6 leading-relaxed">Take the next step in realizing your projected ₹{savings25L}L in lifetime savings. Get competitive installation rates in minutes.</p>
+                    <div className="flex flex-wrap justify-center gap-3">
+                      <button onClick={() => setLeadFormOpen(true)} style={{ background: C.secondary, color: C.onSecondary }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-90 transition-opacity cursor-pointer rounded-[3px] font-mono">
                         <span className="material-symbols-outlined text-sm">request_quote</span>
-                        Request Quotes
+                        Request Quotes — Free
                       </button>
-                      <button onClick={() => setLeadFormOpen(true)} style={{ background: C.charcoal, border: `1px solid ${C.outline}`, color: C.onSurface }} className="flex items-center gap-2 px-6 py-3 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-lg font-mono">
+                      <button onClick={() => setLeadFormOpen(true)} style={{ background: C.surfaceVariant, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-[3px] font-mono">
                         <span className="material-symbols-outlined text-sm">calendar_month</span>
                         Schedule Consultation
                       </button>
-                      <button onClick={handleDownload} disabled={downloading} style={{ background: C.charcoal, border: `1px solid ${C.outline}`, color: C.onSurface }} className="flex items-center gap-2 px-6 py-3 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity disabled:opacity-40 cursor-pointer rounded-lg font-mono">
-                        <Download className="w-3.5 h-3.5" /> Download PDF
+                      <button onClick={handleDownload} disabled={downloading} style={{ background: C.surfaceVariant, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity disabled:opacity-40 cursor-pointer rounded-[3px] font-mono">
+                        {downloading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                        {downloading ? "Generating..." : "Download PDF"}
+                      </button>
+                      <button onClick={() => setShareModalOpen(true)} style={{ background: C.surfaceVariant, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-[3px] font-mono">
+                        <span>📱</span> Share on WhatsApp
                       </button>
                     </div>
                   </section>
@@ -1330,12 +2353,12 @@ const ResultsPage = () => {
                 {/* Right Sidebar */}
                 <aside className="lg:col-span-3 flex flex-col gap-4 sp-fade-up-4">
                   {/* Energy Grade */}
-                  <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 flex flex-col items-center text-center sp-card rounded-2xl">
-                    <div style={{ width: 80, height: 80, borderRadius: "50%", background: `${C.secondary}10`, border: `2px solid ${C.secondary}`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }} className="sp-glow-pulse">
-                      <span style={{ fontFamily: "Sora, sans-serif", fontSize: "24px", color: C.secondary, fontWeight: 500 }}>A+</span>
+                  <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 flex flex-col items-center text-center sp-card rounded-[4px]">
+                    <div style={{ width: 70, height: 70, borderRadius: "50%", background: `${C.secondary}08`, border: `1px solid ${C.secondary}`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+                      <span className="sp-serif text-2xl text-emerald-400 font-bold">A+</span>
                     </div>
-                    <h3 className="text-sm font-semibold" style={{ fontFamily: "Sora, sans-serif", color: C.onSurface }}>Energy Grade</h3>
-                    <p className="text-xs mt-1" style={{ color: C.mutedSand }}>Top 12% in {data.location?.label?.split(",")[0] ?? "your"} region based on roof potential.</p>
+                    <h3 className="text-xs font-bold uppercase tracking-wider sp-mono text-[#F0EEE9]">Energy Grade</h3>
+                    <p className="text-[11px] mt-1 text-neutral-400">Top 12% in {data.location?.label?.split(",")[0] ?? "your"} region based on roof potential.</p>
                   </div>
 
                   <SideCard title="Technical Assumptions">
@@ -1359,17 +2382,17 @@ const ResultsPage = () => {
 
                   <SideCard title="Geospatial Parameters">
                     <DataList rows={[
-                      { label: "Horizon Shading", value: data.horizonShadingLoss !== undefined ? `${(data.horizonShadingLoss * 100).toFixed(1)}% Loss` : "3.2% Loss" },
+                      { label: "Horizon Shading", value: `${Math.round(model.shadingLoss * 100)}% Loss` },
                       { label: "Albedo",           value: "0.20" },
                       { label: "Sky View Factor",  value: data.skyViewFactor !== undefined ? data.skyViewFactor.toFixed(2) : "0.95" },
                       { label: "Azimuth",          value: data.roof?.azimuth ? `${data.roof.azimuth} (Facing)` : "180° (South)" },
                       { label: "Tilt",             value: `${data.roof?.tilt ?? 20}°` },
-                      { label: "Wind Zone",        value: `${data.windZone ?? "Zone 1"} (${data.windZoneLabel ?? "Low"})` },
+                      { label: "Wind Zone",        value: `${typeof data.windZone === "object" ? (data.windZone?.label ?? "Zone 1") : (data.windZone ?? "Zone 1")} (${typeof data.windZone === "object" ? (data.windZone?.category ?? "Low") : (data.windZoneLabel ?? "Low")})` },
                     ]} />
                   </SideCard>
 
                   <SideCard title="AI Roof Insights">
-                    <p className="text-xs mb-3" style={{ color: C.mutedSand }}>Strong southern exposure detected. Minimal shading from adjacent structures modeled via LIDAR.</p>
+                    <p className="text-[11px] mb-3 text-neutral-400 leading-relaxed">Strong southern exposure detected. Minimal shading from adjacent structures modeled via LIDAR.</p>
                     <RoofLayoutDiagram
                       polygons={store.scanInput?.roofPolygon ?? []}
                       panelConfig={store.panelConfig}
@@ -1377,46 +2400,46 @@ const ResultsPage = () => {
                   </SideCard>
 
                   {/* Installer Readiness */}
-                  <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 sp-card rounded-2xl">
-                    <h3 className="text-xs font-bold uppercase tracking-wider mb-3 font-mono"
+                  <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 sp-card rounded-[4px]">
+                    <h3 className="text-[9px] font-bold uppercase tracking-wider mb-3 font-mono"
                       style={{ color: C.onSurface, borderBottom: `1px solid ${C.outlineVariant}`, paddingBottom: "8px" }}>Installer Readiness</h3>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs" style={{ color: C.mutedSand }}>Risk Assessment</span>
-                      <span className="text-xs font-bold" style={{ color: data.highWindWarning ? C.error : C.secondary }}>
+                      <span className="text-[11px] font-mono" style={{ color: C.mutedSand }}>Risk Assessment</span>
+                      <span className="text-[11px] font-mono font-bold" style={{ color: data.highWindWarning ? C.error : C.secondary }}>
                         {data.highWindWarning ? "HIGH" : "LOW"}
                       </span>
                     </div>
-                    <div style={{ background: C.surfaceVariant }} className="w-full h-1 rounded-full overflow-hidden mb-3">
+                    <div style={{ background: C.surfaceVariant }} className="w-full h-1 rounded-none overflow-hidden mb-3">
                       <div style={{ background: data.highWindWarning ? C.error : C.secondary, width: data.highWindWarning ? "75%" : "25%" }} className="h-full" />
                     </div>
-                    <ul className="flex flex-col gap-1 text-xs" style={{ color: C.mutedSand }}>
+                    <ul className="flex flex-col gap-1.5 text-[11px] font-mono" style={{ color: C.mutedSand }}>
                       {data.highWindWarning ? (
-                        <li className="flex items-start gap-2 text-[11px]" style={{ color: C.error }}>
+                        <li className="flex items-start gap-2 leading-relaxed" style={{ color: C.error }}>
                           <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: C.error }} />
                           <span>High Wind Structural Risk Warning: Exceeds threshold for &gt;4 consecutive months.</span>
                         </li>
                       ) : (
-                        <li className="flex items-center gap-2"><span className="material-symbols-outlined text-[14px]" style={{ color: C.secondary }}>check_circle</span> Structural Integrity OK</li>
+                        <li className="flex items-center gap-2 text-neutral-300">✓ Structural Integrity OK</li>
                       )}
                       {data.windZone === "Zone 5/6" && (
-                        <li className="flex items-start gap-2 text-[11px] mt-1" style={{ color: C.primary }}>
+                        <li className="flex items-start gap-2 mt-1" style={{ color: C.primary }}>
                           <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: C.primary }} />
                           <span>Needs concrete ballast anchor modeling.</span>
                         </li>
                       )}
-                      <li className="flex items-center gap-2"><span className="material-symbols-outlined text-[14px]" style={{ color: C.secondary }}>check_circle</span> Grid Connection Viable</li>
+                      <li className="flex items-center gap-2 text-neutral-300">✓ Grid Connection Viable</li>
                     </ul>
                   </div>
 
                   <SideCard title="Purchase vs Loan">
-                    <div className="grid grid-cols-2 gap-2 text-xs text-center font-mono">
-                      <div style={{ background: `${C.secondary}08`, border: `1px solid ${C.secondary}20` }} className="p-3 rounded-lg">
-                        <div style={{ color: C.mutedSand }} className="mb-1 text-[9px] uppercase tracking-wider font-bold">Cash</div>
-                        <div style={{ color: C.onSurface, fontFamily: "Sora, sans-serif" }} className="font-bold">₹{Math.round(Math.abs(model.npv)/100000).toFixed(1)}L NPV</div>
+                    <div className="grid grid-cols-2 gap-2 text-[10px] text-center font-mono">
+                      <div style={{ background: `${C.secondary}08`, border: `1px solid ${C.secondary}20` }} className="p-2.5 rounded-[3px]">
+                        <div style={{ color: C.mutedSand }} className="mb-1 text-[8px] uppercase tracking-wider font-bold">Cash</div>
+                        <div style={{ color: C.onSurface }} className="font-bold sp-serif text-sm">₹{Math.round(Math.abs(model.npv)/100000).toFixed(1)}L NPV</div>
                       </div>
-                      <div style={{ background: `${C.primary}08`, border: `1px solid ${C.primary}20` }} className="p-3 rounded-lg">
-                        <div style={{ color: C.mutedSand }} className="mb-1 text-[9px] uppercase tracking-wider font-bold">Loan (7yr)</div>
-                        <div style={{ color: C.onSurface, fontFamily: "Sora, sans-serif" }} className="font-bold">₹{Math.round(Math.abs(model.npv)*0.78/100000).toFixed(1)}L NPV</div>
+                      <div style={{ background: `${C.primary}08`, border: `1px solid ${C.primary}20` }} className="p-2.5 rounded-[3px]">
+                        <div style={{ color: C.mutedSand }} className="mb-1 text-[8px] uppercase tracking-wider font-bold">Loan (7yr)</div>
+                        <div style={{ color: C.onSurface }} className="font-bold sp-serif text-sm">₹{Math.round(Math.abs(model.npv)*0.78/100000).toFixed(1)}L NPV</div>
                       </div>
                     </div>
                   </SideCard>
@@ -1424,23 +2447,6 @@ const ResultsPage = () => {
                   <InstallerLeadForm data={data} />
                 </aside>
               </div>
-
-              {/* Methodology */}
-              <section style={{ borderTop: `1px solid ${C.outlineVariant}` }} className="pt-6 mt-4 sp-fade-up-5">
-                <h3 style={{ fontFamily: "Sora, sans-serif", color: C.onSurface, fontSize: "18px", fontWeight: 500 }} className="mb-4">Methodology & Data Fidelity</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs font-mono" style={{ color: C.mutedSand }}>
-                  {[
-                    { title: "NASA POWER Dataset",     body: "Meteorological and solar irradiance data is sourced from NASA's Prediction of Worldwide Energy Resources (POWER) project. Data utilizes 20-year historical averages mapped to precise lat/long coordinates." },
-                    { title: "Local Tariff Structures", body: "Financial models incorporate real-time tariff databases, accounting for localized net-metering policies, time-of-use (TOU) rates, and projected utility escalation metrics standard to the operating region." },
-                    { title: "LIDAR Terrain Mapping",  body: "Site-specific shading, slope, and structural parameters derived from high-resolution LIDAR scans and satellite imagery to calculate precise horizon losses and optimal array placement." },
-                  ].map(item => (
-                    <div key={item.title}>
-                      <h4 className="mb-2 pb-1" style={{ color: C.onSurface, borderBottom: `1px solid ${C.outlineVariant}` }}>{item.title}</h4>
-                      <p>{item.body}</p>
-                    </div>
-                  ))}
-                </div>
-              </section>
             </>
           ) : (
             /* ================================================================
@@ -1449,36 +2455,34 @@ const ResultsPage = () => {
             <div className="space-y-8 sp-fade-up-1">
               {/* AI Summary + metrics strip */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div style={{ background: `${C.charcoal}99`, border: `1px solid ${C.outlineVariant}`, backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}
-                  className="lg:col-span-1 p-6 flex flex-col gap-4 sp-card animate-slide-up rounded-2xl">
-                  <div className="flex items-center gap-2">
-                    <Satellite className="w-5 h-5" style={{ color: C.secondary }} />
-                    <h2 style={{ fontFamily: "Sora, sans-serif", fontSize: "16px", fontWeight: 500, color: C.secondary }}>AI Summary</h2>
+                <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }}
+                  className="lg:col-span-1 p-6 flex flex-col gap-4 sp-card animate-slide-up rounded-[4px]">
+                  <div className="flex items-center gap-2 text-[#2BD4A0]">
+                    <Satellite className="w-5 h-5" />
+                    <h2 className="sp-serif text-base font-bold">AI Summary</h2>
                   </div>
-                  <div style={{ background: `${C.secondary}10`, border: `1px solid ${C.secondary}25` }} className="flex items-center gap-1.5 px-3 py-1.5 w-fit rounded-lg">
-                    <div style={{ background: C.secondary, width: 6, height: 6, borderRadius: "50%" }} className="sp-glow-pulse" />
-                    <span style={{ color: C.secondary }} className="text-[10px] font-bold uppercase tracking-widest font-mono">Geospatial Analysis Active</span>
+                  <div style={{ background: `${C.secondary}10`, border: `1px solid ${C.secondary}25` }} className="flex items-center gap-1.5 px-3 py-1 w-fit rounded-[3px]">
+                    <div style={{ background: C.secondary, width: 5, height: 5, borderRadius: "50%" }} />
+                    <span style={{ color: C.secondary }} className="text-[9px] font-bold uppercase tracking-widest font-mono">Geospatial Active</span>
                   </div>
-                  <p style={{ color: C.onSurfaceVariant, fontSize: "14px", lineHeight: 1.6 }}>
+                  <p style={{ color: C.onSurfaceVariant }} className="text-xs leading-relaxed">
                     Based on geospatial analysis, this property exhibits excellent solar irradiance. The unshaded roof area supports a system capable of offsetting approximately{" "}
                     <span style={{ color: C.onSurface, fontWeight: 600 }}>92%</span> of historical energy consumption.
                   </p>
                 </div>
 
-                <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-5">
+                <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {[
                     { label: "Est. System Size",  value: data.energy.installedCapacityKw.toFixed(1), unit: "kWp", highlight: false },
                     { label: "Annual Production", value: data.energy.annualKwh.toLocaleString(),       unit: "kWh", highlight: false },
                     { label: "25-Yr Savings",     value: `₹${Math.round(data.financials.savings25yrInr/100000).toLocaleString()}L+`, unit: undefined, highlight: true },
                   ].map(({ label, value, unit, highlight }) => (
                     <div key={label}
-                      style={{ background: `${C.charcoal}33`, border: `1px solid ${highlight ? C.secondary+"40" : C.outlineVariant}20` }}
-                      className="sp-card p-6 flex flex-col justify-between relative overflow-hidden animate-slide-up rounded-2xl">
-                      <div style={{ background: `linear-gradient(to right, transparent, ${highlight ? C.secondary : "rgba(255,255,255,0.04)"}, transparent)` }} className="absolute top-0 left-0 w-full h-px" />
-                      {highlight && <div style={{ background: `radial-gradient(ellipse at top left, ${C.secondary}08, transparent 70%)` }} className="absolute inset-0 pointer-events-none" />}
-                      <span className="text-[10px] font-bold uppercase tracking-widest font-mono" style={{ color: highlight ? C.secondary : C.mutedSand }}>{label}</span>
+                      style={{ background: C.charcoal, border: `1px solid ${highlight ? C.secondary+"35" : C.outlineVariant}` }}
+                      className="sp-card p-6 flex flex-col justify-between relative overflow-hidden rounded-[4px]">
+                      <span className="text-[9px] font-bold uppercase tracking-widest font-mono" style={{ color: highlight ? C.secondary : C.mutedSand }}>{label}</span>
                       <div className="mt-4 flex items-baseline gap-1.5">
-                        <span style={{ fontFamily: "Sora, sans-serif", fontSize: "32px", fontWeight: 500, color: highlight ? C.secondary : C.onSurface, lineHeight: 1.2, letterSpacing: "-0.01em" }} className="sp-count-in">
+                        <span style={{ color: highlight ? C.secondary : C.onSurface }} className="sp-serif text-3xl font-bold leading-none tabular-nums">
                           {value}
                         </span>
                         {unit && <span className="text-xs font-mono" style={{ color: C.mutedSand }}>{unit}</span>}
@@ -1489,71 +2493,66 @@ const ResultsPage = () => {
               </div>
 
               {/* Locked paywall teaser container */}
-              <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, minHeight: "580px" }} className="relative w-full overflow-hidden sp-fade-up-2 rounded-3xl">
+              <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, minHeight: "500px" }} className="relative w-full overflow-hidden sp-fade-up-2 rounded-[4px]">
                 {/* Faux content (blurred behind) */}
-                <div className="absolute inset-0 p-8 opacity-20 pointer-events-none select-none flex flex-col gap-8">
-                  <div style={{ borderBottom: `1px solid ${C.outlineVariant}` }} className="flex justify-between items-end pb-4">
-                    <h3 style={{ fontFamily: "Sora, sans-serif", color: C.onSurface, fontSize: "20px" }}>Cashflow & ROI Projection</h3>
-                    <div className="flex gap-3">
-                      <div style={{ background: C.surfaceVariant, height: 24, width: 96, borderRadius: 4 }} />
-                      <div style={{ background: C.surfaceVariant, height: 24, width: 96, borderRadius: 4 }} />
+                <div className="absolute inset-0 p-8 opacity-10 pointer-events-none select-none flex flex-col gap-6">
+                  <div style={{ borderBottom: `1px solid ${C.outlineVariant}` }} className="flex justify-between items-end pb-3">
+                    <h3 className="sp-serif text-lg text-[#F0EEE9]">Cashflow & ROI Projection</h3>
+                    <div className="flex gap-2">
+                      <div style={{ background: C.surfaceVariant, height: 20, width: 80 }} />
+                      <div style={{ background: C.surfaceVariant, height: 20, width: 80 }} />
                     </div>
                   </div>
                   <div style={{ borderLeft: `1px solid ${C.outlineVariant}`, borderBottom: `1px solid ${C.outlineVariant}` }} className="flex-grow w-full relative flex items-end gap-3 px-4 pb-0">
-                    <div style={{ background: `${C.surfaceVariant}80`, width: "11%", borderRadius: "2px 2px 0 0" }} className="sp-lbar-1" />
-                    <div style={{ background: `${C.surfaceVariant}80`, width: "11%", borderRadius: "2px 2px 0 0" }} className="sp-lbar-2" />
-                    <div style={{ background: `${C.secondary}30`,      width: "11%", borderRadius: "2px 2px 0 0" }} className="sp-lbar-3" />
-                    <div style={{ background: `${C.secondary}30`,      width: "11%", borderRadius: "2px 2px 0 0" }} className="sp-lbar-4" />
-                    <div style={{ background: `${C.secondary}30`,      width: "11%", borderRadius: "2px 2px 0 0" }} className="sp-lbar-5" />
-                    <div style={{ background: `${C.primary}30`,        width: "11%", borderRadius: "2px 2px 0 0" }} className="sp-lbar-3" />
-                    <div style={{ background: `${C.primary}40`,        width: "11%", borderRadius: "2px 2px 0 0" }} className="sp-lbar-4" />
-                  </div>
-                  <div className="space-y-2">
-                    {[1,2,3].map(i => <div key={i} style={{ background: C.surfaceVariant, height: 32, borderRadius: 4, opacity: 0.5 }} />)}
+                    <div style={{ background: `${C.surfaceVariant}80`, width: "11%" }} className="sp-lbar-1" />
+                    <div style={{ background: `${C.surfaceVariant}80`, width: "11%" }} className="sp-lbar-2" />
+                    <div style={{ background: `${C.secondary}30`,      width: "11%" }} className="sp-lbar-3" />
+                    <div style={{ background: `${C.secondary}30`,      width: "11%" }} className="sp-lbar-4" />
+                    <div style={{ background: `${C.secondary}30`,      width: "11%" }} className="sp-lbar-5" />
                   </div>
                 </div>
 
                 {/* Fade overlay */}
-                <div style={{ background: `linear-gradient(to bottom, transparent, ${C.charcoal}cc, ${C.charcoal})` }} className="absolute inset-0 pointer-events-none" />
+                <div style={{ background: `linear-gradient(to bottom, transparent, ${C.charcoal}fc)` }} className="absolute inset-0 pointer-events-none" />
 
                 {/* Upgrade panel */}
                 <div className="absolute bottom-0 left-0 w-full p-8 flex flex-col items-center justify-center text-center z-10">
-                  <div style={{ background: `${C.background}e0`, backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", border: `1px solid ${C.outlineVariant}`, maxWidth: 600, width: "100%" }}
-                    className="sp-border-glow p-8 flex flex-col items-center gap-6 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.6)] rounded-3xl">
-                    <Lock style={{ color: C.primary, width: 36, height: 36 }} className="sp-float" />
+                  <div style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, maxWidth: 540, width: "100%" }}
+                    className="p-8 flex flex-col items-center gap-5 rounded-[4px] border">
+                    <Lock style={{ color: C.primary, width: 32, height: 32 }} />
 
                     <div className="flex w-full max-w-xs gap-1">
                       {[C.secondary, C.secondary, C.primaryContainer, C.outlineVariant, C.outlineVariant].map((col, i) => (
-                        <div key={i} style={{ height: 2, flex: 1, background: col }} className="rounded-full" />
+                        <div key={i} style={{ height: 2, flex: 1, background: col }} />
                       ))}
                     </div>
 
                     <div className="flex flex-col gap-2">
-                      <h3 style={{ fontFamily: "Sora, sans-serif", color: C.onSurface, fontSize: "24px", fontWeight: 500, lineHeight: 1.2 }}>
+                      <h3 className="sp-serif text-[#F0EEE9] text-xl font-bold leading-snug">
                         Unlock Your Full Solar Intelligence Report
                       </h3>
-                      <p style={{ color: C.onSurfaceVariant, fontSize: "14px", lineHeight: 1.6 }} className="max-w-md mx-auto">
+                      <p style={{ color: C.onSurfaceVariant }} className="text-xs leading-relaxed max-w-sm mx-auto">
                         Access detailed financial models, itemized equipment specifications, 3D interactive viewer, and certified installer readiness breakdown.
                       </p>
                     </div>
 
-                    <div className="flex flex-wrap justify-center gap-2">
+                    <div className="flex flex-wrap justify-center gap-1.5">
                       {["25-Yr Cashflow Model","3D AR Preview","BESS Battery Config","PDF Export"].map(f => (
-                        <div key={f} style={{ background: `${C.secondary}10`, border: `1px solid ${C.secondary}30`, color: C.secondary }} className="text-[10px] font-bold uppercase tracking-wider font-mono px-3 py-1 rounded-lg">
+                        <div key={f} style={{ border: `1px solid ${C.secondary}30`, color: C.secondary, background: `${C.secondary}05` }} className="text-[9px] font-bold uppercase tracking-wider font-mono px-2.5 py-0.5 rounded-[3px]">
                           {f}
                         </div>
                       ))}
                     </div>
 
                     <button onClick={() => setCheckoutOpen(true)}
-                      style={{ background: C.primaryContainer, color: C.onPrimary }}
-                      className="flex items-center gap-2 px-8 py-4 font-semibold text-sm uppercase tracking-wider transition-all hover:opacity-90 active:scale-[0.98] group shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] rounded-2xl cursor-pointer">
-                      Unlock Report — ₹149
-                      <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                      style={{ background: C.primary, color: C.onPrimary }}
+                      className="flex items-center gap-2 px-6 py-3 font-bold text-xs uppercase tracking-wider transition-all hover:opacity-90 active:scale-[0.98] rounded-[3px] cursor-pointer font-mono">
+                      Unlock Report — ₹{payPerScanPrice} {hasReferralDiscount && "(₹20 off applied)"}
+                      <ArrowRight className="w-4 h-4" />
                     </button>
 
-                    <div className="flex items-center gap-2 text-xs font-mono" style={{ color: C.mutedSand }}>
-                      <ShieldCheck className="w-4 h-4" style={{ color: C.secondary }} />
+                    <div className="flex items-center gap-2 text-[10px] font-mono" style={{ color: C.mutedSand }}>
+                      <ShieldCheck className="w-3.5 h-3.5" style={{ color: C.secondary }} />
                       Secure checkout. Immediate access.
                     </div>
                   </div>
@@ -1563,70 +2562,70 @@ const ResultsPage = () => {
           )}
 
           {/* Footnote */}
-          <div className="mt-4 text-center text-[9px] font-mono uppercase tracking-widest" style={{ color: C.mutedSand }}>
+          <div className="mt-4 text-center text-[8px] font-mono uppercase tracking-widest" style={{ color: C.mutedSand }}>
             SUNPOWER LINK Solar Estimation Engine · Grid loss factor: 14% · Climatology: NASA POWER API satellite profile · RCC flatness tilt structural calibration active
           </div>
         </main>
 
         {/* Footer */}
         <footer style={{ background: C.background, borderTop: `1px solid ${C.outlineVariant}` }} className="flex flex-col md:flex-row justify-between items-center px-4 md:px-16 py-4 gap-6 mt-4">
-          <div className="flex flex-col gap-2 max-w-xl text-left">
-            <div style={{ fontFamily: "Sora, sans-serif", color: C.mutedSand, fontSize: "14px" }}>SUNPOWER LINK</div>
-            <p className="text-xs" style={{ color: C.mutedSand }}>© {new Date().getFullYear()} SUNPOWER LINK. Financial intelligence driven by geospatial AI.</p>
+          <div className="flex flex-col gap-1.5 max-w-xl text-left">
+            <div className="sp-serif text-[#8A8A99] text-sm font-bold">SUNPOWER LINK</div>
+            <p className="text-[11px]" style={{ color: C.mutedSand }}>© {new Date().getFullYear()} SUNPOWER LINK. Financial intelligence driven by geospatial AI.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate("/map")} style={{ background: C.secondary, color: C.onSecondary }} className="px-4 py-2 text-xs font-bold uppercase tracking-wider hover:opacity-95 transition-opacity cursor-pointer rounded-lg font-mono">
+            <button onClick={() => navigate("/map")} style={{ background: C.secondary, color: C.onSecondary }} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-95 transition-opacity cursor-pointer rounded-[3px] font-mono">
               Analyze Another Rooftop
             </button>
-            <button onClick={() => navigate("/")} style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="px-4 py-2 text-xs font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-lg font-mono">
+            <button onClick={() => navigate("/")} style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-[3px] font-mono">
               Back to Home
             </button>
           </div>
           <div className="flex flex-col md:flex-row gap-6">
             {["Methodology","Data Sources","Terms","Privacy"].map(link => (
-              <a key={link} href="#" className="text-[10px] font-bold uppercase tracking-wider font-mono transition-colors hover:text-white" style={{ color: C.mutedSand }}>{link}</a>
+              <a key={link} href="#" className="text-[9px] font-bold uppercase tracking-wider font-mono transition-colors hover:text-white" style={{ color: C.mutedSand }}>{link}</a>
             ))}
           </div>
         </footer>
 
         {/* ── Checkout Dialog ───────────────────────────────────── */}
         <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
-          <DialogContent style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="sm:max-w-[450px] rounded-3xl shadow-2xl p-6 focus:outline-none border">
+          <DialogContent style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="sm:max-w-[420px] rounded-[4px] shadow-2xl p-6 focus:outline-none border">
             <DialogHeader className="space-y-1.5 text-left">
-              <DialogTitle className="text-sm font-bold flex items-center gap-2 font-mono uppercase tracking-wider" style={{ color: C.primary }}>
-                <Sparkles className="w-4 h-4 animate-pulse" style={{ color: C.primary }} />
+              <DialogTitle className="text-xs font-bold flex items-center gap-2 font-mono uppercase tracking-wider" style={{ color: C.primary }}>
+                <Sparkles className="w-3.5 h-3.5" style={{ color: C.primary }} />
                 Secure Report Checkout
               </DialogTitle>
-              <DialogDescription className="text-xs" style={{ color: C.mutedSand }}>
-                Scan ID: <span className="font-mono font-bold" style={{ color: C.primary }}>{data.analysisId}</span>
+              <DialogDescription className="text-[10px]" style={{ color: C.mutedSand }}>
+                Scan ID: <span className="font-mono font-bold text-neutral-300">{data.analysisId}</span>
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4 my-3 text-left">
-              <div className="text-[10px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>Select tier</div>
+            <div className="space-y-3.5 my-3 text-left">
+              <div className="text-[9px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>Select tier</div>
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { key: "pay_per_scan", label: "Single Scan", price: "₹149", sub: "One-time payment" },
+                  { key: "pay_per_scan", label: "Single Scan", price: `₹${payPerScanPrice}`, sub: hasReferralDiscount ? "₹20 Referral Off" : "One-time payment" },
                   { key: "pro_monthly",  label: "Pro Monthly", price: "₹999/mo", sub: "Unlimited Scans", highlight: true },
                 ].map(plan => (
                   <button key={plan.key} onClick={() => setPaymentPlan(plan.key as any)}
-                    style={{ background: paymentPlan === plan.key ? `${C.primaryContainer}15` : "transparent", border: `1px solid ${paymentPlan === plan.key ? C.primaryContainer : C.outlineVariant}`, color: C.onSurface }}
-                    className="p-3 text-left flex flex-col justify-between h-20 transition-all font-mono rounded-xl cursor-pointer">
-                    <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: C.mutedSand }}>{plan.label}</span>
-                    <span style={{ fontFamily: "Sora, sans-serif", fontSize: "16px" }} className="font-bold">{plan.price}</span>
-                    <span className="text-[8px]" style={{ color: plan.highlight ? C.secondary : C.mutedSand }}>{plan.sub}</span>
+                    style={{ background: paymentPlan === plan.key ? `${C.primary}05` : "transparent", border: `1px solid ${paymentPlan === plan.key ? C.primary : C.outlineVariant}`, color: C.onSurface }}
+                    className="p-3 text-left flex flex-col justify-between h-20 transition-all font-mono rounded-[3px] cursor-pointer">
+                    <span className="text-[8px] font-bold uppercase tracking-wider" style={{ color: C.mutedSand }}>{plan.label}</span>
+                    <span className="font-bold sp-serif text-base">{plan.price}</span>
+                    <span className="text-[8px] text-[#2BD4A0]">{plan.sub}</span>
                   </button>
                 ))}
               </div>
             </div>
 
             <div className="space-y-3 my-2 text-left">
-              <div className="text-[10px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>Payment details</div>
-              <div style={{ background: C.background, border: `1px solid ${C.outlineVariant}` }} className="flex p-0.5 rounded-lg">
+              <div className="text-[9px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>Payment details</div>
+              <div style={{ background: C.background, border: `1px solid ${C.outlineVariant}` }} className="flex p-0.5 rounded-[3px]">
                 {["card","upi"].map(m => (
                   <button key={m} onClick={() => setPaymentMethod(m as any)}
                     style={{ background: paymentMethod===m ? C.primaryContainer : "transparent", color: paymentMethod===m ? C.onPrimary : C.mutedSand }}
-                    className="flex-1 text-[10px] py-1.5 font-bold uppercase transition-all font-mono rounded-md cursor-pointer border-none outline-none">
+                    className="flex-1 text-[9px] py-1 font-bold uppercase transition-all font-mono rounded-[2px] cursor-pointer border-none outline-none">
                     {m === "card" ? "Card" : "UPI"}
                   </button>
                 ))}
@@ -1634,47 +2633,110 @@ const ResultsPage = () => {
               {paymentMethod === "card" ? (
                 <div className="space-y-3">
                   <div>
-                    <label className="text-[9px] font-bold uppercase font-mono block mb-1" style={{ color: C.mutedSand }}>Card number</label>
+                    <label className="text-[8px] font-bold uppercase font-mono block mb-1" style={{ color: C.mutedSand }}>Card number</label>
                     <input type="text" placeholder="4000 1234 5678 9010" value={cardNumber} onChange={e => setCardNumber(e.target.value)}
                       style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                      className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#ff8f00] rounded-lg border" />
+                      className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#E8A020] rounded-[3px] border" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[9px] font-bold uppercase font-mono block mb-1" style={{ color: C.mutedSand }}>Expiry</label>
+                      <label className="text-[8px] font-bold uppercase font-mono block mb-1" style={{ color: C.mutedSand }}>Expiry</label>
                       <input type="text" placeholder="MM/YY" value={cardExpiry} onChange={e => setCardExpiry(e.target.value)}
                         style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                        className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#ff8f00] rounded-lg border" />
+                        className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#E8A020] rounded-[3px] border" />
                     </div>
                     <div>
-                      <label className="text-[9px] font-bold uppercase font-mono block mb-1" style={{ color: C.mutedSand }}>CVV</label>
+                      <label className="text-[8px] font-bold uppercase font-mono block mb-1" style={{ color: C.mutedSand }}>CVV</label>
                       <input type="password" placeholder="•••" value={cardCvv} onChange={e => setCardCvv(e.target.value)}
                         style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                        className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#ff8f00] rounded-lg border" />
+                        className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#E8A020] rounded-[3px] border" />
                     </div>
                   </div>
                 </div>
               ) : (
                 <div className="text-center py-4">
-                  <div style={{ border: `1px dashed ${C.secondary}30`, width: 128, height: 128, margin: "0 auto 8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <span className="text-[9px] font-mono uppercase" style={{ color: C.secondary }}>SolarScan Sandbox QR</span>
+                  <div style={{ border: `1px dashed ${C.secondary}30`, width: 120, height: 120, margin: "0 auto 8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <span className="text-[8px] font-mono uppercase" style={{ color: C.secondary }}>SolarScan Sandbox QR</span>
                   </div>
-                  <div className="text-[9px] font-mono uppercase" style={{ color: C.mutedSand }}>Scan with any UPI app</div>
+                  <div className="text-[8px] font-mono uppercase" style={{ color: C.mutedSand }}>Scan with any UPI app</div>
                 </div>
               )}
             </div>
 
             <div style={{ borderTop: `1px solid ${C.outlineVariant}` }} className="space-y-2 pt-4 mt-4">
               <button onClick={handleSandboxCheckout} disabled={paymentProcessing || paymentSuccess}
-                style={{ background: C.primaryContainer, color: C.onPrimary }}
-                className="w-full text-xs font-bold py-3 flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity uppercase tracking-wider rounded-xl cursor-pointer border-none outline-none">
+                style={{ background: C.primary, color: C.onPrimary }}
+                className="w-full text-[10px] font-bold py-2.5 flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity uppercase tracking-wider rounded-[3px] cursor-pointer border-none outline-none font-mono">
                 {paymentProcessing ? <><RefreshCw className="w-4 h-4 animate-spin" />Processing...</> : paymentSuccess ? <><CheckCircle2 className="w-4 h-4" />Unlocking...</> : "Simulate Instant Sandbox Unlock"}
               </button>
               <button onClick={() => { setCheckoutOpen(false); initiatePayment({ plan: paymentPlan, scanId: data?.analysisId, onSuccess: refreshUnlock }); }}
                 disabled={paymentProcessing || paymentSuccess || isPaymentGatewayLoading}
                 style={{ background: "transparent", border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                className="w-full text-xs font-bold py-3 flex items-center justify-center gap-2 hover:bg-[#1F1B18] transition-colors disabled:opacity-50 uppercase tracking-wider rounded-xl cursor-pointer">
+                className="w-full text-[10px] font-bold py-2.5 flex items-center justify-center gap-2 hover:bg-[#141416] transition-colors disabled:opacity-50 uppercase tracking-wider rounded-[3px] cursor-pointer font-mono">
                 {isPaymentGatewayLoading ? <><RefreshCw className="w-4 h-4 animate-spin" />Connecting...</> : "Launch Razorpay"}
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── WhatsApp Share Dialog ───────────────────────────────── */}
+        <Dialog open={shareModalOpen} onOpenChange={setShareModalOpen}>
+          <DialogContent style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="sm:max-w-[400px] rounded-[4px] shadow-2xl p-6 focus:outline-none border">
+            <DialogHeader className="space-y-1.5 text-left">
+              <DialogTitle className="text-xs font-bold flex items-center gap-2 font-mono uppercase tracking-wider" style={{ color: C.secondary }}>
+                <span>📱</span>
+                Share Proposal via WhatsApp
+              </DialogTitle>
+              <DialogDescription className="text-[10px]" style={{ color: C.mutedSand }}>
+                Generate a clean solar proposal message and open wa.me link.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 my-4 text-left">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>
+                  Homeowner WhatsApp Number
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 9876543210"
+                  value={sharePhone}
+                  onChange={(e) => {
+                    setSharePhone(e.target.value);
+                    setSharePhoneError("");
+                  }}
+                  style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+                  className="px-3 py-2 text-xs font-mono rounded-[3px] focus:outline-none focus:ring-1 focus:ring-[#E2E8F0]"
+                />
+                {sharePhoneError && (
+                  <p className="text-[10px] text-red-400 font-mono mt-0.5">{sharePhoneError}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={handleWhatsAppShare}
+                disabled={isSharing}
+                style={{ background: C.primary, color: C.onPrimary }}
+                className="w-full text-[10px] font-bold py-2.5 flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity uppercase tracking-wider rounded-[3px] cursor-pointer border-none outline-none font-mono"
+              >
+                {isSharing ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    Generating Link...
+                  </>
+                ) : (
+                  "Open WhatsApp Web / App"
+                )}
+              </button>
+              <button
+                onClick={() => setShareModalOpen(false)}
+                disabled={isSharing}
+                style={{ background: "transparent", border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+                className="w-full text-[10px] font-bold py-2.5 flex items-center justify-center gap-2 hover:bg-[#141416] transition-colors disabled:opacity-50 uppercase tracking-wider rounded-[3px] cursor-pointer font-mono"
+              >
+                Cancel
               </button>
             </div>
           </DialogContent>

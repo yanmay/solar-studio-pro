@@ -7,8 +7,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 let cached: SupabaseClient | null = null;
 
 export function getSupabaseAdmin(): SupabaseClient | null {
-  const url = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
   if (!url || !serviceRoleKey) return null;
   if (cached) return cached;
   cached = createClient(url, serviceRoleKey, {

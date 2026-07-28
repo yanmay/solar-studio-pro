@@ -8,6 +8,9 @@ import { Loader2 } from "lucide-react";
 import LandingPage from "./pages/LandingPage";
 import PwaInstallPrompt from "./components/PwaInstallPrompt";
 import { trackPageView } from "./lib/analytics";
+import { AuthProvider } from "./contexts/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
+import { captureReferrerCode } from "./lib/referrals";
 
 // Load Plausible script once (guarded by env var)
 const PLAUSIBLE_DOMAIN = import.meta.env.VITE_PLAUSIBLE_DOMAIN;
@@ -29,7 +32,13 @@ loadPlausible();
 // SPA page-view tracker
 function RouteTracker() {
   const loc = useLocation();
-  useEffect(() => { trackPageView(loc.pathname); }, [loc.pathname]);
+  useEffect(() => {
+    trackPageView(loc.pathname);
+    
+    // Capture referral query parameter
+    const params = new URLSearchParams(loc.search);
+    captureReferrerCode(params);
+  }, [loc]);
   return null;
 }
 
@@ -39,6 +48,18 @@ const ResultsPage = lazy(() => import("./pages/ResultsPage"));
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
 const MarketInsightsPage = lazy(() => import("./pages/MarketInsightsPage"));
 const PolicyTrackerPage = lazy(() => import("./pages/PolicyTrackerPage"));
+const SignInPage = lazy(() => import("./pages/auth/SignInPage"));
+const SignUpPage = lazy(() => import("./pages/auth/SignUpPage"));
+const ForgotPasswordPage = lazy(() => import("./pages/auth/ForgotPasswordPage"));
+const ResetPasswordPage = lazy(() => import("./pages/auth/ResetPasswordPage"));
+const MyScansPage = lazy(() => import("./pages/MyScansPage"));
+const AccountSettingsPage = lazy(() => import("./pages/AccountSettingsPage"));
+const ResultsDashboard = lazy(() => import("./pages/ResultsDashboard"));
+const InstallerSignup = lazy(() => import("./pages/installer/Signup"));
+const InstallerDashboard = lazy(() => import("./pages/installer/Dashboard"));
+const InstallerLeadDetail = lazy(() => import("./pages/installer/LeadDetail"));
+const ApiDocs = lazy(() => import("./pages/ApiDocs"));
+const AdminPage = lazy(() => import("./pages/AdminPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -54,27 +75,40 @@ const RouteFallback = () => (
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <RouteTracker />
-        <Suspense fallback={<RouteFallback />}>
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/map" element={<MapPage />} />
-            <Route path="/results" element={<ResultsPage />} />
-            <Route path="/privacy" element={<PrivacyPage />} />
-            <Route path="/market-insights" element={<MarketInsightsPage />} />
-            <Route path="/policy-tracker" element={<PolicyTrackerPage />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </Suspense>
-        <PwaInstallPrompt />
-      </BrowserRouter>
-    </TooltipProvider>
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <RouteTracker />
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/map" element={<MapPage />} />
+              <Route path="/results" element={<ResultsPage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/market-insights" element={<MarketInsightsPage />} />
+              <Route path="/policy-tracker" element={<PolicyTrackerPage />} />
+              <Route path="/auth/signin" element={<SignInPage />} />
+              <Route path="/auth/signup" element={<SignUpPage />} />
+              <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/my-scans" element={<ProtectedRoute><MyScansPage /></ProtectedRoute>} />
+              <Route path="/settings" element={<ProtectedRoute><AccountSettingsPage /></ProtectedRoute>} />
+              <Route path="/dashboard" element={<ResultsDashboard />} />
+              <Route path="/installer/signup" element={<InstallerSignup />} />
+              <Route path="/installer/dashboard" element={<InstallerDashboard />} />
+              <Route path="/installer/lead/:leadId" element={<InstallerLeadDetail />} />
+              <Route path="/api/docs" element={<ApiDocs />} />
+              <Route path="/admin" element={<AdminPage />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
+          <PwaInstallPrompt />
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
-
 
 export default App;

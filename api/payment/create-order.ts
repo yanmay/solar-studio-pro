@@ -20,6 +20,7 @@ export default async function handler(req: Request): Promise<Response> {
       address?: string;
       lat?: number;
       lng?: number;
+      referrerCode?: string;
     } = {};
     try {
       body = await req.json();
@@ -39,7 +40,10 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     // Determine amount IN PAISE server-side only
-    const amount = plan === 'pay_per_scan' ? 14900 : 99900;
+    // Referred user gets ₹20 off first PDF (12900 paise instead of 14900 paise)
+    const amount = plan === 'pay_per_scan' 
+      ? (body.referrerCode ? 12900 : 14900) 
+      : 99900;
     const keyId = process.env.RAZORPAY_KEY_ID;
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
@@ -65,6 +69,7 @@ export default async function handler(req: Request): Promise<Response> {
       notes: {
         plan,
         scanId: body.scanId || '',
+        referrerCode: body.referrerCode || '',
       },
     });
 

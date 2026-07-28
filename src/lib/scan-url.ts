@@ -5,12 +5,7 @@ export function encodeScanToUrl(
   panelConfig: PanelConfig,
   tariff: TariffConfig
 ): string {
-  // Never encode unlock/payment state into shareable URLs — unlock state is
-  // server-authoritative (see use-unlock-status.ts). Strip any legacy flag.
-  const { unlocked: _legacyUnlocked, ...safeScanInput } = scanInput as ScanInput & {
-    unlocked?: boolean;
-  };
-  const data = { si: safeScanInput, pc: panelConfig, t: tariff };
+  const data = { si: scanInput, pc: panelConfig, t: tariff };
   const json = JSON.stringify(data);
   // Safe base64 encoding for unicode strings
   return btoa(encodeURIComponent(json).replace(/%([0-9A-F]{2})/g, (_, p1) => {
@@ -30,9 +25,6 @@ export function decodeScanFromUrl(
     );
     const parsed = JSON.parse(json);
     if (parsed && parsed.si && parsed.pc && parsed.t) {
-      // Ignore any legacy client-supplied unlock flag — a tampered URL must
-      // never influence paywall state.
-      delete parsed.si.unlocked;
       return {
         scanInput: parsed.si,
         panelConfig: parsed.pc,
