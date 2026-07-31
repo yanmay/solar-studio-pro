@@ -889,6 +889,16 @@
   .group:hover .group-hover\:opacity-100 {
     opacity: 1;
   }
+
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  /* Hide scrollbar for IE, Edge and Firefox */
+  .scrollbar-none {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
 }
 
 /* ── Starfield & Pulsing Marker Animations (Globe Redesign) ── */
@@ -1105,5 +1115,6 @@
 .stagger-in:nth-child(6) { animation-delay: 400ms; }
 .stagger-in:nth-child(7) { animation-delay: 480ms; }
 .stagger-in:nth-child(8) { animation-delay: 560ms; }
+
 
 

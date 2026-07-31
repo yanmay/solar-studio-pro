@@ -392,6 +392,36 @@ const LandingPage = () => {
           </div>
         </div>
 
+        {/* Mobile Horizontal Scrollable Tabs */}
+        <div className="md:hidden flex items-center overflow-x-auto whitespace-nowrap scrollbar-none py-2 px-4 mt-2 gap-4 bg-black/40">
+          {[
+            { href: "#about", label: "Architecture", id: "about" },
+            { href: "#technology", label: "Technology", id: "technology" },
+            { href: "#workflow", label: "Process", id: "workflow" },
+            { href: "#faq", label: "FAQ", id: "faq" },
+          ].map(({ href, label, id }) => (
+            <a
+              key={id}
+              href={href}
+              className={`transition-colors relative text-xs font-medium px-3 py-1.5 rounded-lg ${activeSection === id ? "text-[#FF6600] bg-white/5 font-semibold" : "text-neutral-400 hover:text-white"}`}
+            >
+              {label}
+            </a>
+          ))}
+          <a
+            onClick={() => navigate("/market-insights")}
+            className="transition-colors text-xs font-medium px-3 py-1.5 text-neutral-400 hover:text-white cursor-pointer"
+          >
+            Market Insights
+          </a>
+          <a
+            onClick={() => navigate("/policy-tracker")}
+            className="transition-colors text-xs font-medium px-3 py-1.5 text-neutral-400 hover:text-white cursor-pointer"
+          >
+            Policy Tracker
+          </a>
+        </div>
+
         {/* Mobile menu */}
         <div className={`fixed inset-0 bg-[#050505]/[0.98] backdrop-blur-3xl z-40 transition-all duration-300 ease-out md:hidden flex flex-col pt-24 px-6 ${mobileMenuOpen ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 -translate-y-4 pointer-events-none"}`}>
           <div className="flex flex-col space-y-5 text-lg font-medium tracking-tight text-neutral-300 overflow-y-auto max-h-[80vh] pb-8">

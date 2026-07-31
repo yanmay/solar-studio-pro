@@ -196,13 +196,14 @@ export interface SolarAnalysis {
   generatedAt: string;
   irradianceSource?: string;
   monthlyIrradiance?: Record<string, number>;
-  
+  // Shading accuracy outputs
+  horizonShadingLoss?: number;
+  skyViewFactor?: number;
   windZone?: { zone: number; label: string };
   tempDerate?: number;
   ws10m?: number;
   t2m?: number;
   shadingLoss?: number;
-  
   // Custom layout properties
   panelCount?: number;
   panelType?: "compact" | "premium";
@@ -225,6 +226,16 @@ function generateAnalysisId(): string {
   return id;
 }
 
+/** Roof shading levels → fractional yield loss (matches Python engine + ResultsPage UI). */
+export const SHADING_LOSS: Record<"none" | "partial" | "heavy", number> = {
+  none: 0.0,
+  partial: 0.15,
+  heavy: 0.30,
+};
+
+/** Clear-sky sky-view factor before shading is applied. */
+export const BASE_SKY_VIEW_FACTOR = 0.95;
+
 interface FullCalcOptions {
   electricityRate?: number;
   irradianceSource?: string;
@@ -232,10 +243,8 @@ interface FullCalcOptions {
   shading?: "none" | "partial" | "heavy" | "auto";
   computedShadingLoss?: number | null;
   exclusionAreaM2?: number;
-  
   ws10m?: number;
   t2m?: number;
-  
   // Custom capacity & layout inputs
   customCapacityKw?: number;
   panelCount?: number;
@@ -288,6 +297,7 @@ export function runFullCalculation(
   } else {
     appliedShadingLoss = opts.computedShadingLoss ?? 0;
   }
+  const skyViewFactor = BASE_SKY_VIEW_FACTOR * (1 - appliedShadingLoss);
 
   // Step 4
   const dailyKwh = Math.round((annualKwh / 365) * 10) / 10;
@@ -333,13 +343,14 @@ export function runFullCalculation(
     generatedAt: new Date().toISOString(),
     irradianceSource: opts.irradianceSource,
     monthlyIrradiance: opts.monthlyIrradiance,
-    
+    // Shading accuracy outputs
+    horizonShadingLoss: appliedShadingLoss,
+    skyViewFactor,
     windZone: windZoneObj,
     tempDerate,
     ws10m: opts.ws10m,
     t2m: opts.t2m,
     shadingLoss: appliedShadingLoss,
-    
     // Pass custom layout properties to the results object
     panelCount: opts.panelCount,
     panelType: opts.panelType,
