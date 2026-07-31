@@ -41,7 +41,6 @@ export function buildWhatsAppUrl(phone: string, text: string): string {
 /**
  * Converts a hex color string to RGB object
  */
- */
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const clean = hex.replace("#", "").trim();
   if (clean.length === 3) {
