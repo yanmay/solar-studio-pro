@@ -101,7 +101,10 @@ export async function generatePDFReport(
       const baseAnnualKwh = model?.baseAnnualKwh ?? analysis.energy.annualKwh;
       const paybackPeriod = model?.paybackPeriod ?? analysis.investment.paybackYears;
       const netCostInr = model?.netCostInr ?? analysis.investment.netCostInr;
-      const npv = model?.npv ?? analysis.investment.netCostInr;
+      const npv = model?.npv ?? analysis.investment.npv ?? analysis.investment.netCostInr;
+      const irr = analysis.investment.irr;
+      const lcoe = analysis.investment.lcoe;
+      const investmentGrade = analysis.investment.investmentGrade;
       const savings25yr = model ? (model.cumulativeCashFlow[25] + model.netCostInr) : analysis.financials.savings25yrInr;
       const savings25L = (savings25yr / 100000).toFixed(2);
       const siteId = analysis.analysisId?.slice(-6).toUpperCase() || "REPORT";
@@ -149,7 +152,7 @@ export async function generatePDFReport(
         doc.setTextColor(240, 238, 233); // #F0EEE9
         doc.setFont("helvetica", "bold");
         doc.setFontSize(9);
-        doc.text(`${opts.brandConfig?.companyName || "SUNPOWER LINK"}  |  ${pageTitle}`, margin, 10);
+        doc.text(`${opts.brandConfig?.companyName || "SolarScan AI"}  |  ${pageTitle}`, margin, 10);
         
         doc.setFont("courier", "bold");
         doc.setFontSize(8.5);
@@ -192,13 +195,13 @@ export async function generatePDFReport(
           doc.setTextColor(primaryRgb.r, primaryRgb.g, primaryRgb.b);
           doc.setFont("helvetica", "bold");
           doc.setFontSize(14);
-          doc.text(opts.brandConfig.companyName || "SUNPOWER LINK", margin, 24);
+          doc.text(opts.brandConfig.companyName || "SolarScan AI", margin, 24);
         }
       } else {
         doc.setTextColor(primaryRgb.r, primaryRgb.g, primaryRgb.b);
         doc.setFont("helvetica", "bold");
         doc.setFontSize(14);
-        doc.text("SUNPOWER LINK", margin, 24);
+        doc.text("SolarScan AI", margin, 24);
       }
 
       y = 65;
@@ -255,7 +258,37 @@ export async function generatePDFReport(
       doc.setFontSize(8.5);
       doc.text(badgeText, margin + 29, y + 2.5);
 
-      y += 25;
+      // Investment Grade Badge (inline with confidence)
+      if (investmentGrade) {
+        const gradeX = margin + 26 + badgeW + 6;
+        doc.setTextColor(26, 26, 26);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9.5);
+        doc.text("GRADE:  ", gradeX, y + 2.5);
+        const gradeRgb = hexToRgb(investmentGrade.color);
+        const gradeBadgeText = `${investmentGrade.grade} — ${investmentGrade.label.toUpperCase()}`;
+        const gradeBadgeW = doc.getTextWidth(gradeBadgeText) + 6;
+        doc.setFillColor(gradeRgb.r, gradeRgb.g, gradeRgb.b);
+        doc.roundedRect(gradeX + 16, y - 1.5, gradeBadgeW, 6, 1, 1, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("courier", "bold");
+        doc.setFontSize(8.5);
+        doc.text(gradeBadgeText, gradeX + 19, y + 2.5);
+      }
+
+      y += 10;
+      // LCOE / IRR mini-metrics row
+      if (lcoe !== undefined || irr !== undefined) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(100, 116, 139);
+        const miniMetrics: string[] = [];
+        if (lcoe !== undefined) miniMetrics.push(`LCOE: ₹${lcoe.toFixed(2)}/kWh`);
+        if (irr !== undefined) miniMetrics.push(`IRR: ${irr.toFixed(1)}%`);
+        doc.text(miniMetrics.join("   ·   "), margin, y + 2.5);
+      }
+
+      y += 15;
 
       // Large Metric Highlight Card
       doc.setDrawColor(229, 231, 235);

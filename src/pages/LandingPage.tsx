@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Menu,
@@ -85,10 +85,10 @@ const LandingPage = () => {
 
   // SEO
   useEffect(() => {
-    document.title = "SUNPOWER LINK - India's Rooftop Solar Potential Estimator";
+    document.title = "SolarScan AI - India's Rooftop Solar Potential Estimator";
     const meta = document.querySelector('meta[name="description"]');
     if (meta) {
-      meta.setAttribute("content", "SUNPOWER LINK maps your rooftop solar potential with satellite-precision, instantly computing grid savings, panel geometry layouts, and PM scheme subsidies.");
+      meta.setAttribute("content", "SolarScan AI maps your rooftop solar potential with satellite-precision, instantly computing grid savings, panel geometry layouts, and PM scheme subsidies.");
     }
   }, []);
 
@@ -205,7 +205,7 @@ const LandingPage = () => {
             <a href="#" className="flex items-center gap-2.5 group">
               <img 
                 src="/logo.png" 
-                alt="SUNPOWER LINK Logo" 
+                alt="SolarScan AI Logo" 
                 className={`object-contain transition-all duration-500 group-hover:scale-105 ${
                   isScrolled ? "w-9 h-9" : "w-12 h-12"
                 }`} 
@@ -600,7 +600,7 @@ const LandingPage = () => {
             <div className="w-full lg:w-[60%] flex flex-col slide-in-right">
               <h3 className="text-3xl md:text-[2.6rem] font-light text-white leading-[1.25] tracking-[-0.025em]">
                 Instead of bouncing between complex engineering calculators, mapping software, and utility rate sheets,{" "}
-                <span className="text-[#FF6600] font-semibold transition-all duration-300 hover:text-orange-400">SUNPOWER LINK</span>{" "}
+                <span className="text-[#FF6600] font-semibold transition-all duration-300 hover:text-orange-400">SolarScan AI</span>{" "}
                 provides a single AI-powered canvas for rooftop detection, layout design, and financial mapping.
               </h3>
             </div>
@@ -614,7 +614,7 @@ const LandingPage = () => {
               {/* Plain text label */}
               <p className="text-[#FFAA00] font-mono text-[11px] uppercase tracking-[0.2em] mb-4">AI at the Core</p>
               <h2 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight leading-[1.1] max-w-2xl mx-auto">
-                SUNPOWER LINK is built from the ground up{" "}
+                SolarScan AI is built from the ground up{" "}
                 <span className="text-[#FF6600]">for Indian rooftops.</span>
               </h2>
             </div>
@@ -755,7 +755,7 @@ const LandingPage = () => {
                 { q: "How does SolarNet analyze my roof?", a: "Our deep learning neural networks analyze geographic coordinate tiles to identify boundaries, slopes, and shading from surrounding foliage or buildings, generating a high-fidelity rendering of your usable solar surface area." },
                 { q: "What is NASA POWER data?", a: "The NASA Prediction of Worldwide Energy Resources (POWER) project distributes solar irradiance data. We integrate this to assess localized daily and yearly solar radiation based on GPS coordinates." },
                 { q: "Are the savings calculations accurate?", a: "Calculations match local electricity utility tariff schedules (slab charges, fixed fees, and taxes) against net energy production predictions, making final estimations highly realistic." },
-                { q: "What is the PM Surya Ghar scheme?", a: "PM Surya Ghar: Muft Bijli Yojana is the Government of India's flagship rooftop solar subsidy scheme offering up to ₹78,000 for residential installations. SUNPOWER LINK automatically calculates your applicable subsidy based on system capacity." },
+                { q: "What is the PM Surya Ghar scheme?", a: "PM Surya Ghar: Muft Bijli Yojana is the Government of India's flagship rooftop solar subsidy scheme offering up to ₹78,000 for residential installations. SolarScan AI automatically calculates your applicable subsidy based on system capacity." },
               ].map((faq, index) => (
                 <div className="border-b border-white/5" key={index}>
                   <button
@@ -791,7 +791,7 @@ const LandingPage = () => {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 pb-20 border-b border-white/5">
             <div className="lg:col-span-4 space-y-6">
               <div className="flex items-center gap-2">
-                <img src="/logo.png" alt="SUNPOWER LINK Logo" className="w-12 h-12 object-contain" />
+                <img src="/logo.png" alt="SolarScan AI Logo" className="w-12 h-12 object-contain" />
                 <span className="text-lg font-bold text-white">SUNPOWER <span className="font-serif italic font-light">LINK</span></span>
               </div>
               <p className="text-neutral-600 text-sm leading-relaxed max-w-xs">The AI-native solar intelligence system for modern energy planning in India.</p>
@@ -826,7 +826,7 @@ const LandingPage = () => {
           </div>
 
           <div className="py-8 flex flex-col md:flex-row justify-between items-center gap-6 text-xs text-neutral-700 font-mono">
-            <span>© {new Date().getFullYear()} SUNPOWER LINK. Rooftop solar analysis for India. All Rights Reserved.</span>
+            <span>© {new Date().getFullYear()} SolarScan AI. Rooftop solar analysis for India. All Rights Reserved.</span>
             <div className="flex space-x-6">
               <button onClick={() => navigate("/privacy")} className="hover:text-[#FF6600] transition-colors bg-transparent border-none cursor-pointer p-0">Privacy Policy</button>
               <button className="hover:text-[#FF6600] transition-colors bg-transparent border-none cursor-pointer p-0">Sitemap</button>

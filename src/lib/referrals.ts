@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Referral Engine for Organic Growth
  */
 
@@ -143,7 +143,7 @@ export function processReferralConversion(): void {
  * Generate viral sharing content
  */
 export function getReferralShareContent(referralCode: string, address: string = "my roof") {
-  const referralLink = `https://sunpowerlink.in/?ref=${referralCode}`;
+  const referralLink = `https://solarscan.ai/?ref=${referralCode}`;
   
   const text = `I just estimated the solar solar potential for ${address}! ☀️ We can save thousands on electricity bills. Check your roof's solar potential with PM-Surya Ghar subsidies here: ${referralLink}`;
   

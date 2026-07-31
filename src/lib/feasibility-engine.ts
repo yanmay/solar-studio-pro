@@ -1,4 +1,4 @@
-import { getRegionalPSH } from "./india-grid";
+﻿import { getRegionalPSH } from "./india-grid";
 import { 
   calcSubsidyInr, 
   ELECTRICITY_RATE_INR,
@@ -1016,7 +1016,7 @@ export async function runAutomatedFeasibility(
           let response;
           try {
             response = await fetch(nomUrl, {
-              headers: { 'User-Agent': 'SunPowerLinkSolarApp/1.0' },
+              headers: { 'User-Agent': 'SolarScanAIApp/1.0' },
               signal: geoController.signal,
             });
           } finally {

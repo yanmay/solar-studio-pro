@@ -1,4 +1,4 @@
-// Sales/workflow constants for installer-facing proposal, CRM, and kanban flows.
+﻿// Sales/workflow constants for installer-facing proposal, CRM, and kanban flows.
 // PM Surya Ghar Muft Bijli Yojana central subsidy slabs:
 // Source: National Portal for Rooftop Solar / PM Surya Ghar scheme schedule
 // (Rs 30,000/kW up to 2 kW, Rs 18,000 for the third kW, capped at Rs 78,000).
@@ -10,7 +10,7 @@ export const PM_SURYA_GHAR_SUBSIDY = {
 } as const;
 
 // National fallback tariff used only when the feasibility report has no state tariff.
-// Source: existing SUNPOWER LINK default residential tariff assumption.
+// Source: existing SolarScan AI default residential tariff assumption.
 export const NATIONAL_FALLBACK_TARIFF_INR_PER_KWH = 7;
 
 export const PROPOSAL_ROI_YEARS = 25;

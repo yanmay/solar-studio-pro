@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   TrendingUp,
@@ -69,7 +69,7 @@ export default function AdminPage() {
   const [loadingAlert, setLoadingAlert] = useState<string | null>(null);
 
   useEffect(() => {
-    document.title = "Admin Console — SUNPOWER LINK";
+    document.title = "Admin Console — SolarScan AI";
   }, []);
 
   // Mock database statistics over date range
@@ -163,7 +163,7 @@ export default function AdminPage() {
       <header className="sticky top-0 z-50 backdrop-blur-2xl bg-[#050505]/85 border-b border-white/10 px-4 md:px-12 py-3">
         <div className="max-w-[1280px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} className="flex items-center gap-3 group">
-            <img src="/logo.png" alt="SUNPOWER LINK Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
+            <img src="/logo.png" alt="SolarScan AI Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
             <span className="text-[15px] font-bold text-white tracking-tight">
               SUNPOWER <span className="font-serif italic font-light text-[#FF6600]">LINK</span> <span className="font-mono text-xs text-white/40 font-normal">/ ADMIN</span>
             </span>
@@ -441,7 +441,7 @@ export default function AdminPage() {
       {/* Footer */}
       <footer className="mt-12 py-6 text-center border-t border-white/10 text-xs font-mono text-white/40 bg-[#050505]">
         <div className="max-w-[1280px] mx-auto px-4 md:px-12 flex justify-between items-center">
-          <span>© {new Date().getFullYear()} SUNPOWER LINK. Internal Telemetry.</span>
+          <span>© {new Date().getFullYear()} SolarScan AI. Internal Telemetry.</span>
           <span>Access Restricted to Certified Operators</span>
         </div>
       </footer>

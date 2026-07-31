@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useInstallerAuth } from "@/hooks/use-installer-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -57,7 +57,7 @@ export default function Signup() {
     setLoading(true);
     try {
       await signUp(email, companyName, cleanGstin, cleanPhone, city, state, mnre);
-      toast({ title: "Partner Account Activated", description: "Welcome to SUNPOWER LINK Partner Network!" });
+      toast({ title: "Partner Account Activated", description: "Welcome to SolarScan AI Partner Network!" });
       navigate("/installer/dashboard?tour=true");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Sign up failed. Please try again.";
@@ -91,7 +91,7 @@ export default function Signup() {
       {/* ── Top Nav ───────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-[#020203]/80 backdrop-blur-2xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2.5 group" aria-label="SUNPOWER LINK Home">
+          <Link to="/" className="flex items-center gap-2.5 group" aria-label="SolarScan AI Home">
             <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
             <span className="text-[15px] font-bold text-white tracking-tight">
               SUNPOWER <span className="font-['Calistoga',serif] italic font-normal text-[#FF6600]">LINK</span>
@@ -124,7 +124,7 @@ export default function Signup() {
                 Win More <span className="text-[#FF6600]">Solar</span> Contracts
               </h1>
               <p className="text-[14px] text-white/50 leading-relaxed max-w-[360px]">
-                Connect with homeowners who've already analysed their own rooftop on SUNPOWER LINK — these are warm, high-intent leads, not cold lists.
+                Connect with homeowners who've already analysed their own rooftop on SolarScan AI — these are warm, high-intent leads, not cold lists.
               </p>
             </div>
 
@@ -329,7 +329,7 @@ export default function Signup() {
       </main>
 
       <footer className="border-t border-white/[0.04] py-5 text-center text-[11px] text-white/20 relative z-10">
-        © 2026 SUNPOWER LINK Partner Network · All rights reserved
+        © 2026 SolarScan AI Partner Network · All rights reserved
       </footer>
     </div>
   );

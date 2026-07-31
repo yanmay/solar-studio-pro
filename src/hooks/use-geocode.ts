@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+﻿import { useMutation } from "@tanstack/react-query";
 
 interface GeocodeResponse {
   lat: number;
@@ -13,7 +13,7 @@ async function nominatimGeocode(address: string): Promise<GeocodeResponse> {
     address.trim()
   )}&format=json&addressdetails=1&limit=1&accept-language=en`;
   const res = await fetch(url, {
-    headers: { "User-Agent": "SunPowerLinkSolarApp/1.0" },
+    headers: { "User-Agent": "SolarScanAIApp/1.0" },
   });
   if (!res.ok) throw new Error("Geocoding service unavailable.");
   const data = await res.json();

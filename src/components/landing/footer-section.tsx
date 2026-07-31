@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useNavigate } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
@@ -53,7 +53,7 @@ export function FooterSection() {
             {/* Brand Column */}
             <div className="col-span-2 space-y-6">
               <a href="#" className="inline-flex items-center gap-2.5">
-                <img src="/logo.svg" alt="SUNPOWER LINK Logo" className="w-10 h-10 object-contain" />
+                <img src="/logo.svg" alt="SolarScan AI Logo" className="w-10 h-10 object-contain" />
                 <span className="text-lg font-bold text-white">
                   SUNPOWER <span className="font-serif italic font-light text-[#FF6600]">LINK</span>
                 </span>
@@ -121,7 +121,7 @@ export function FooterSection() {
         {/* Bottom Bar */}
         <div className="py-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-xs text-neutral-500 font-mono">
-            © {new Date().getFullYear()} SUNPOWER LINK. All rights reserved.
+            © {new Date().getFullYear()} SolarScan AI. All rights reserved.
           </p>
 
           <div className="flex items-center gap-4 text-xs text-neutral-500 font-mono">

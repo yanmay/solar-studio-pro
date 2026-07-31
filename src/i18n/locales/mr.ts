@@ -1,4 +1,4 @@
-export default {
+﻿export default {
   app: {
     name: "सनपॉवर लिंक",
     tagline: "प्रत्येक छताला सौर बुद्धिमत्तेने सक्षम",
@@ -105,7 +105,7 @@ export default {
     phonePh: "98765 43210",
     city: "शहर",
     cityPh: "पुणे, बेंगळुरू, दिल्ली…",
-    consent: "SUNPOWER LINK आणि भागीदार इंस्टॉलर्सशी या सोलर कोटेशनबद्दल संपर्क साधण्यास मी सहमत आहे.",
+    consent: "SolarScan AI आणि भागीदार इंस्टॉलर्सशी या सोलर कोटेशनबद्दल संपर्क साधण्यास मी सहमत आहे.",
     submit: "माझे विनामूल्य कोटेशन मिळवा →",
     submitting: "सबमिट होत आहे…",
     successTitle: "तुम्ही यादीत आहात",
@@ -113,7 +113,7 @@ export default {
     close: "बंद करा",
   },
   pwa: {
-    title: "SUNPOWER LINK स्थापित करा",
+    title: "SolarScan AI स्थापित करा",
     desc: "होम स्क्रीनवर जोडा — ऑफलाइन कार्य करते, अॅपसारखे उघडते.",
     install: "स्थापित करा",
     notNow: "आता नाही",

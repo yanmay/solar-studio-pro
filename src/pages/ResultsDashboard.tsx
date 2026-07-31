@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -221,7 +221,7 @@ export default function ResultsDashboard() {
   const confidenceScore = isSample ? 0.91 : 0.84;
 
   useEffect(() => {
-    document.title = "Solar Scan Dashboard — SUNPOWER LINK";
+    document.title = "Solar Scan Dashboard — SolarScan AI";
   }, []);
 
   // Generate 25 year timeline cash flow
@@ -310,7 +310,7 @@ export default function ResultsDashboard() {
       <header className="fixed top-0 left-0 right-0 z-50 h-16 backdrop-blur-2xl bg-[#050505]/85 border-b border-white/10">
         <div className="max-w-[1280px] h-full mx-auto px-4 md:px-8 flex justify-between items-center">
           <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} className="flex items-center gap-3 group">
-            <img src="/logo.png" alt="SUNPOWER LINK Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
+            <img src="/logo.png" alt="SolarScan AI Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
             <span className="text-[15px] font-bold text-white tracking-tight">
               SUNPOWER <span className="font-serif italic font-light text-[#FF6600]">LINK</span>
             </span>

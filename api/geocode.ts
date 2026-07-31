@@ -1,4 +1,4 @@
-import { checkRateLimit } from "./_utils/rate-limit.js";
+﻿import { checkRateLimit } from "./_utils/rate-limit.js";
 
 export const config = {
   runtime: "nodejs",
@@ -78,7 +78,7 @@ export default async function handler(req: Request): Promise<Response> {
       try {
         const nominatimUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${parseFloat(latitude).toFixed(6)}&lon=${parseFloat(longitude).toFixed(6)}&accept-language=en`;
         const res = await fetch(nominatimUrl, {
-          headers: { "User-Agent": "SunPowerLinkSolarApp/1.0" },
+          headers: { "User-Agent": "SolarScanAIApp/1.0" },
         });
         if (res.ok) {
           const data = await res.json();
@@ -151,7 +151,7 @@ export default async function handler(req: Request): Promise<Response> {
         queryStr.trim()
       )}&format=json&addressdetails=1&limit=1&accept-language=en`;
       const res = await fetch(nominatimUrl, {
-        headers: { "User-Agent": "SunPowerLinkSolarApp/1.0" },
+        headers: { "User-Agent": "SolarScanAIApp/1.0" },
       });
       if (res.ok) {
         const nomData = await res.json();

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -111,7 +111,7 @@ export function Navigation() {
             <button
               onClick={() => goTo("/")}
               className="flex items-center gap-2.5 group cursor-pointer border-none bg-transparent"
-              aria-label="SUNPOWER LINK Home"
+              aria-label="SolarScan AI Home"
             >
               <div className="relative">
                 <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain transition-transform group-hover:scale-110" style={{ transition: `transform 250ms ${EASING}` }} />

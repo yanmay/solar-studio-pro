@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
@@ -43,7 +43,7 @@ export default function MyScansPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    document.title = "My Scans — SUNPOWER LINK";
+    document.title = "My Scans — SolarScan AI";
     if (!user) return;
     const fetchScans = async () => {
       if (!supabase) { setLoading(false); return; }
@@ -121,8 +121,8 @@ export default function MyScansPage() {
       {/* ── Sticky Header ──────────────────────────────────────── */}
       <header className="sticky top-0 z-30 border-b border-white/[0.08] bg-[#050505]/85 backdrop-blur-2xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3 group" aria-label="SUNPOWER LINK Home">
-            <img src="/logo.png" alt="SUNPOWER LINK Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
+          <Link to="/" className="flex items-center gap-3 group" aria-label="SolarScan AI Home">
+            <img src="/logo.png" alt="SolarScan AI Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
             <span className="text-[15px] font-bold text-white tracking-tight">
               SUNPOWER <span className="font-['Calistoga',serif] italic font-normal text-[#FF6600]">LINK</span>
             </span>

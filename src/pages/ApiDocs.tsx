@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -73,7 +73,7 @@ export default function ApiDocs() {
   const downloadPostman = () => {
     const postman = {
       info: {
-        name: "SUNPOWER LINK Underwriting API v1",
+        name: "SolarScan AI Underwriting API v1",
         schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
       },
       item: [
@@ -82,7 +82,7 @@ export default function ApiDocs() {
           request: {
             method: "GET",
             header: [{ key: "X-API-Key", value: "{{apiKey}}" }],
-            url: { raw: "https://api.sunpowerlink.in/api/v1/solar-estimate?lat=19.076&lng=72.877&roofAreaM2=100&electricityRate=8" }
+            url: { raw: "https://api.solarscan.ai/api/v1/solar-estimate?lat=19.076&lng=72.877&roofAreaM2=100&electricityRate=8" }
           }
         }
       ]
@@ -101,30 +101,30 @@ export default function ApiDocs() {
   const getCodeSnippet = () => {
     if (activeRoute === "estimate") {
       if (selectedLang === "curl") {
-        return `curl -X GET "https://api.sunpowerlink.in/api/v1/solar-estimate?lat=${estimateQuery.lat}&lng=${estimateQuery.lng}&roofAreaM2=${estimateQuery.area}&electricityRate=${estimateQuery.rate}" \\\n  -H "X-API-Key: ${apiKeyInput}"`;
+        return `curl -X GET "https://api.solarscan.ai/api/v1/solar-estimate?lat=${estimateQuery.lat}&lng=${estimateQuery.lng}&roofAreaM2=${estimateQuery.area}&electricityRate=${estimateQuery.rate}" \\\n  -H "X-API-Key: ${apiKeyInput}"`;
       }
       if (selectedLang === "js") {
-        return `fetch("https://api.sunpowerlink.in/api/v1/solar-estimate?lat=${estimateQuery.lat}&lng=${estimateQuery.lng}&roofAreaM2=${estimateQuery.area}&electricityRate=${estimateQuery.rate}", {\n  headers: { "X-API-Key": "${apiKeyInput}" }\n})\n.then(res => res.json())\n.then(console.log);`;
+        return `fetch("https://api.solarscan.ai/api/v1/solar-estimate?lat=${estimateQuery.lat}&lng=${estimateQuery.lng}&roofAreaM2=${estimateQuery.area}&electricityRate=${estimateQuery.rate}", {\n  headers: { "X-API-Key": "${apiKeyInput}" }\n})\n.then(res => res.json())\n.then(console.log);`;
       }
-      return `import requests\n\nheaders = { "X-API-Key": "${apiKeyInput}" }\nresponse = requests.get(\n  "https://api.sunpowerlink.in/api/v1/solar-estimate",\n  params={"lat": "${estimateQuery.lat}", "lng": "${estimateQuery.lng}", "roofAreaM2": "${estimateQuery.area}", "electricityRate": "${estimateQuery.rate}"},\n  headers=headers\n)\nprint(response.json())`;
+      return `import requests\n\nheaders = { "X-API-Key": "${apiKeyInput}" }\nresponse = requests.get(\n  "https://api.solarscan.ai/api/v1/solar-estimate",\n  params={"lat": "${estimateQuery.lat}", "lng": "${estimateQuery.lng}", "roofAreaM2": "${estimateQuery.area}", "electricityRate": "${estimateQuery.rate}"},\n  headers=headers\n)\nprint(response.json())`;
     }
     if (activeRoute === "subsidy") {
       if (selectedLang === "curl") {
-        return `curl -X GET "https://api.sunpowerlink.in/api/v1/subsidy-check?state=Maharashtra&systemSizeKw=3.5" \\\n  -H "X-API-Key: ${apiKeyInput}"`;
+        return `curl -X GET "https://api.solarscan.ai/api/v1/subsidy-check?state=Maharashtra&systemSizeKw=3.5" \\\n  -H "X-API-Key: ${apiKeyInput}"`;
       }
       if (selectedLang === "js") {
-        return `fetch("https://api.sunpowerlink.in/api/v1/subsidy-check?state=Maharashtra&systemSizeKw=3.5", {\n  headers: { "X-API-Key": "${apiKeyInput}" }\n})\n.then(res => res.json())\n.then(console.log);`;
+        return `fetch("https://api.solarscan.ai/api/v1/subsidy-check?state=Maharashtra&systemSizeKw=3.5", {\n  headers: { "X-API-Key": "${apiKeyInput}" }\n})\n.then(res => res.json())\n.then(console.log);`;
       }
-      return `import requests\n\nheaders = { "X-API-Key": "${apiKeyInput}" }\nresponse = requests.get(\n  "https://api.sunpowerlink.in/api/v1/subsidy-check",\n  params={"state": "Maharashtra", "systemSizeKw": "3.5"},\n  headers=headers\n)\nprint(response.json())`;
+      return `import requests\n\nheaders = { "X-API-Key": "${apiKeyInput}" }\nresponse = requests.get(\n  "https://api.solarscan.ai/api/v1/subsidy-check",\n  params={"state": "Maharashtra", "systemSizeKw": "3.5"},\n  headers=headers\n)\nprint(response.json())`;
     }
     // validate-roof POST
     if (selectedLang === "curl") {
-      return `curl -X POST "https://api.sunpowerlink.in/api/v1/validate-roof" \\\n  -H "X-API-Key: ${apiKeyInput}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"imageBase64": "data:image/png;base64,..."}'`;
+      return `curl -X POST "https://api.solarscan.ai/api/v1/validate-roof" \\\n  -H "X-API-Key: ${apiKeyInput}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"imageBase64": "data:image/png;base64,..."}'`;
     }
     if (selectedLang === "js") {
-      return `fetch("https://api.sunpowerlink.in/api/v1/validate-roof", {\n  method: "POST",\n  headers: {\n    "Content-Type": "application/json",\n    "X-API-Key": "${apiKeyInput}"\n  },\n  body: JSON.stringify({ imageBase64: "data:image/png;base64,..." })\n})\n.then(res => res.json())\n.then(console.log);`;
+      return `fetch("https://api.solarscan.ai/api/v1/validate-roof", {\n  method: "POST",\n  headers: {\n    "Content-Type": "application/json",\n    "X-API-Key": "${apiKeyInput}"\n  },\n  body: JSON.stringify({ imageBase64: "data:image/png;base64,..." })\n})\n.then(res => res.json())\n.then(console.log);`;
     }
-    return `import requests\n\nheaders = {\n  "X-API-Key": "${apiKeyInput}",\n  "Content-Type": "application/json"\n}\npayload = { "imageBase64": "data:image/png;base64,..." }\nresponse = requests.post(\n  "https://api.sunpowerlink.in/api/v1/validate-roof",\n  json=payload,\n  headers=headers\n)\nprint(response.json())`;
+    return `import requests\n\nheaders = {\n  "X-API-Key": "${apiKeyInput}",\n  "Content-Type": "application/json"\n}\npayload = { "imageBase64": "data:image/png;base64,..." }\nresponse = requests.post(\n  "https://api.solarscan.ai/api/v1/validate-roof",\n  json=payload,\n  headers=headers\n)\nprint(response.json())`;
   };
 
   return (
@@ -138,7 +138,7 @@ export default function ApiDocs() {
       <header className="sticky top-0 z-50 backdrop-blur-2xl bg-[#050505]/85 border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4 md:px-12 h-16 flex justify-between items-center">
           <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} className="flex items-center gap-3 group">
-            <img src="/logo.png" alt="SUNPOWER LINK Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
+            <img src="/logo.png" alt="SolarScan AI Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
             <span className="text-[15px] font-bold text-white tracking-tight">
               SUNPOWER <span className="font-serif italic font-light text-[#FF6600]">LINK</span> <span className="font-mono text-xs text-white/40 font-normal">/ DEVELOPERS</span>
             </span>

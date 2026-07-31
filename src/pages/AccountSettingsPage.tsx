@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2, User, Phone, Lock, ArrowLeft, ShieldCheck, CheckCircle2, KeyRound } from "lucide-react";
@@ -17,7 +17,7 @@ export default function AccountSettingsPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    document.title = "Account Settings — SUNPOWER LINK";
+    document.title = "Account Settings — SolarScan AI";
     if (profile) { setFullName(profile.full_name || ""); setPhone(profile.phone || ""); }
   }, [profile]);
 
@@ -69,7 +69,7 @@ export default function AccountSettingsPage() {
       <header className="sticky top-0 z-30 border-b border-white/10 bg-[#050505]/85 backdrop-blur-2xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3 group">
-            <img src="/logo.png" alt="SUNPOWER LINK Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
+            <img src="/logo.png" alt="SolarScan AI Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
             <span className="text-[15px] font-bold text-white tracking-tight">
               SUNPOWER <span className="font-serif italic font-light text-[#FF6600]">LINK</span>
             </span>

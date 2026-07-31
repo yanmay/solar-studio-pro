@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useRef } from "react";
 import { Copy, Check } from "lucide-react";
@@ -6,15 +6,15 @@ import { Copy, Check } from "lucide-react";
 const codeExamples = [
   {
     label: "Install",
-    code: `npm install @sunpowerlink/sdk
+    code: `npm install @solarscan/sdk
 
 # or
-yarn add @sunpowerlink/sdk
-pnpm add @sunpowerlink/sdk`,
+yarn add @solarscan/sdk
+pnpm add @solarscan/sdk`,
   },
   {
     label: "Initialize",
-    code: `import { Sunpower } from '@sunpowerlink/sdk'
+    code: `import { Sunpower } from '@solarscan/sdk'
 
 const api = new Sunpower({
   apiKey: process.env.SUNPOWER_API_KEY

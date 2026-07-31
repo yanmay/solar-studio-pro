@@ -50,7 +50,7 @@ import { ComposedBar as Bar } from "@/components/charts/ComposedChart";
 import { useScanStore } from "@/hooks/use-scan-store";
 import { usePayment } from "@/hooks/use-payment";
 import { useUnlockStatus } from "@/hooks/use-unlock-status";
-import { runFullCalculation } from "@/lib/solar-calc";
+import { runFullCalculation, calcInvestmentGrade } from "@/lib/solar-calc";
 import { decodeScanFromUrl, encodeScanToUrl } from "@/lib/scan-url";
 import { generateWhatsAppMessage, generateWhatsAppUrl, shortenUrl } from "@/lib/whatsapp-share";
 import { computePanelLayout } from "@/lib/panel-layout";
@@ -1311,7 +1311,7 @@ const ResultsPage = () => {
         <header className="sp-nav sticky top-0 z-50" style={{ borderBottom: `1px solid ${C.outlineVariant}` }}>
           <div className="flex justify-between items-center px-4 md:px-16 py-3 mx-auto max-w-[1280px]">
             <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} className="flex items-center gap-2 group cursor-pointer">
-              <img src="/logo.png" alt="SUNPOWER LINK Logo" className="w-10 h-10 object-contain transition-all duration-300 group-hover:scale-105" />
+              <img src="/logo.png" alt="SolarScan AI Logo" className="w-10 h-10 object-contain transition-all duration-300 group-hover:scale-105" />
               <div style={{ fontFamily: "Sora, sans-serif", color: C.mutedSand, fontSize: "20px", fontWeight: 500, letterSpacing: "-0.01em" }}>
                 SUNPOWER <span style={{ fontStyle: "italic", fontWeight: 300 }}>LINK</span>
               </div>
@@ -1370,7 +1370,7 @@ const ResultsPage = () => {
           <section className="pb-4 sp-fade-up border-b" style={{ borderColor: C.outlineVariant }}>
             <div className="flex flex-col md:flex-row justify-between items-baseline gap-2 mb-3">
               <div className="text-lg font-semibold tracking-wider sp-mono text-[#F0EEE9]">
-                SUNPOWER LINK
+                SolarScan AI
               </div>
               <div className="text-[10px] font-semibold tracking-widest sp-mono text-neutral-500 uppercase flex gap-4">
                 <span>TECHNICAL PROSPECTUS</span>
@@ -2352,14 +2352,27 @@ const ResultsPage = () => {
 
                 {/* Right Sidebar */}
                 <aside className="lg:col-span-3 flex flex-col gap-4 sp-fade-up-4">
-                  {/* Energy Grade */}
-                  <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 flex flex-col items-center text-center sp-card rounded-[4px]">
-                    <div style={{ width: 70, height: 70, borderRadius: "50%", background: `${C.secondary}08`, border: `1px solid ${C.secondary}`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
-                      <span className="sp-serif text-2xl text-emerald-400 font-bold">A+</span>
-                    </div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider sp-mono text-[#F0EEE9]">Energy Grade</h3>
-                    <p className="text-[11px] mt-1 text-neutral-400">Top 12% in {data.location?.label?.split(",")[0] ?? "your"} region based on roof potential.</p>
-                  </div>
+                  {/* Energy Grade / Investment Grade */}
+                  {(() => {
+                    const grade = model ? calcInvestmentGrade(model.paybackPeriod, model.irr) : null;
+                    const gradeColor = grade?.color ?? "#10B981";
+                    const gradeLabel = grade?.grade ?? "A+";
+                    const gradeDesc = grade?.label ?? "Exceptional";
+                    return (
+                      <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 flex flex-col items-center text-center sp-card rounded-[4px]">
+                        <div style={{ width: 70, height: 70, borderRadius: "50%", background: `${gradeColor}15`, border: `2px solid ${gradeColor}`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+                          <span className="sp-serif text-2xl font-bold" style={{ color: gradeColor }}>{gradeLabel}</span>
+                        </div>
+                        <h3 className="text-xs font-bold uppercase tracking-wider sp-mono text-[#F0EEE9]">Investment Grade</h3>
+                        <p className="text-[11px] mt-1" style={{ color: gradeColor, fontWeight: 600 }}>{gradeDesc}</p>
+                        {model && (
+                          <p className="text-[10px] mt-1 text-neutral-500">
+                            IRR {model.irr.toFixed(1)}% · LCOE ₹{model.lcoe.toFixed(2)}/kWh
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   <SideCard title="Technical Assumptions">
                     <DataList rows={[
@@ -2563,15 +2576,15 @@ const ResultsPage = () => {
 
           {/* Footnote */}
           <div className="mt-4 text-center text-[8px] font-mono uppercase tracking-widest" style={{ color: C.mutedSand }}>
-            SUNPOWER LINK Solar Estimation Engine · Grid loss factor: 14% · Climatology: NASA POWER API satellite profile · RCC flatness tilt structural calibration active
+            SolarScan AI Solar Estimation Engine · Grid loss factor: 14% · Climatology: NASA POWER API satellite profile · RCC flatness tilt structural calibration active
           </div>
         </main>
 
         {/* Footer */}
         <footer style={{ background: C.background, borderTop: `1px solid ${C.outlineVariant}` }} className="flex flex-col md:flex-row justify-between items-center px-4 md:px-16 py-4 gap-6 mt-4">
           <div className="flex flex-col gap-1.5 max-w-xl text-left">
-            <div className="sp-serif text-[#8A8A99] text-sm font-bold">SUNPOWER LINK</div>
-            <p className="text-[11px]" style={{ color: C.mutedSand }}>© {new Date().getFullYear()} SUNPOWER LINK. Financial intelligence driven by geospatial AI.</p>
+            <div className="sp-serif text-[#8A8A99] text-sm font-bold">SolarScan AI</div>
+            <p className="text-[11px]" style={{ color: C.mutedSand }}>© {new Date().getFullYear()} SolarScan AI. Financial intelligence driven by geospatial AI.</p>
           </div>
           <div className="flex items-center gap-3">
             <button onClick={() => navigate("/map")} style={{ background: C.secondary, color: C.onSecondary }} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-95 transition-opacity cursor-pointer rounded-[3px] font-mono">

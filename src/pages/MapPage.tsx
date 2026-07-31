@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+﻿import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
@@ -190,7 +190,7 @@ function calcCentroid(latlngs: LatLng[]): LatLng {
 
 const NOMINATIM_HEADERS = {
   "Accept-Language": "en",
-  "User-Agent": "SunPowerLinkSolarApp/1.0 (https://sunpowerlink.in)",
+  "User-Agent": "SolarScanAIApp/1.0 (https://solarscan.ai)",
 };
 
 interface NominatimSearchResult {
@@ -263,7 +263,7 @@ async function geocodeAddress(
     url += `&viewbox=${viewbox}`;
   }
   const res = await fetch(url, {
-    headers: { "User-Agent": "SunPowerLinkSolarApp/1.0" },
+    headers: { "User-Agent": "SolarScanAIApp/1.0" },
   });
   if (!res.ok) throw new Error("Geocoding service unavailable.");
   let data = await res.json();
@@ -1567,7 +1567,7 @@ const MapPage = () => {
               className="flex items-center justify-center w-10 h-10 rounded-xl bg-black/80 backdrop-blur-2xl border border-white/10 shadow-lg hover:border-[#FF6600]/80 hover:scale-105 active:scale-95 transition-all cursor-pointer text-white"
               aria-label="Back to Home"
             >
-              <img src="/logo.png" alt="SUNPOWER LINK Logo" className="w-6 h-6 object-contain" />
+              <img src="/logo.png" alt="SolarScan AI Logo" className="w-6 h-6 object-contain" />
             </button>
             <div className="hidden sm:flex items-center h-10 px-3.5 rounded-xl bg-black/80 backdrop-blur-2xl border border-white/10 shadow-lg text-sm font-bold text-white">
               SUNPOWER <span className="font-serif italic font-light text-[#FF6600] ml-1">LINK</span>
@@ -2728,14 +2728,14 @@ const MapPage = () => {
                   <div className="absolute w-20 h-20 bg-primary/10 rounded-full blur-xl animate-pulse" />
                   <img 
                     src="/logo.png" 
-                    alt="SUNPOWER LINK Logo" 
+                    alt="SolarScan AI Logo" 
                     className="w-16 h-16 object-contain relative z-10 animate-bounce"
                     style={{ animationDuration: "3s" }} 
                   />
                 </div>
 
                 <h2 className="text-xl font-extrabold tracking-tight uppercase text-muted-foreground/80 font-mono text-xs">
-                  SUNPOWER LINK AI
+                  SolarScan AI AI
                 </h2>
 
                 <ProgressiveFluxLoader 

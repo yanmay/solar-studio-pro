@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -212,7 +212,7 @@ export default function InstallerCrmPage() {
   };
 
   useEffect(() => {
-    document.title = "Installer CRM Portal — SUNPOWER LINK";
+    document.title = "Installer CRM Portal — SolarScan AI";
     if (role === "installer" || role === "admin") {
       fetchLeads();
     }
@@ -924,7 +924,7 @@ export default function InstallerCrmPage() {
                 <p className="text-xs leading-relaxed" style={{ color: C.mutedSand }}>
                   {profile.subscription_tier === "pro"
                     ? "Enjoy unlimited scans, custom white-labeled PDFs, and custom branding overrides."
-                    : "Get 10 free scans per month with SUNPOWER LINK branding on reports. Upgrade to unlock white-label features."}
+                    : "Get 10 free scans per month with SolarScan AI branding on reports. Upgrade to unlock white-label features."}
                 </p>
 
                 {profile.subscription_tier !== "pro" && (
@@ -1749,7 +1749,7 @@ export default function InstallerCrmPage() {
 
       <footer className="mt-20 py-8 text-center border-t text-xs font-mono" style={{ borderColor: C.outlineVariant, color: C.mutedSand }}>
         <div className="max-w-[1280px] mx-auto px-4 md:px-16">
-          <span>© {new Date().getFullYear()} SUNPOWER LINK Installer Portal. All Rights Reserved.</span>
+          <span>© {new Date().getFullYear()} SolarScan AI Installer Portal. All Rights Reserved.</span>
         </div>
       </footer>
 

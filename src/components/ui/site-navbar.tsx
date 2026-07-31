@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { Menu, Sun as SunIcon, ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -74,7 +74,7 @@ export function SiteNavbar({
           <button
             onClick={() => go("/")}
             className="flex items-center gap-2.5 outline-none"
-            aria-label="Sunpower Link home"
+            aria-label="SolarScan AI home"
           >
             <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-[#FFB87B] to-[#FF7A1A] shadow-[0_0_18px_rgba(255,122,26,0.45)]">
               <SunIcon className="h-[18px] w-[18px] text-black" strokeWidth={2.5} />

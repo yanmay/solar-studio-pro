@@ -1,4 +1,4 @@
-import { ExternalLink, Star, MapPin, ShieldCheck } from "lucide-react";
+﻿import { ExternalLink, Star, MapPin, ShieldCheck } from "lucide-react";
 import { track } from "@/lib/analytics";
 
 // Curated affiliate partners — replace `affiliate` URLs with real tracking links
@@ -19,7 +19,7 @@ const PARTNERS: {
     reviews: 2840,
     cities: ["All India"],
     affiliate: (kw, city) =>
-      `https://www.loomsolar.com/pages/contact-us?utm_source=sunpowerlink&utm_medium=lead&utm_campaign=quote&kw=${kw}${city ? `&city=${encodeURIComponent(city)}` : ""}`,
+      `https://www.loomsolar.com/pages/contact-us?utm_source=solarscan&utm_medium=lead&utm_campaign=quote&kw=${kw}${city ? `&city=${encodeURIComponent(city)}` : ""}`,
     badges: ["MNRE Channel Partner", "ALMM Listed"],
   },
   {
@@ -29,7 +29,7 @@ const PARTNERS: {
     reviews: 1230,
     cities: ["Maharashtra", "Karnataka", "Tamil Nadu", "Gujarat", "Delhi NCR"],
     affiliate: (kw, city) =>
-      `https://www.feniceenergy.com/get-quote?ref=sunpowerlink&kw=${kw}${city ? `&city=${encodeURIComponent(city)}` : ""}`,
+      `https://www.feniceenergy.com/get-quote?ref=solarscan&kw=${kw}${city ? `&city=${encodeURIComponent(city)}` : ""}`,
     badges: ["MNRE Empanelled", "ISO 9001"],
   },
   {
@@ -39,7 +39,7 @@ const PARTNERS: {
     reviews: 5670,
     cities: ["All India"],
     affiliate: (kw, city) =>
-      `https://www.tatapowersolar.com/rooftop-solar-solutions/?source=sunpowerlink&kw=${kw}${city ? `&city=${encodeURIComponent(city)}` : ""}`,
+      `https://www.tatapowersolar.com/rooftop-solar-solutions/?source=solarscan&kw=${kw}${city ? `&city=${encodeURIComponent(city)}` : ""}`,
     badges: ["BEE Star", "MNRE Channel Partner"],
   },
 ];
@@ -116,7 +116,7 @@ const InstallerMarketplace = ({ installedKw, city }: InstallerMarketplaceProps) 
       </div>
 
       <div className="text-[10px] font-mono text-white/30 text-center mt-5">
-        Empanelled Partner Network · SUNPOWER LINK direct referral system with zero hidden markups.
+        Empanelled Partner Network · SolarScan AI direct referral system with zero hidden markups.
       </div>
     </div>
   );

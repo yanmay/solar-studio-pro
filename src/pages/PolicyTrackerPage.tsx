@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -43,7 +43,7 @@ export default function PolicyTrackerPage() {
   const [compareB, setCompareB] = useState("Maharashtra");
 
   useEffect(() => {
-    document.title = "Policy Tracker — SUNPOWER LINK";
+    document.title = "Policy Tracker — SolarScan AI";
     const meta = document.querySelector('meta[name="description"]');
     if (meta) {
       meta.setAttribute(
@@ -132,7 +132,7 @@ export default function PolicyTrackerPage() {
       <header className="sticky top-0 z-50 backdrop-blur-2xl bg-[#050505]/85 border-b border-white/10">
         <div className="flex justify-between items-center px-4 md:px-12 py-3 mx-auto max-w-[1280px]">
           <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} className="flex items-center gap-3 group">
-            <img src="/logo.png" alt="SUNPOWER LINK Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
+            <img src="/logo.png" alt="SolarScan AI Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
             <span className="text-[15px] font-bold text-white tracking-tight">
               SUNPOWER <span className="font-serif italic font-light text-[#FF6600]">LINK</span>
             </span>
@@ -464,7 +464,7 @@ export default function PolicyTrackerPage() {
       {/* Footer */}
       <footer className="mt-20 py-8 text-center border-t border-white/10 text-xs font-mono text-white/40 bg-[#050505]">
         <div className="max-w-[1280px] mx-auto px-4 md:px-12 flex flex-col md:flex-row justify-between items-center gap-4">
-          <span>© {new Date().getFullYear()} SUNPOWER LINK. Rooftop solar analysis for India. All Rights Reserved.</span>
+          <span>© {new Date().getFullYear()} SolarScan AI. Rooftop solar analysis for India. All Rights Reserved.</span>
           <div className="flex gap-6">
             <button onClick={() => navigate("/privacy")} className="hover:text-white transition-colors bg-transparent border-none cursor-pointer">Privacy Policy</button>
             <button onClick={() => navigate("/market-insights")} className="hover:text-white transition-colors bg-transparent border-none cursor-pointer">Market Insights</button>

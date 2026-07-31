@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+﻿import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   generateReferralCode,
   getOrCreateReferralState,
@@ -54,9 +54,9 @@ describe("Referral Engine Utilities", () => {
 
   it("should generate correct viral sharing links", () => {
     const share = getReferralShareContent("MYREFCODE", "123 Solar Street");
-    expect(share.referralLink).toBe("https://sunpowerlink.in/?ref=MYREFCODE");
+    expect(share.referralLink).toBe("https://solarscan.ai/?ref=MYREFCODE");
     expect(share.text).toContain("MYREFCODE");
     expect(share.text).toContain("123 Solar Street");
-    expect(share.whatsappUrl).toContain(encodeURIComponent("https://sunpowerlink.in/?ref=MYREFCODE"));
+    expect(share.whatsappUrl).toContain(encodeURIComponent("https://solarscan.ai/?ref=MYREFCODE"));
   });
 });

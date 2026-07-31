@@ -1,6 +1,6 @@
-export default {
+﻿export default {
   app: {
-    name: "SUNPOWER LINK",
+    name: "SolarScan AI",
     tagline: "Empowering Every Roof with Solar Intelligence",
   },
   nav: {
@@ -105,7 +105,7 @@ export default {
     phonePh: "98765 43210",
     city: "City",
     cityPh: "Pune, Bengaluru, Delhi…",
-    consent: "I agree to be contacted by SUNPOWER LINK and partner installers about this solar quote. My number will not be sold or used for unrelated marketing.",
+    consent: "I agree to be contacted by SolarScan AI and partner installers about this solar quote. My number will not be sold or used for unrelated marketing.",
     submit: "Get my free quote →",
     submitting: "Submitting…",
     successTitle: "You're on the list",
@@ -113,7 +113,7 @@ export default {
     close: "Close",
   },
   pwa: {
-    title: "Install SUNPOWER LINK",
+    title: "Install SolarScan AI",
     desc: "Add to home screen — works offline, opens like an app, faster start.",
     install: "Install",
     notNow: "Not now",
