@@ -1,9 +1,4 @@
 {
-  "functions": {
-    "api/pvlib-engine.py": {
-      "runtime": "vercel-python"
-    }
-  },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/((?!api).*)", "destination": "/index.html" }
