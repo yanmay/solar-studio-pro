@@ -95,3 +95,15 @@ export function detectDiscom(input: {
   }
   return null;
 }
+
+export function getDiscomRate(stateName: string): number | undefined {
+  const normState = stateName.toLowerCase().trim();
+  const info = STATE_DISCOM_MAP[normState];
+  if (info) return info.rate;
+
+  const detected = detectDiscom({ state: stateName });
+  if (detected) return detected.rate;
+
+  return undefined;
+}
+

@@ -1,0 +1,45 @@
+import useSWR, { mutate } from "swr";
+
+interface UnlockStatus {
+  unlocked: boolean;
+  source?: "db" | "cookie";
+}
+
+const statusKey = (scanId: string) =>
+  `/api/payment/status?scanId=${encodeURIComponent(scanId)}`;
+
+async function fetchStatus(url: string): Promise<UnlockStatus> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Status check failed (${res.status})`);
+  return res.json();
+}
+
+/**
+ * Server-authoritative unlock state for a scan.
+ * The database (via /api/payment/status) is the single source of truth —
+ * never trust URL flags, localStorage, or sessionStorage for paywall state.
+ */
+export function useUnlockStatus(scanId: string | null | undefined) {
+  const { data, error, isLoading, mutate: revalidate } = useSWR<UnlockStatus>(
+    scanId ? statusKey(scanId) : null,
+    fetchStatus,
+    {
+      revalidateOnFocus: true,
+      revalidateOnMount: true,
+      dedupingInterval: 0,
+    }
+  );
+
+  return {
+    unlocked: data?.unlocked === true,
+    isChecking: isLoading,
+    error,
+    /** Re-fetch unlock state from the server (e.g. right after payment verification). */
+    refresh: () => void revalidate(),
+  };
+}
+
+/** Revalidate unlock state after a successful payment verification. */
+export function revalidateUnlock(scanId: string): Promise<unknown> {
+  return mutate(statusKey(scanId));
+}

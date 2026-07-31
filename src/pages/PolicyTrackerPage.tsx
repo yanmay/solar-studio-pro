@@ -13,26 +13,6 @@ import {
   ExternalLink,
   Info,
 } from "lucide-react";
-import { AnimatedThemeToggleButton } from "@/components/ui/animated-theme-toggle-button";
-
-// ─── Color tokens from DESIGN.md ─────────────────────────────
-const C = {
-  background:           "#171210",
-  charcoal:             "#1F1B18",
-  surfaceVariant:       "#393431",
-  surfaceContainerHigh: "#2e2927",
-  primary:              "#ffb87b",
-  primaryContainer:     "#ff8f00",
-  secondary:            "#41e1b4",
-  onSurface:            "#eae0dd",
-  onSurfaceVariant:     "#dcc1ae",
-  mutedSand:            "#AD9F92",
-  outline:              "#a48c7a",
-  outlineVariant:       "#564334",
-  error:                "#ffb4ab",
-  onPrimary:            "#4c2700",
-  onSecondary:          "#00382a",
-};
 
 interface StatePolicy {
   state: string;
@@ -90,10 +70,10 @@ export default function PolicyTrackerPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-white font-mono" style={{ background: C.background }}>
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-12 h-12 border-2 border-t-transparent animate-spin rounded-full" style={{ borderColor: `${C.primary} transparent transparent transparent` }}></div>
-          <span className="text-xs uppercase tracking-widest" style={{ color: C.mutedSand }}>Fetching Policy Databases...</span>
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white font-mono">
+        <div className="flex flex-col items-center gap-4 bg-[#0A0A0A]/80 border border-white/10 p-10 rounded-3xl backdrop-blur-2xl">
+          <div className="w-10 h-10 border-2 border-t-transparent border-[#FF6600] animate-spin rounded-full"></div>
+          <span className="text-xs uppercase tracking-widest text-white/50">Fetching Policy Databases...</span>
         </div>
       </div>
     );
@@ -101,10 +81,15 @@ export default function PolicyTrackerPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-white font-mono" style={{ background: C.background }}>
-        <div className="text-center space-y-4">
-          <p className="text-red-400">Error: {error}</p>
-          <button onClick={() => window.location.reload()} className="px-4 py-2 border rounded hover:bg-white/10" style={{ borderColor: C.outlineVariant }}>Retry</button>
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white font-mono">
+        <div className="text-center space-y-4 bg-[#0A0A0A]/80 border border-white/10 p-10 rounded-3xl backdrop-blur-2xl">
+          <p className="text-red-400 text-sm">Error: {error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-5 py-2 text-xs font-bold bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 active:scale-95 transition-all cursor-pointer"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
@@ -136,37 +121,39 @@ export default function PolicyTrackerPage() {
   const stateB = states.find((s) => s.state === compareB) || states[1] || states[0];
 
   return (
-    <div className="min-h-screen text-[#eae0dd] font-sans antialiased overflow-x-hidden" style={{ background: C.background }}>
-      <style>{`
-        .font-mono-numbers { font-variant-numeric: tabular-nums; }
-        .glow-card {
-          box-shadow: 0 0 30px -15px rgba(65, 225, 180, 0.05);
-        }
-      `}</style>
+    <div className="min-h-screen bg-[#050505] text-white font-sans antialiased overflow-x-hidden relative selection:bg-[#FF6600]/30 selection:text-white">
+      {/* Background Glow Blobs */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+        <div className="absolute top-[-15%] right-[-5%] w-[600px] h-[600px] rounded-full bg-[#FF6600]/5 blur-[140px]" />
+        <div className="absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] rounded-full bg-emerald-500/3 blur-[140px]" />
+      </div>
 
-      {/* ── Header ──────────────────────────────────────────── */}
-      <header className="sticky top-0 z-50 backdrop-blur-md bg-[#171210]/80" style={{ borderBottom: `1px solid ${C.outlineVariant}` }}>
-        <div className="flex justify-between items-center px-4 md:px-16 py-3 mx-auto max-w-[1280px]">
-          <div style={{ fontFamily: "Sora, sans-serif", color: C.mutedSand, fontSize: "20px", fontWeight: 500, letterSpacing: "-0.01em" }} className="flex items-center gap-2">
-            <span className="text-white">SUNPOWER</span>
-            <span className="font-serif italic font-light text-[#ffb87b]">LINK</span>
-          </div>
+      {/* Header */}
+      <header className="sticky top-0 z-50 backdrop-blur-2xl bg-[#050505]/85 border-b border-white/10">
+        <div className="flex justify-between items-center px-4 md:px-12 py-3 mx-auto max-w-[1280px]">
+          <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} className="flex items-center gap-3 group">
+            <img src="/logo.png" alt="SUNPOWER LINK Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
+            <span className="text-[15px] font-bold text-white tracking-tight">
+              SUNPOWER <span className="font-serif italic font-light text-[#FF6600]">LINK</span>
+            </span>
+          </a>
           <nav className="hidden md:flex gap-6">
-            <a style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/")}>Home</a>
-            <a style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/market-insights")}>Market Insights</a>
-            <a style={{ color: C.primary }} className="text-[10px] font-bold uppercase tracking-wider font-mono cursor-pointer" onClick={() => navigate("/policy-tracker")}>Policy Tracker</a>
+            <button onClick={() => navigate("/")} className="text-xs font-mono uppercase tracking-wider text-white/50 hover:text-white transition-colors bg-transparent border-none cursor-pointer">Home</button>
+            <button onClick={() => navigate("/market-insights")} className="text-xs font-mono uppercase tracking-wider text-white/50 hover:text-white transition-colors bg-transparent border-none cursor-pointer">Market Insights</button>
+            <button onClick={() => navigate("/policy-tracker")} className="text-xs font-mono uppercase tracking-wider text-[#FF6600] font-bold bg-transparent border-none cursor-pointer">Policy Tracker</button>
           </nav>
           <div className="flex items-center gap-2 md:gap-3">
-            <AnimatedThemeToggleButton type="vertical" />
-            <button onClick={() => navigate("/map")}
-              style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity">
-              <ArrowLeft className="w-3 h-3" /> Back
+            <button
+              onClick={() => navigate("/")}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white/60 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-all active:scale-95 cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Back
             </button>
-            <button onClick={() => navigate("/map")}
-              style={{ background: C.primaryContainer, color: C.background }}
-              className="hidden md:flex items-center gap-1.5 px-4 py-1.5 text-[10px] font-extrabold uppercase tracking-wider rounded-full hover:bg-orange-500 transition-colors">
-              Launch Analyzer <ArrowRight className="w-3 h-3" />
+            <button
+              onClick={() => navigate("/map")}
+              className="hidden md:flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-black bg-[#FF6600] hover:bg-orange-500 rounded-xl transition-all active:scale-95 cursor-pointer border-none shadow-lg shadow-[#FF6600]/20"
+            >
+              Launch Studio <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
@@ -197,32 +184,36 @@ export default function PolicyTrackerPage() {
         </div>
       </header>
 
-      {/* ── Main Layout ─────────────────────────────────────── */}
-      <main className="max-w-[1280px] mx-auto px-4 md:px-16 py-8 flex flex-col gap-10">
+      {/* Main Layout */}
+      <main className="max-w-[1280px] mx-auto px-4 md:px-12 py-10 flex flex-col gap-10 relative z-10">
 
-        {/* ── Title & Intro ── */}
+        {/* Title & Intro */}
         <section className="flex flex-col gap-3 max-w-3xl">
-          <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-[0.2em]" style={{ color: C.primary }}>
-            <ShieldCheck className="w-4 h-4 text-[#ffb87b] animate-pulse" /> Regulatory & Incentive Registry
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-[#FF6600] text-[10px] font-mono font-bold uppercase tracking-[0.12em] w-fit">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Regulatory & Incentive Registry</span>
           </div>
-          <h1 className="text-3xl md:text-5xl font-semibold tracking-tight text-white font-display" style={{ fontFamily: "Sora, sans-serif" }}>
+          <h1
+            className="text-3xl md:text-5xl text-white leading-tight"
+            style={{ fontFamily: "'Calistoga', serif", fontWeight: 400 }}
+          >
             State Solar Subsidies & <br className="hidden md:block" />
-            <span className="text-[#ffb87b] italic font-serif font-light">Policy Tracker</span>
+            <span className="text-[#FF6600]">Policy Tracker</span>
           </h1>
-          <p className="text-sm md:text-base leading-relaxed" style={{ color: C.onSurfaceVariant }}>
-            Track and compare state-level grid parameters, export tariffs, and application requirements under India's PM-Surya Ghar Muft Bijli Yojana rules.
+          <p className="text-sm md:text-base leading-relaxed text-white/50 font-light">
+            Track and compare state-level grid parameters, export tariffs, and application requirements under India's PM-Surya Ghar Muft Bijli Yojana framework.
           </p>
         </section>
 
-        {/* ── National Policy Focus (PM Surya Ghar) ── */}
-        <section className="p-6 rounded-2xl border flex flex-col md:flex-row gap-8 items-center" style={{ background: C.charcoal, borderColor: C.outlineVariant }}>
+        {/* National Policy Focus (PM Surya Ghar) */}
+        <section className="p-6 sm:p-8 rounded-3xl border border-white/10 bg-[#0A0A0A]/90 backdrop-blur-2xl flex flex-col md:flex-row gap-8 items-center shadow-2xl">
           <div className="flex-1 space-y-4">
             <div className="flex items-center gap-2">
-              <span className="bg-[#41e1b4]/10 text-[#41e1b4] text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border border-[#41e1b4]/20">Active Policy</span>
-              <h2 className="text-lg font-semibold text-white font-display" style={{ fontFamily: "Sora, sans-serif" }}>PM-Surya Ghar: Muft Bijli Yojana</h2>
+              <span className="bg-emerald-500/10 text-emerald-400 text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg border border-emerald-500/20 uppercase tracking-wider">National Flagship Scheme</span>
+              <h2 className="text-lg font-bold text-white">PM-Surya Ghar: Muft Bijli Yojana</h2>
             </div>
-            <p className="text-xs leading-relaxed" style={{ color: C.onSurfaceVariant }}>
-              The central government's flagship scheme provides massive direct subsidies for residential rooftop solar installations. Subsidies are sent directly to the homeowner’s linked bank account within 30 days of DISCOM commissioning.
+            <p className="text-xs leading-relaxed text-white/50 font-light">
+              Direct central government subsidies for residential rooftop solar installations. Financial assistance is credited directly to the homeowner’s linked bank account within 30 days of DISCOM commissioning.
             </p>
             <div className="space-y-2.5">
               {[
@@ -230,66 +221,63 @@ export default function PolicyTrackerPage() {
                 { cap: "Up to 2 kW capacity", sub: "₹60,000 direct subsidy" },
                 { cap: "3 kW capacity or more", sub: "₹78,000 maximum capping" },
               ].map((tier, idx) => (
-                <div key={idx} className="flex justify-between items-center bg-[#171210] p-2.5 px-4 rounded-xl border border-white/5 text-xs">
-                  <span className="font-semibold text-white/95">{tier.cap}</span>
-                  <span className="font-mono text-[#41e1b4] font-bold">{tier.sub}</span>
+                <div key={idx} className="flex justify-between items-center bg-white/[0.02] p-3 px-4 rounded-xl border border-white/5 text-xs font-mono">
+                  <span className="font-semibold text-white">{tier.cap}</span>
+                  <span className="font-bold text-emerald-400">{tier.sub}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="w-full md:w-[350px] p-6 rounded-xl bg-[#171210] border border-white/5 space-y-4 shrink-0">
-            <div className="flex items-center gap-2 text-[#ffb87b] text-xs font-mono">
-              <Info className="w-4 h-4" /> Eligibility Checklist
+          <div className="w-full md:w-[350px] p-6 rounded-2xl bg-white/[0.02] border border-white/10 space-y-4 shrink-0">
+            <div className="flex items-center gap-2 text-[#FF6600] text-xs font-mono font-bold">
+              <Info className="w-4 h-4" /> Eligibility Requirements
             </div>
-            <ul className="space-y-3 text-[11px] list-none p-0 text-neutral-400">
-              <li className="flex gap-2"><CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" /> Must be a residential electricity consumer</li>
-              <li className="flex gap-2"><CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" /> Usable rooftop surface area with minimal shadow</li>
-              <li className="flex gap-2"><CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" /> Valid Sanctioned Load with state DISCOM</li>
-              <li className="flex gap-2"><CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" /> Certified solar panel & inverter equipment</li>
+            <ul className="space-y-3 text-xs list-none p-0 text-white/60">
+              <li className="flex gap-2.5 items-start"><CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" /> Registered residential electricity connection</li>
+              <li className="flex gap-2.5 items-start"><CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" /> Unshaded, accessible rooftop surface</li>
+              <li className="flex gap-2.5 items-start"><CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" /> Sanctioned Load approval from state DISCOM</li>
+              <li className="flex gap-2.5 items-start"><CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" /> DCR-compliant solar PV modules & inverter</li>
             </ul>
             <a 
               href="https://pmsuryaghar.gov.in" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-neutral-800 text-white hover:bg-neutral-700 font-bold font-mono text-[10px] uppercase tracking-wider rounded-lg border border-white/8 transition-colors"
+              className="w-full flex items-center justify-center gap-2 py-3 bg-white/5 hover:bg-white/10 text-white font-bold font-mono text-xs uppercase tracking-wider rounded-xl border border-white/10 transition-all cursor-pointer"
             >
-              Official National Portal <ExternalLink className="w-3 h-3" />
+              National Portal <ExternalLink className="w-3.5 h-3.5" />
             </a>
           </div>
         </section>
 
-        {/* ── Search & Filter Controls ── */}
+        {/* Search & Filter Controls */}
         <section className="flex flex-col md:flex-row gap-4 items-center justify-between">
           <div className="relative w-full md:max-w-md">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
             <input
               type="text"
               placeholder="Search state, DISCOM, or regulations..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#1F1B18] text-white pl-10 pr-4 py-2.5 text-xs rounded-xl focus:outline-none focus:border-[#ff8f00] border transition-colors"
-              style={{ borderColor: C.outlineVariant }}
+              className="w-full bg-[#0A0A0A] text-white pl-11 pr-4 py-3 text-xs rounded-xl focus:outline-none focus:border-[#FF6600]/60 focus:ring-2 focus:ring-[#FF6600]/20 border border-white/10 transition-all"
             />
           </div>
 
-          <div className="flex gap-2 shrink-0">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 flex items-center mr-2">Sort by</span>
+          <div className="flex gap-2 shrink-0 items-center">
+            <span className="text-[10px] font-mono uppercase tracking-wider text-white/40 mr-1">Sort by</span>
             {[
-              { id: "name", label: "State Alphabetical" },
-              { id: "ease", label: "Grid Connection Ease" },
-              { id: "tariff", label: "Highest Export Tariff" },
+              { id: "name", label: "Alphabetical" },
+              { id: "ease", label: "Ease Score" },
+              { id: "tariff", label: "Export Tariff" },
             ].map((opt) => (
               <button
                 key={opt.id}
                 onClick={() => setSortBy(opt.id as any)}
-                className="px-3.5 py-1.5 rounded-full border text-[10px] font-mono tracking-wider transition-colors"
-                style={{
-                  background: sortBy === opt.id ? C.primaryContainer : C.charcoal,
-                  color: sortBy === opt.id ? C.background : C.onSurface,
-                  borderColor: sortBy === opt.id ? C.primaryContainer : C.outlineVariant,
-                  fontWeight: sortBy === opt.id ? 700 : 500
-                }}
+                className={`px-3.5 py-1.5 rounded-xl border text-xs font-mono transition-all cursor-pointer ${
+                  sortBy === opt.id
+                    ? "bg-[#FF6600] text-black border-transparent font-bold"
+                    : "bg-white/5 text-white/60 border-white/10 hover:text-white"
+                }`}
               >
                 {opt.label}
               </button>
@@ -297,89 +285,90 @@ export default function PolicyTrackerPage() {
           </div>
         </section>
 
-        {/* ── State Policy Cards ── */}
+        {/* State Policy Cards */}
         <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredStates.map((s, idx) => (
-            <div key={idx} className="p-6 rounded-2xl border flex flex-col justify-between gap-5 transition-transform hover:scale-[1.01] glow-card" style={{ background: C.charcoal, borderColor: C.outlineVariant }}>
-              <div className="space-y-3.5">
+            <div
+              key={idx}
+              className="p-6 rounded-3xl border border-white/10 bg-[#0A0A0A]/90 backdrop-blur-2xl flex flex-col justify-between gap-5 hover:border-[#FF6600]/40 hover:scale-[1.01] transition-all duration-200 shadow-2xl"
+            >
+              <div className="space-y-4">
                 <div className="flex justify-between items-center border-b border-white/5 pb-3">
                   <div>
-                    <h3 className="text-base font-semibold text-white font-display" style={{ fontFamily: "Sora, sans-serif" }}>{s.state}</h3>
-                    <span className="text-[9px] font-mono" style={{ color: C.mutedSand }}>DISCOMS: {s.discoms.slice(0, 3).join(", ")}{s.discoms.length > 3 ? "..." : ""}</span>
+                    <h3 className="text-lg font-bold text-white">{s.state}</h3>
+                    <span className="text-[10px] font-mono text-white/40">DISCOMs: {s.discoms.slice(0, 3).join(", ")}{s.discoms.length > 3 ? "..." : ""}</span>
                   </div>
                   <div className="flex flex-col items-end shrink-0">
-                    <span className="text-[14px] font-bold text-white font-mono-numbers">{s.easeScore}</span>
-                    <span className="text-[8px] font-mono uppercase tracking-wider text-neutral-400">Ease Score</span>
+                    <span className="text-base font-bold text-white font-mono">{s.easeScore}</span>
+                    <span className="text-[9px] font-mono uppercase tracking-wider text-[#FF6600]">Ease Score</span>
                   </div>
                 </div>
 
-                <p className="text-[11px] leading-relaxed text-neutral-300 line-clamp-3">
+                <p className="text-xs leading-relaxed text-white/60 line-clamp-3">
                   {s.policySummary}
                 </p>
 
-                <div className="grid grid-cols-2 gap-3.5 pt-2">
-                  <div className="bg-[#171210] p-2 rounded-lg border border-white/5">
-                    <span className="text-[8px] font-mono uppercase tracking-wider text-neutral-400 block mb-0.5">Net Metering Limit</span>
-                    <span className="text-xs text-white font-semibold font-mono-numbers">{s.netMeteringLimitKw} kW</span>
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div className="bg-white/[0.02] p-3 rounded-2xl border border-white/5">
+                    <span className="text-[9px] font-mono uppercase tracking-wider text-white/40 block mb-0.5">Net Metering Cap</span>
+                    <span className="text-xs text-white font-bold font-mono">{s.netMeteringLimitKw} kW</span>
                   </div>
-                  <div className="bg-[#171210] p-2 rounded-lg border border-white/5">
-                    <span className="text-[8px] font-mono uppercase tracking-wider text-neutral-400 block mb-0.5">DISCOM export rate</span>
-                    <span className="text-xs text-[#ffb87b] font-bold font-mono-numbers">{s.exportTariff} <span className="text-[9px] text-neutral-500 font-light">/ kWh</span></span>
+                  <div className="bg-white/[0.02] p-3 rounded-2xl border border-white/5">
+                    <span className="text-[9px] font-mono uppercase tracking-wider text-white/40 block mb-0.5">Export Rate</span>
+                    <span className="text-xs text-[#FF6600] font-bold font-mono">{s.exportTariff} <span className="text-[9px] text-white/30 font-normal">/ kWh</span></span>
                   </div>
                 </div>
 
                 <div className="space-y-1 pt-1">
-                  <span className="text-[9px] font-mono uppercase tracking-wider text-neutral-400 block">State-specific Subsidies</span>
-                  <p className="text-[10px] text-emerald-400 leading-relaxed font-mono font-medium">{s.stateSubsidy}</p>
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-white/40 block">State Boosters</span>
+                  <p className="text-xs text-emerald-400 font-mono font-medium">{s.stateSubsidy}</p>
                 </div>
               </div>
 
-              <div className="flex justify-between items-center border-t border-white/5 pt-4 text-[10px] font-mono">
-                <span className="text-neutral-400">Timeline: <strong className="text-white font-semibold font-mono-numbers">{s.processingTime}</strong></span>
+              <div className="flex justify-between items-center border-t border-white/5 pt-4 text-xs font-mono">
+                <span className="text-white/40">Timeline: <strong className="text-white font-semibold">{s.processingTime}</strong></span>
                 <a
                   href={s.officialPortal}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-[#ffb87b] hover:text-white transition-colors"
+                  className="flex items-center gap-1.5 text-[#FF6600] hover:underline font-bold"
                 >
-                  DISCOM Portal <ExternalLink className="w-3 h-3" />
+                  DISCOM Portal <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               </div>
             </div>
           ))}
 
           {filteredStates.length === 0 && (
-            <div className="col-span-full py-12 text-center text-neutral-500 font-mono text-xs">
-              No state policies matching your filter parameters.
+            <div className="col-span-full py-16 text-center text-white/40 font-mono text-xs bg-[#0A0A0A]/60 border border-white/10 rounded-3xl">
+              No state policies matching search criteria.
             </div>
           )}
         </section>
 
-        {/* ── State Comparison Interface ── */}
-        <section className="p-6 rounded-2xl border space-y-6" style={{ background: C.charcoal, borderColor: C.outlineVariant }}>
+        {/* State Comparison Interface */}
+        <section className="p-6 sm:p-8 rounded-3xl border border-white/10 bg-[#0A0A0A]/90 backdrop-blur-2xl space-y-6 shadow-2xl">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-              <h2 className="text-base font-semibold text-white font-display" style={{ fontFamily: "Sora, sans-serif" }}>Compare Regional Solar Policies</h2>
-              <p className="text-xs" style={{ color: C.mutedSand }}>Side-by-side analysis of metering policies, export payouts, and approval schedules.</p>
+              <h2 className="text-lg font-bold text-white">Compare Regional Solar Policies</h2>
+              <p className="text-xs text-white/40 font-mono">Side-by-side analysis of metering rules, feed-in rates, and approval timelines.</p>
             </div>
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <select
                 value={compareA}
                 onChange={(e) => setCompareA(e.target.value)}
-                className="p-2.5 bg-[#171210] border rounded-lg text-xs text-white focus:outline-none focus:border-[#ff8f00]"
-                style={{ borderColor: C.outlineVariant }}
+                className="p-2.5 bg-[#050505] border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-[#FF6600]/60 cursor-pointer"
               >
                 {states.map((s) => (
                   <option key={s.state} value={s.state}>{s.state}</option>
                 ))}
               </select>
-              <span className="text-xs text-neutral-600 font-mono">VS</span>
+              <span className="text-xs text-white/30 font-mono font-bold">VS</span>
               <select
                 value={compareB}
                 onChange={(e) => setCompareB(e.target.value)}
-                className="p-2.5 bg-[#171210] border rounded-lg text-xs text-white focus:outline-none focus:border-[#ff8f00]"
-                style={{ borderColor: C.outlineVariant }}
+                className="p-2.5 bg-[#050505] border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-[#FF6600]/60 cursor-pointer"
               >
                 {states.map((s) => (
                   <option key={s.state} value={s.state} disabled={s.state === compareA}>{s.state}</option>
@@ -391,77 +380,77 @@ export default function PolicyTrackerPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b" style={{ borderColor: C.outlineVariant }}>
-                  <th className="py-3 px-4 font-mono uppercase text-[10px] tracking-wider text-neutral-400">Parameter</th>
-                  <th className="py-3 px-4 font-display font-semibold text-white text-sm" style={{ width: "40%" }}>{stateA.state}</th>
-                  <th className="py-3 px-4 font-display font-semibold text-white text-sm" style={{ width: "40%" }}>{stateB.state}</th>
+                <tr className="border-b border-white/10 text-white/40 font-mono">
+                  <th className="py-3 px-4 uppercase text-[10px] tracking-wider">Parameter</th>
+                  <th className="py-3 px-4 font-bold text-white text-sm" style={{ width: "40%" }}>{stateA.state}</th>
+                  <th className="py-3 px-4 font-bold text-white text-sm" style={{ width: "40%" }}>{stateB.state}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 <tr>
-                  <td className="py-3 px-4 font-semibold text-neutral-300">Ease of Grid Connection</td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold font-mono-numbers">{stateA.easeScore} / 100</span>
-                      <div className="w-24 h-1.5 bg-[#171210] rounded-full overflow-hidden">
+                  <td className="py-3.5 px-4 font-semibold text-white/80">Grid Connection Ease</td>
+                  <td className="py-3.5 px-4">
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono font-bold text-white">{stateA.easeScore} / 100</span>
+                      <div className="w-24 h-1.5 bg-white/5 rounded-full overflow-hidden">
                         <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${stateA.easeScore}%` }} />
                       </div>
                     </div>
                   </td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold font-mono-numbers">{stateB.easeScore} / 100</span>
-                      <div className="w-24 h-1.5 bg-[#171210] rounded-full overflow-hidden">
+                  <td className="py-3.5 px-4">
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono font-bold text-white">{stateB.easeScore} / 100</span>
+                      <div className="w-24 h-1.5 bg-white/5 rounded-full overflow-hidden">
                         <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${stateB.easeScore}%` }} />
                       </div>
                     </div>
                   </td>
                 </tr>
                 <tr>
-                  <td className="py-3 px-4 font-semibold text-neutral-300">Net Metering Capacity Cap</td>
-                  <td className="py-3 px-4 font-mono-numbers text-white font-medium">{stateA.netMeteringLimitKw} kW limit</td>
-                  <td className="py-3 px-4 font-mono-numbers text-white font-medium">{stateB.netMeteringLimitKw} kW limit</td>
+                  <td className="py-3.5 px-4 font-semibold text-white/80">Net Metering Capacity Cap</td>
+                  <td className="py-3.5 px-4 font-mono text-white">{stateA.netMeteringLimitKw} kW limit</td>
+                  <td className="py-3.5 px-4 font-mono text-white">{stateB.netMeteringLimitKw} kW limit</td>
                 </tr>
                 <tr>
-                  <td className="py-3 px-4 font-semibold text-neutral-300">Export Feed-in Tariff</td>
-                  <td className="py-3 px-4 font-mono text-[#ffb87b] font-bold">{stateA.exportTariff} / kWh</td>
-                  <td className="py-3 px-4 font-mono text-[#ffb87b] font-bold">{stateB.exportTariff} / kWh</td>
+                  <td className="py-3.5 px-4 font-semibold text-white/80">Export Feed-in Tariff</td>
+                  <td className="py-3.5 px-4 font-mono text-[#FF6600] font-bold">{stateA.exportTariff} / kWh</td>
+                  <td className="py-3.5 px-4 font-mono text-[#FF6600] font-bold">{stateB.exportTariff} / kWh</td>
                 </tr>
                 <tr>
-                  <td className="py-3 px-4 font-semibold text-neutral-300">Approval Processing Timeline</td>
-                  <td className="py-3 px-4 font-mono-numbers text-white">{stateA.processingTime} typical</td>
-                  <td className="py-3 px-4 font-mono-numbers text-white">{stateB.processingTime} typical</td>
+                  <td className="py-3.5 px-4 font-semibold text-white/80">Approval Timeline</td>
+                  <td className="py-3.5 px-4 font-mono text-white">{stateA.processingTime} typical</td>
+                  <td className="py-3.5 px-4 font-mono text-white">{stateB.processingTime} typical</td>
                 </tr>
                 <tr>
-                  <td className="py-3 px-4 font-semibold text-neutral-300">State subsidy options</td>
-                  <td className="py-3 px-4 text-emerald-400 leading-relaxed font-mono font-medium">{stateA.stateSubsidy}</td>
-                  <td className="py-3 px-4 text-emerald-400 leading-relaxed font-mono font-medium">{stateB.stateSubsidy}</td>
+                  <td className="py-3.5 px-4 font-semibold text-white/80">State Subsidy Boosters</td>
+                  <td className="py-3.5 px-4 text-emerald-400 font-mono font-medium">{stateA.stateSubsidy}</td>
+                  <td className="py-3.5 px-4 text-emerald-400 font-mono font-medium">{stateB.stateSubsidy}</td>
                 </tr>
                 <tr>
-                  <td className="py-3 px-4 font-semibold text-neutral-300">DISCOM Networks</td>
-                  <td className="py-3 px-4 text-neutral-400 leading-normal">{stateA.discoms.join(", ")}</td>
-                  <td className="py-3 px-4 text-neutral-400 leading-normal">{stateB.discoms.join(", ")}</td>
+                  <td className="py-3.5 px-4 font-semibold text-white/80">DISCOM Networks</td>
+                  <td className="py-3.5 px-4 text-white/50">{stateA.discoms.join(", ")}</td>
+                  <td className="py-3.5 px-4 text-white/50">{stateB.discoms.join(", ")}</td>
                 </tr>
                 <tr>
-                  <td className="py-3 px-4 font-semibold text-neutral-300">Digital Portal</td>
-                  <td className="py-3 px-4">
+                  <td className="py-3.5 px-4 font-semibold text-white/80">DISCOM Portal</td>
+                  <td className="py-3.5 px-4">
                     <a
                       href={stateA.officialPortal}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[#ffb87b] hover:text-white transition-colors"
+                      className="inline-flex items-center gap-1.5 text-[#FF6600] hover:underline font-bold font-mono"
                     >
-                      Apply online <ExternalLink className="w-3.5 h-3.5" />
+                      Apply Online <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   </td>
-                  <td className="py-3 px-4">
+                  <td className="py-3.5 px-4">
                     <a
                       href={stateB.officialPortal}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[#ffb87b] hover:text-white transition-colors"
+                      className="inline-flex items-center gap-1.5 text-[#FF6600] hover:underline font-bold font-mono"
                     >
-                      Apply online <ExternalLink className="w-3.5 h-3.5" />
+                      Apply Online <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   </td>
                 </tr>
@@ -472,11 +461,11 @@ export default function PolicyTrackerPage() {
 
       </main>
 
-      {/* ── Footer ──────────────────────────────────────────── */}
-      <footer className="mt-20 py-8 text-center border-t text-xs font-mono" style={{ borderColor: C.outlineVariant, color: C.mutedSand }}>
-        <div className="max-w-[1280px] mx-auto px-4 md:px-16 flex flex-col md:flex-row justify-between items-center gap-4">
+      {/* Footer */}
+      <footer className="mt-20 py-8 text-center border-t border-white/10 text-xs font-mono text-white/40 bg-[#050505]">
+        <div className="max-w-[1280px] mx-auto px-4 md:px-12 flex flex-col md:flex-row justify-between items-center gap-4">
           <span>© {new Date().getFullYear()} SUNPOWER LINK. Rooftop solar analysis for India. All Rights Reserved.</span>
-          <div className="flex gap-4">
+          <div className="flex gap-6">
             <button onClick={() => navigate("/privacy")} className="hover:text-white transition-colors bg-transparent border-none cursor-pointer">Privacy Policy</button>
             <button onClick={() => navigate("/market-insights")} className="hover:text-white transition-colors bg-transparent border-none cursor-pointer">Market Insights</button>
           </div>

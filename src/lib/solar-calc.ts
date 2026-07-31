@@ -18,6 +18,8 @@ import {
   MIN_ELECTRICITY_RATE,
   MAX_ELECTRICITY_RATE,
 } from "./solar-defaults";
+import { classifyWindZone, calcWindCostAdder } from "./wind-zone";
+import { calcTemperatureDerate } from "./temperature-derate";
 
 // ---------- Validation ----------
 
@@ -48,9 +50,10 @@ function validateInputs(rooftopAreaM2: number, peakSunHours: number, electricity
 
 // ---------- Step functions ----------
 
-/** Step 1: Usable area = rooftopArea × 0.75 */
-export function calcUsableArea(rooftopAreaM2: number): number {
-  return Math.round(rooftopAreaM2 * USABLE_AREA_FACTOR * 10) / 10;
+/** Step 1: Usable area = (rooftopArea / cos(pitch)) × 0.75 */
+export function calcUsableArea(rooftopAreaM2: number, pitchDegrees: number = 0, exclusionAreaM2: number = 0): number {
+  const correctedArea = (rooftopAreaM2 - exclusionAreaM2) / Math.cos((pitchDegrees * Math.PI) / 180);
+  return Math.round(correctedArea * USABLE_AREA_FACTOR * 10) / 10;
 }
 
 /** Step 2: Installed capacity (kWp) = usableArea / 8 */
@@ -58,9 +61,30 @@ export function calcInstalledCapacity(usableAreaM2: number): number {
   return Math.round((usableAreaM2 / PANEL_AREA_PER_KW) * 100) / 100;
 }
 
-/** Step 3: Annual energy (kWh) = kWp × PSH × 365 × (1 - losses) */
-export function calcAnnualEnergy(installedKw: number, peakSunHoursDaily: number): number {
-  return Math.round(installedKw * peakSunHoursDaily * 365 * (1 - SYSTEM_LOSSES) * 10) / 10;
+/** Step 3: Annual energy (kWh) = kWp × PSH × 365 × (1 - losses) × (1 - shading) */
+export function calcAnnualEnergy(
+  installedKw: number,
+  peakSunHoursDaily: number,
+  shading: "none" | "partial" | "heavy" | "auto" = "auto",
+  computedShadingLoss: number | null = null,
+  t2mCelsius?: number
+): number {
+  let manualShadingLoss = 0;
+  if (shading === "partial") {
+    manualShadingLoss = 0.15;
+  } else if (shading === "heavy") {
+    manualShadingLoss = 0.30;
+  }
+
+  const actualComputedShadingLoss = shading === "auto" ? (computedShadingLoss ?? 0) : 0;
+  const baseEnergy = installedKw * peakSunHoursDaily * 365 * (1 - SYSTEM_LOSSES);
+  const shadingMultiplier = 1 - (actualComputedShadingLoss || manualShadingLoss);
+  let energy = baseEnergy * shadingMultiplier;
+
+  if (t2mCelsius !== undefined) {
+    energy *= calcTemperatureDerate(t2mCelsius);
+  }
+  return Math.round(energy * 10) / 10;
 }
 
 /** Step 5: Financial savings */
@@ -77,19 +101,32 @@ export function calcFinancials(
 }
 
 /** Step 5b: System cost (turn-key, INR) — uses tiered ₹/kW pricing */
-export function calcSystemCost(installedKw: number): number {
+export function calcSystemCost(installedKw: number, windZone?: number): number {
+  let baseCost = 0;
+  let found = false;
   for (const tier of SYSTEM_COST_PER_KW_INR_TIERS) {
-    if (installedKw <= tier.maxKw) return Math.round(installedKw * tier.cost);
+    if (installedKw <= tier.maxKw) {
+      baseCost = Math.round(installedKw * tier.cost);
+      found = true;
+      break;
+    }
   }
-  return Math.round(installedKw * 50000);
+  if (!found) {
+    baseCost = Math.round(installedKw * 50000);
+  }
+  if (windZone !== undefined) {
+    baseCost += Math.round(calcWindCostAdder(windZone) * installedKw);
+  }
+  return baseCost;
 }
 
 /** Step 5c: Investment summary — subsidy, net cost, payback period */
 export function calcInvestment(
   installedKw: number,
   annualSavingsInr: number,
+  windZone?: number
 ): { systemCostInr: number; subsidyInr: number; netCostInr: number; paybackYears: number; roi25yrPercent: number } {
-  const systemCostInr = calcSystemCost(installedKw);
+  const systemCostInr = calcSystemCost(installedKw, windZone);
   const subsidyInr = calcSubsidyInr(installedKw);
   const netCostInr = Math.max(0, systemCostInr - subsidyInr);
   const paybackYears = annualSavingsInr > 0
@@ -100,6 +137,19 @@ export function calcInvestment(
     ? Math.round(((lifetimeSavings - netCostInr) / netCostInr) * 100)
     : 0;
   return { systemCostInr, subsidyInr, netCostInr, paybackYears, roi25yrPercent };
+}
+
+export function calcAnnualSavings(annualKwh: number, electricityRate: number): number {
+  return calcFinancials(annualKwh, electricityRate).annual;
+}
+
+export function calcPaybackYears(netCostInr: number, annualSavingsInr: number): number {
+  return annualSavingsInr > 0 ? Math.round((netCostInr / annualSavingsInr) * 10) / 10 : 0;
+}
+
+export function calcROI(netCostInr: number, annualSavingsInr: number): number {
+  const lifetimeSavings = annualSavingsInr * SYSTEM_LIFETIME_YRS;
+  return netCostInr > 0 ? Math.round(((lifetimeSavings - netCostInr) / netCostInr) * 100) : 0;
 }
 
 /** Step 6: CO₂ impact */
@@ -146,11 +196,14 @@ export interface SolarAnalysis {
   generatedAt: string;
   irradianceSource?: string;
   monthlyIrradiance?: Record<string, number>;
-
   // Shading accuracy outputs
   horizonShadingLoss?: number;
   skyViewFactor?: number;
-
+  windZone?: { zone: number; label: string };
+  tempDerate?: number;
+  ws10m?: number;
+  t2m?: number;
+  shadingLoss?: number;
   // Custom layout properties
   panelCount?: number;
   panelType?: "compact" | "premium";
@@ -159,13 +212,16 @@ export interface SolarAnalysis {
   orientation?: "portrait" | "landscape" | "auto";
   walkways?: boolean;
   setbackM?: number;
+  pitchDegrees?: number;
+  shading?: "none" | "partial" | "heavy" | "auto";
+  computedShadingLoss?: number | null;
 }
 
 function generateAnalysisId(): string {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
   let id = "sunpower_";
-  for (let i = 0; i < 8; i++) {
-    id += chars.charAt(Math.floor(Math.random() * chars.length));
+  for (let i = 0; i < 12; i++) {
+    id += chars[Math.floor(Math.random() * chars.length)];
   }
   return id;
 }
@@ -184,8 +240,11 @@ interface FullCalcOptions {
   electricityRate?: number;
   irradianceSource?: string;
   monthlyIrradiance?: Record<string, number>;
-  shading?: "none" | "partial" | "heavy";
-
+  shading?: "none" | "partial" | "heavy" | "auto";
+  computedShadingLoss?: number | null;
+  exclusionAreaM2?: number;
+  ws10m?: number;
+  t2m?: number;
   // Custom capacity & layout inputs
   customCapacityKw?: number;
   panelCount?: number;
@@ -195,6 +254,7 @@ interface FullCalcOptions {
   orientation?: "portrait" | "landscape" | "auto";
   walkways?: boolean;
   setbackM?: number;
+  pitchDegrees?: number;
 }
 
 /**
@@ -212,16 +272,32 @@ export function runFullCalculation(
   validateInputs(rooftopAreaM2, peakSunHours, electricityRate);
 
   // Step 1
-  const usableArea = calcUsableArea(rooftopAreaM2);
+  const usableArea = calcUsableArea(rooftopAreaM2, opts.pitchDegrees, opts.exclusionAreaM2);
 
   // Step 2: Use custom capacity if provided (calculated from actual panels), otherwise fallback to area-based estimation
   const installedKw = opts.customCapacityKw ?? calcInstalledCapacity(usableArea);
 
-  // Step 3: base annual energy, then apply roof-shading derating.
-  const shadingLoss = SHADING_LOSS[opts.shading ?? "none"];
-  const skyViewFactor = BASE_SKY_VIEW_FACTOR * (1 - shadingLoss);
-  const baseAnnualKwh = calcAnnualEnergy(installedKw, peakSunHours);
-  const annualKwh = Math.round(baseAnnualKwh * (1 - shadingLoss) * 10) / 10;
+  // Wind Zone classification
+  let windZoneObj: { zone: number; label: string } | undefined;
+  if (opts.ws10m !== undefined) {
+    windZoneObj = classifyWindZone(opts.ws10m);
+  }
+
+  // Step 3
+  const annualKwh = calcAnnualEnergy(installedKw, peakSunHours, opts.shading, opts.computedShadingLoss, opts.t2m);
+
+  // Applied Shading Loss calculation for return payload
+  let appliedShadingLoss = 0;
+  if (opts.shading === "none") {
+    appliedShadingLoss = 0;
+  } else if (opts.shading === "partial") {
+    appliedShadingLoss = 0.15;
+  } else if (opts.shading === "heavy") {
+    appliedShadingLoss = 0.30;
+  } else {
+    appliedShadingLoss = opts.computedShadingLoss ?? 0;
+  }
+  const skyViewFactor = BASE_SKY_VIEW_FACTOR * (1 - appliedShadingLoss);
 
   // Step 4
   const dailyKwh = Math.round((annualKwh / 365) * 10) / 10;
@@ -231,10 +307,13 @@ export function runFullCalculation(
   const financials = calcFinancials(annualKwh, electricityRate);
 
   // Step 5b/c
-  const investment = calcInvestment(installedKw, financials.annual);
+  const investment = calcInvestment(installedKw, financials.annual, windZoneObj?.zone);
 
   // Step 6
   const co2 = calcCO2Impact(annualKwh);
+
+  // Temperature Derating multiplier calculation
+  const tempDerate = opts.t2m !== undefined ? calcTemperatureDerate(opts.t2m) : undefined;
 
   return {
     analysisId: generateAnalysisId(),
@@ -264,11 +343,14 @@ export function runFullCalculation(
     generatedAt: new Date().toISOString(),
     irradianceSource: opts.irradianceSource,
     monthlyIrradiance: opts.monthlyIrradiance,
-
     // Shading accuracy outputs
-    horizonShadingLoss: shadingLoss,
+    horizonShadingLoss: appliedShadingLoss,
     skyViewFactor,
-
+    windZone: windZoneObj,
+    tempDerate,
+    ws10m: opts.ws10m,
+    t2m: opts.t2m,
+    shadingLoss: appliedShadingLoss,
     // Pass custom layout properties to the results object
     panelCount: opts.panelCount,
     panelType: opts.panelType,
@@ -277,5 +359,10 @@ export function runFullCalculation(
     orientation: opts.orientation,
     walkways: opts.walkways,
     setbackM: opts.setbackM,
+    pitchDegrees: opts.pitchDegrees || 0,
+    shading: opts.shading || "auto",
+    computedShadingLoss: opts.computedShadingLoss ?? null,
   };
 }
+
+export { calcSubsidyInr };

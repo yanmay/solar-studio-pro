@@ -1,33 +1,33 @@
-"use client";
-
-import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeftIcon } from "lucide-react";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
+import { ArrowLeft, Home, MapPin } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
 import { Globe } from "@/components/ui/cosmic-404";
 
-// 🎞️ Animation Variants
-const fadeUp = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.9, ease: "easeOut" } },
+// ui-ux-pro-max — expo.out easing: cubic-bezier(0.16,1,0.3,1)
+const EXPO_OUT = [0.16, 1, 0.3, 1] as const;
+
+const fadeUp: Variants = {
+  hidden: { opacity: 0, y: 24 },
+  visible: {
+    opacity: 1, y: 0,
+    transition: { duration: 0.7, ease: EXPO_OUT }
+  },
 };
 
-const globeVariants = {
-  hidden: { scale: 0.85, opacity: 0, y: 10 },
+const stagger: Variants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.08 } },
+};
+
+const globeVariants: Variants = {
+  hidden: { scale: 0.85, opacity: 0, y: 12 },
   visible: {
-    scale: 1,
-    opacity: 1,
-    y: 0,
-    transition: { duration: 1, ease: "easeOut" },
+    scale: 1, opacity: 1, y: 0,
+    transition: { duration: 0.9, ease: EXPO_OUT }
   },
   floating: {
     y: [-4, 4],
-    transition: {
-      duration: 5,
-      ease: "easeInOut",
-      repeat: Infinity,
-      repeatType: "reverse",
-    },
+    transition: { duration: 5, ease: "easeInOut", repeat: Infinity, repeatType: "reverse" },
   },
 };
 
@@ -39,85 +39,120 @@ export interface NotFoundProps {
 }
 
 export default function NotFound({
-  title = "Ups! Lost in space",
-  description = "We couldn’t find the page you’re looking for. It might have been moved or deleted.",
+  title = "Lost in the void",
+  description = "We couldn't find the page you're looking for. It may have been moved, deleted, or the URL is incorrect.",
   backText = "Go Back",
   onBack,
 }: NotFoundProps) {
   const navigate = useNavigate();
 
   const handleBack = onBack || (() => {
-    if (window.history.length > 1) {
-      navigate(-1);
-    } else {
-      navigate("/");
-    }
+    if (window.history.length > 1) navigate(-1);
+    else navigate("/");
   });
 
   return (
-    <div className="flex flex-col justify-center items-center px-4 h-[100vh] bg-background text-foreground overflow-hidden">
+    <div className="relative min-h-screen bg-[#050505] text-white flex flex-col items-center justify-center px-4 overflow-hidden selection:bg-[#FF6600]/30">
+      {/* Ambient Glow Blobs — ui-ux-pro-max cinematic dark */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+        <div
+          className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full blur-[130px] opacity-[0.08]"
+          style={{ background: "#FF6600", animation: "blob404-1 20s ease-in-out infinite alternate" }}
+        />
+        <div
+          className="absolute bottom-[-15%] right-[-5%] w-[500px] h-[500px] rounded-full blur-[110px] opacity-[0.05]"
+          style={{ background: "#10B981", animation: "blob404-2 24s ease-in-out infinite alternate" }}
+        />
+      </div>
+      <style>{`
+        @keyframes blob404-1 { to { transform: translate(50px, 70px) scale(1.15); } }
+        @keyframes blob404-2 { to { transform: translate(-40px, -30px) scale(1.1); } }
+      `}</style>
+
       <AnimatePresence mode="wait">
         <motion.div
-          className="text-center flex flex-col items-center justify-center max-w-lg"
+          className="relative z-10 text-center flex flex-col items-center justify-center max-w-lg"
           initial="hidden"
           animate="visible"
           exit="hidden"
-          variants={fadeUp}
+          variants={stagger}
         >
-          {/* 404 Globe Row */}
-          <div className="flex items-center justify-center gap-6 mb-8">
-            <motion.span
-              className="text-7xl md:text-8xl font-bold text-[#ffb87b] select-none font-display"
-              variants={fadeUp}
-              style={{ fontFamily: "Sora, sans-serif" }}
+          {/* 404 row — Calistoga display font */}
+          <motion.div
+            className="flex items-center justify-center gap-4 sm:gap-8 mb-10"
+            variants={fadeUp}
+          >
+            <span
+              className="text-7xl sm:text-9xl font-bold select-none"
+              style={{ fontFamily: "'Calistoga', serif", color: "#FF6600", textShadow: "0 0 60px rgba(255,102,0,0.3)" }}
             >
               4
-            </motion.span>
+            </span>
 
             <motion.div
-              className="relative w-24 h-24 md:w-32 md:h-32 flex items-center justify-center"
+              className="relative w-20 h-20 sm:w-32 sm:h-32 flex items-center justify-center"
               variants={globeVariants}
               animate={["visible", "floating"]}
             >
-              <Globe className="w-full h-full scale-125 md:scale-150" />
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,143,0,0.08)_0%,transparent_70%)]" />
+              <Globe className="w-full h-full scale-110 sm:scale-125" />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,102,0,0.12)_0%,transparent_70%)]" />
             </motion.div>
 
-            <motion.span
-              className="text-7xl md:text-8xl font-bold text-[#ffb87b] select-none font-display"
-              variants={fadeUp}
-              style={{ fontFamily: "Sora, sans-serif" }}
+            <span
+              className="text-7xl sm:text-9xl font-bold select-none"
+              style={{ fontFamily: "'Calistoga', serif", color: "#FF6600", textShadow: "0 0 60px rgba(255,102,0,0.3)" }}
             >
               4
-            </motion.span>
-          </div>
+            </span>
+          </motion.div>
 
-          {/* Heading */}
+          {/* Bento status badge */}
+          <motion.div variants={fadeUp}>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-[10px] font-mono font-bold text-white/40 uppercase tracking-[0.12em] mb-5">
+              <MapPin className="w-3 h-3 text-[#FF6600]" />
+              <span>Route Not Found</span>
+            </div>
+          </motion.div>
+
+          {/* Headline — Calistoga for human warmth */}
           <motion.h1
-            className="mb-4 text-2xl md:text-4xl font-semibold tracking-tight text-white font-display"
+            className="mb-4 text-3xl sm:text-5xl text-white leading-tight"
+            style={{ fontFamily: "'Calistoga', serif", fontWeight: 400 }}
             variants={fadeUp}
-            style={{ fontFamily: "Sora, sans-serif" }}
           >
             {title}
           </motion.h1>
 
-          {/* Description */}
+          {/* Description — Inter body */}
           <motion.p
-            className="mb-10 text-sm md:text-base text-neutral-400 max-w-sm leading-relaxed"
+            className="mb-10 text-sm sm:text-base text-white/50 max-w-sm leading-relaxed font-light"
             variants={fadeUp}
           >
             {description}
           </motion.p>
 
-          {/* Action Button */}
-          <motion.div variants={fadeUp}>
-            <Button
+          {/* CTA Buttons */}
+          <motion.div variants={fadeUp} className="flex items-center gap-3 flex-wrap justify-center">
+            <button
               onClick={handleBack}
-              className="gap-2 hover:scale-105 transition-all duration-500 cursor-pointer bg-[#ff8f00] text-black hover:bg-orange-500 px-6 py-2.5 font-bold rounded-full font-mono uppercase text-[11px] tracking-wider"
+              className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-white/5 border border-white/10 text-white text-xs font-mono font-bold uppercase tracking-wider hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer active:scale-[0.97]"
+              style={{ transition: "all 200ms cubic-bezier(0.16,1,0.3,1)" }}
             >
-              <ArrowLeftIcon className="w-4 h-4" />
+              <ArrowLeft className="w-4 h-4" />
               {backText}
-            </Button>
+            </button>
+            <button
+              onClick={() => navigate("/")}
+              className="flex items-center gap-2 px-5 py-3 rounded-2xl text-black text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer active:scale-[0.97] border-none"
+              style={{
+                background: "linear-gradient(135deg, #FF6600 0%, #FF8C38 100%)",
+                boxShadow: "0 0 28px rgba(255,102,0,0.3)",
+                transition: "all 200ms cubic-bezier(0.16,1,0.3,1)",
+              }}
+            >
+              <Home className="w-4 h-4" />
+              Take Me Home
+            </button>
           </motion.div>
         </motion.div>
       </AnimatePresence>

@@ -8,6 +8,9 @@ export interface NASAPowerResponse {
   properties: {
     parameter: {
       ALLSKY_SFC_SW_DWN: Record<string, number>;
+      WS10M?: Record<string, number>;
+      WS50M?: Record<string, number>;
+      T2M?: Record<string, number>;
     };
   };
 }
@@ -17,6 +20,10 @@ export interface IrradianceResult {
   source: "NASA_POWER" | "REGIONAL_FALLBACK";
   region?: string;
   monthlyValues?: Record<string, number>;
+  ws10m?: number;
+  ws50m?: number;
+  t2m?: number;
+  t2m_monthly?: number[];
 }
 
 export interface MonthlyGHIResult {
@@ -24,6 +31,10 @@ export interface MonthlyGHIResult {
   lat: number;
   lng: number;
   year: number;
+  ws10m?: number;
+  ws50m?: number;
+  t2m?: number;
+  t2m_monthly?: number[];
 }
 
 // In-memory cache: key → { data, timestamp }
@@ -97,6 +108,10 @@ export async function fetchSolarIrradiance(lat: number, lng: number): Promise<Ir
       peakSunHours: Math.round(peakSunHours * 100) / 100,
       source: "NASA_POWER",
       monthlyValues,
+      ws10m: data.ws10m,
+      ws50m: data.ws50m,
+      t2m: data.t2m,
+      t2m_monthly: data.t2m_monthly,
     };
 
     cache.set(key, { data: result, timestamp: Date.now() });
@@ -111,6 +126,10 @@ export async function fetchSolarIrradiance(lat: number, lng: number): Promise<Ir
       peakSunHours: psh,
       source: "REGIONAL_FALLBACK",
       region,
+      ws10m: 3.0,
+      ws50m: 4.5,
+      t2m: 26.5,
+      t2m_monthly: [22, 24, 28, 31, 33, 31, 28.5, 28, 28.5, 27.5, 25, 22],
     };
 
     cache.set(key, { data: result, timestamp: Date.now() });

@@ -1,6 +1,13 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500;600;700&display=swap');
+/* ═══════════════════════════════════════════════════════════════
+   ui-ux-pro-max Design System — SUNPOWER LINK
+   Style: Bento Grid + Modern Dark Cinema (OLED-safe)
+   Typography: Calistoga (display) + Inter (body) + JetBrains Mono (data)
+   Easing: expo.out cubic-bezier(0.16, 1, 0.3, 1)
+   ═══════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Calistoga:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* Legacy font imports kept for existing components */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
 
 @tailwind base;
 @tailwind components;
@@ -192,13 +199,29 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-    transition: background-color 0.4s ease, color 0.4s ease;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #050505;
   }
-  h1, h2, h3, h4, h5, h6 {
-    font-family: 'Outfit', system-ui, -apple-system, sans-serif;
-    @apply tracking-tight font-bold text-sunpower-text-primary;
+  /* ui-ux-pro-max: Calistoga for hero display — adds human warmth to the B2B SaaS aesthetic */
+  h1 {
+    font-family: 'Calistoga', serif;
+    @apply tracking-tight;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+  }
+  h2, h3 {
+    font-family: 'Inter', system-ui, sans-serif;
+    @apply tracking-tight font-bold;
+  }
+  h4, h5, h6 {
+    font-family: 'Inter', system-ui, sans-serif;
+    @apply font-semibold;
+  }
+  /* JetBrains Mono for all data labels, section badges, mono utility text */
+  .font-mono, code, pre {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
   }
 }
 
@@ -878,7 +901,220 @@
   }
 }
 
+/* ── Starfield & Pulsing Marker Animations (Globe Redesign) ── */
+@keyframes twinkle {
+  0%, 100% {
+    opacity: 0.15;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.15);
+  }
+}
 
+.animate-twinkle {
+  animation: twinkle 4s ease-in-out infinite;
+}
+
+@keyframes globe-pulse {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(2.8);
+    opacity: 0;
+  }
+}
+
+.pulse-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 102, 0, 0.45);
+  pointer-events: none;
+}
+
+.pulse-ring-1 {
+  animation: globe-pulse 2.8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  animation-delay: 0s;
+}
+
+.pulse-ring-2 {
+  animation: globe-pulse 2.8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  animation-delay: 0.9s;
+}
+
+.pulse-ring-3 {
+  animation: globe-pulse 2.8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  animation-delay: 1.8s;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ui-ux-pro-max Additional Design System Utilities
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Calistoga display heading utility */
+.font-display {
+  font-family: 'Calistoga', serif;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+/* JetBrains Mono data badge — 12pt uppercase tracking-[1.5] */
+.data-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* Ambient glow blob animations — ui-ux-pro-max slow oscillation */
+@keyframes ambientBlob1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(40px, 60px) scale(1.1); }
+}
+@keyframes ambientBlob2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-30px, -40px) scale(1.08); }
+}
+@keyframes ambientBlob3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(20px, -30px) scale(1.05); }
+}
+.animate-ambient-blob-1 { animation: ambientBlob1 18s ease-in-out infinite; }
+.animate-ambient-blob-2 { animation: ambientBlob2 22s ease-in-out infinite; }
+.animate-ambient-blob-3 { animation: ambientBlob3 26s ease-in-out infinite; }
+
+/* Bento card hover with expo.out — matches ui-ux-pro-max spec */
+.bento-card {
+  position: relative;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(10, 10, 10, 0.90);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: all 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  will-change: transform, box-shadow, border-color;
+}
+.bento-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+  border-radius: 24px 24px 0 0;
+  pointer-events: none;
+}
+.bento-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(255, 102, 0, 0.30);
+  box-shadow: 0 0 24px rgba(255, 102, 0, 0.08), 0 20px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.bento-card:hover::before {
+  background: linear-gradient(90deg, transparent, rgba(255, 102, 0, 0.35), transparent);
+}
+
+/* Section badge — section label with Mono + orange */
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.05);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #FF6600;
+}
+
+/* Orange primary CTA — ui-ux-pro-max spec */
+.ui-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 2.75rem;
+  padding: 0 1.5rem;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, #FF6600 0%, #FF8C38 100%);
+  color: #000;
+  font-weight: 700;
+  font-size: 0.75rem;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 0 24px rgba(255, 102, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+.ui-btn-primary:hover {
+  box-shadow: 0 0 36px rgba(255, 102, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+.ui-btn-primary:active {
+  transform: scale(0.97);
+}
+.ui-btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Ghost button for dark surfaces */
+.ui-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 2.5rem;
+  padding: 0 1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ui-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.20);
+  color: rgba(255, 255, 255, 0.90);
+}
+.ui-btn-ghost:active {
+  transform: scale(0.97);
+}
+
+/* Stagger entrance — ui-ux-pro-max: Y:20→0 + opacity:0→1 with 80ms increments */
+@keyframes staggerFadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.stagger-in { animation: staggerFadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.stagger-in:nth-child(1) { animation-delay: 0ms; }
+.stagger-in:nth-child(2) { animation-delay: 80ms; }
+.stagger-in:nth-child(3) { animation-delay: 160ms; }
+.stagger-in:nth-child(4) { animation-delay: 240ms; }
+.stagger-in:nth-child(5) { animation-delay: 320ms; }
+.stagger-in:nth-child(6) { animation-delay: 400ms; }
+.stagger-in:nth-child(7) { animation-delay: 480ms; }
+.stagger-in:nth-child(8) { animation-delay: 560ms; }
 
 
 

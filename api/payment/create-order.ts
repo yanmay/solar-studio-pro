@@ -1,7 +1,8 @@
 import Razorpay from 'razorpay';
+import { getSupabaseAdmin, ensureSession } from '../_utils/supabase.js';
 
 export const config = {
-  runtime: 'edge',
+  runtime: 'nodejs',
 };
 
 export default async function handler(req: Request): Promise<Response> {
@@ -13,7 +14,14 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   try {
-    let body: { plan?: string; scanId?: string } = {};
+    let body: {
+      plan?: string;
+      scanId?: string;
+      address?: string;
+      lat?: number;
+      lng?: number;
+      referrerCode?: string;
+    } = {};
     try {
       body = await req.json();
     } catch {
@@ -32,7 +40,10 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     // Determine amount IN PAISE server-side only
-    const amount = plan === 'pay_per_scan' ? 14900 : 99900;
+    // Referred user gets ₹20 off first PDF (12900 paise instead of 14900 paise)
+    const amount = plan === 'pay_per_scan' 
+      ? (body.referrerCode ? 12900 : 14900) 
+      : 99900;
     const keyId = process.env.RAZORPAY_KEY_ID;
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
@@ -58,8 +69,40 @@ export default async function handler(req: Request): Promise<Response> {
       notes: {
         plan,
         scanId: body.scanId || '',
+        referrerCode: body.referrerCode || '',
       },
     });
+
+    // Persist a pending payment record (server-authoritative source of truth).
+    // A DB failure must not block checkout, but is logged loudly.
+    try {
+      const supabase = getSupabaseAdmin();
+      if (supabase && body.scanId) {
+        const sessionId = await ensureSession(supabase, body.scanId, {
+          address: body.address,
+          lat: body.lat,
+          lng: body.lng,
+        });
+        if (sessionId) {
+          const { error: payError } = await supabase.from('payments').insert({
+            session_id: sessionId,
+            amount_paise: amount,
+            currency: 'INR',
+            payment_type:
+              plan === 'pay_per_scan' ? 'report_unlock' : 'installer_subscription',
+            razorpay_order_id: order.id,
+            status: 'pending',
+          });
+          if (payError) {
+            console.error('Failed to persist pending payment:', payError.message);
+          }
+        }
+      } else if (!supabase) {
+        console.error('Supabase admin client unavailable — payment not persisted');
+      }
+    } catch (dbError) {
+      console.error('DB error persisting pending payment:', dbError);
+    }
 
     return new Response(
       JSON.stringify({

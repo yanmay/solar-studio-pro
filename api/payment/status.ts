@@ -1,17 +1,9 @@
+import { getSupabaseAdmin } from '../_utils/supabase.js';
+
 export const config = {
-  runtime: 'edge',
+  runtime: 'nodejs',
 };
 
-// Helper to parse cookies from header
-function getCookie(cookieHeader: string, name: string): string | null {
-  if (!cookieHeader) return null;
-  const cookies = cookieHeader.split(';');
-  for (let cookie of cookies) {
-    const [cName, cVal] = cookie.trim().split('=');
-    if (cName === name) return decodeURIComponent(cVal);
-  }
-  return null;
-}
 
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'GET') {
@@ -22,13 +14,42 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   const { searchParams } = new URL(req.url);
-  const scanId = searchParams.get('scanId') || 'default';
-  
-  const cookieHeader = req.headers.get('cookie') || '';
-  const cookieName = `scan_unlocked_${scanId}`;
-  const isUnlocked = getCookie(cookieHeader, cookieName) === 'true';
+  const scanId = searchParams.get('scanId') || '';
+  const orderId = searchParams.get('orderId') || searchParams.get('order_id') || '';
+  const paymentId = searchParams.get('paymentId') || searchParams.get('payment_id') || '';
 
-  return new Response(JSON.stringify({ unlocked: isUnlocked }), {
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    try {
+      const filters = [];
+      if (paymentId) filters.push(`payment_id.eq.${paymentId}`);
+      if (orderId) filters.push(`order_id.eq.${orderId}`);
+      if (scanId && scanId !== 'default') {
+        filters.push(`scan_hash.eq.${scanId}`);
+        filters.push(`payment_id.eq.${scanId}`);
+        filters.push(`order_id.eq.${scanId}`);
+      }
+
+      if (filters.length > 0) {
+        const { data: dbData, error } = await supabase
+          .from('payments')
+          .select('status')
+          .or(filters.join(','));
+
+        if (error) throw error;
+
+        const isUnlocked = dbData?.some(p => p.status === 'captured') || false;
+        return new Response(JSON.stringify({ unlocked: isUnlocked }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    } catch (err) {
+      console.error('status: DB query failed:', err);
+    }
+  }
+
+  return new Response(JSON.stringify({ unlocked: false }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   });
