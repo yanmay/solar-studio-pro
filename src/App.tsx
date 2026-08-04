@@ -25,7 +25,7 @@ function loadPlausible() {
   document.head.appendChild(s);
   // Proxy queue until script loads
   // @ts-expect-error — stub matches upstream Plausible bootstrap
-  window.plausible = window.plausible || function () { (window.plausible.q = window.plausible.q || []).push(arguments); };
+  window.plausible = window.plausible || function (...args: unknown[]) { (window.plausible.q = window.plausible.q || []).push(args); };
 }
 loadPlausible();
 

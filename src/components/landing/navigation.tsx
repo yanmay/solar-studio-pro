@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -314,7 +314,7 @@ export function Navigation() {
             ].map((item, i) => (
               <button
                 key={item.label}
-                onClick={() => { setMobileOpen(false); item.href.startsWith("/") ? navigate(item.href) : undefined; }}
+                onClick={() => { setMobileOpen(false); if (item.href.startsWith("/")) { navigate(item.href); } }}
                 className={`text-left px-4 py-3 rounded-2xl cursor-pointer border-none font-bold transition-all ${
                   item.accent
                     ? "text-black"

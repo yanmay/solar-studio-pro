@@ -1,4 +1,4 @@
-﻿import { getRegionalPSH } from "./india-grid";
+import { getRegionalPSH } from "./india-grid";
 import { 
   calcSubsidyInr, 
   ELECTRICITY_RATE_INR,
@@ -1029,7 +1029,9 @@ export async function runAutomatedFeasibility(
               city = data.address?.city || data.address?.town || data.address?.suburb || city;
             }
           }
-        } catch (e) {}
+        } catch (e) {
+          // ignore reverse geocoding failure
+        }
         
         const { error: sessInsertErr } = await supabase
           .from("analysis_sessions")

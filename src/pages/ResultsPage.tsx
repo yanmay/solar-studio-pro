@@ -203,7 +203,11 @@ function computeModel({ peakSunHours, pCount, pType, tariff, escalation, discoun
   if (calcNpv(low) > 0 && calcNpv(high) < 0) {
     for (let i = 0; i < 30; i++) {
       const mid = (low + high) / 2;
-      calcNpv(mid) > 0 ? low = mid : high = mid;
+      if (calcNpv(mid) > 0) {
+        low = mid;
+      } else {
+        high = mid;
+      }
       irr = mid;
     }
   }
@@ -784,7 +788,9 @@ const ResultsPage = () => {
           const decoded = decodeScanFromUrl(enc);
           decodedPolygon = decoded?.scanInput?.roofPolygon;
           urlPitchDegrees = decoded?.scanInput?.pitchDegrees ?? 0;
-        } catch {}
+        } catch {
+          // ignore decode errors
+        }
       }
 
       const centroid = calcCentroid(
@@ -883,7 +889,9 @@ const ResultsPage = () => {
       if (cachedBrand) {
         try {
           activeBrandConfig = JSON.parse(cachedBrand);
-        } catch {}
+        } catch {
+          // ignore parse errors
+        }
       }
 
       await generatePDFReport(

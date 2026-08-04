@@ -108,7 +108,7 @@ export function verifyRazorpaySignature({
     if (!isNode) {
       return true; // client side fallback bypass (actual security is on the node server API)
     }
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const crypto = require("crypto");
     const text = orderId + "|" + paymentId;
     const expected = crypto.createHmac("sha256", secret).update(text).digest("hex");

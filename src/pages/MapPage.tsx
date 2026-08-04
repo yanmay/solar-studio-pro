@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
@@ -257,32 +257,59 @@ async function geocodeAddress(
   address: string,
   bounds?: L.LatLngBounds | null
 ): Promise<{ lat: number; lng: number; label: string }> {
-  let url = `/api/geocode?q=${encodeURIComponent(address.trim())}`;
-  if (bounds) {
-    const viewbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
-    url += `&viewbox=${viewbox}`;
+  try {
+    let url = `/api/geocode?q=${encodeURIComponent(address.trim())}`;
+    if (bounds) {
+      const viewbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
+      url += `&viewbox=${viewbox}`;
+    }
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && !Array.isArray(data) && data.lat != null) {
+        return {
+          lat: parseFloat(data.lat),
+          lng: parseFloat(data.lng),
+          label: data.formatted_address || address,
+        };
+      }
+      if (Array.isArray(data) && data.length > 0) {
+        const first = data[0];
+        return {
+          lat: parseFloat(first.lat),
+          lng: parseFloat(first.lon),
+          label: first.display_name,
+        };
+      }
+    }
+  } catch {
+    // Ignore backend proxy error and fall back to Photon API
   }
-  const res = await fetch(url, {
-    headers: { "User-Agent": "SolarScanAIApp/1.0" },
-  });
-  if (!res.ok) throw new Error("Geocoding service unavailable.");
-  let data = await res.json();
-  if (data && !Array.isArray(data)) {
-    data = [{
-      lat: String(data.lat),
-      lon: String(data.lng),
-      display_name: data.formatted_address
-    }];
+
+  try {
+    const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(address.trim())}&limit=1`;
+    const pRes = await fetch(photonUrl);
+    if (pRes.ok) {
+      const pData = await pRes.json();
+      if (pData?.features && pData.features.length > 0) {
+        const feat = pData.features[0];
+        const coords = feat.geometry?.coordinates;
+        if (coords && coords.length >= 2) {
+          const props = feat.properties || {};
+          const labelParts = [props.name, props.city, props.state, props.country].filter(Boolean);
+          return {
+            lat: coords[1],
+            lng: coords[0],
+            label: labelParts.join(", ") || address,
+          };
+        }
+      }
+    }
+  } catch {
+    // Ignore
   }
-  if (!data || data.length === 0) {
-    throw new Error("Location not found. Try adding details like city or state name.");
-  }
-  const first = data[0];
-  return {
-    lat: parseFloat(first.lat),
-    lng: parseFloat(first.lon),
-    label: first.display_name,
-  };
+
+  throw new Error("Location not found. Try adding details like city or state name.");
 }
 
 async function reverseGeocode(lat: number, lng: number): Promise<string> {
@@ -605,23 +632,30 @@ const MapPage = () => {
     });
 
     const googleSat = L.tileLayer(
-      "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
-      { attribution: "© Google", maxZoom: 21, subdomains: ["mt0", "mt1", "mt2", "mt3"] }
+      "https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+      {
+        attribution: "© Google Maps",
+        maxZoom: 21,
+        subdomains: ["mt0", "mt1", "mt2", "mt3"],
+      }
     );
     const esriSat = L.tileLayer(
       "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
       { attribution: "Tiles &copy; Esri", maxZoom: 21 }
     );
-    const labels = L.tileLayer(
-      "https://mt1.google.com/vt/lyrs=h&x={x}&y={y}&z={z}",
-      { maxZoom: 21, opacity: 0.7, pane: "overlayPane" }
+    const esriLabels = L.tileLayer(
+      "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom: 21, opacity: 0.85, pane: "overlayPane" }
     );
 
     googleSat.on("tileerror", () => {
-      if (!map.hasLayer(esriSat)) { googleSat.remove(); esriSat.addTo(map); labels.addTo(map); }
+      if (!map.hasLayer(esriSat)) {
+        googleSat.remove();
+        esriSat.addTo(map);
+        esriLabels.addTo(map);
+      }
     });
     googleSat.addTo(map);
-    labels.addTo(map);
 
     // ── Click handler ──────────────────────────────────────
     const handleMapClick = (e: L.LeafletMouseEvent) => {

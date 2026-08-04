@@ -95,7 +95,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               try {
                 const decoded = JSON.parse(atob(scan));
                 localScanId = decoded?.scanInput?.siteId || decoded?.analysisId;
-              } catch {}
+              } catch {
+                // ignore invalid base64 or json
+              }
             }
             await claimAnonymousData(currentUser.email, localScanId);
           }
