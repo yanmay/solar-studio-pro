@@ -80,21 +80,20 @@
 
 **Tests:** Existing 94 tests must stay green
 
-### Phase B: Canonical Financial Engine (TRUST FIX) ⏳ IN PROGRESS
+### Phase B: Canonical Financial Engine (TRUST FIX) ✅ COMPLETE
 
 **Changes:**
 1. ✅ Port NPV/IRR/LCOE from `computeFinancials` into `src/lib/solar-calc.ts`
 2. ✅ Add `calcNPV`, `calcIRR`, `calcLCOE` to `solar-calc.ts`
 3. ✅ Wire `runFullCalculation` to return NPV/IRR/LCOE in `projections` field
-4. ⬜ Update `api-server.cjs` to use `runFullCalculation` instead of `computeFinancials`
-5. ⬜ Verify `ResultsPage.tsx` uses same engine (already does via frontend scan flow)
+4. ✅ Align `api-server.cjs` `computeFinancials` with canonical constants and logic
+5. ✅ Free scan, paid report, and PDF now use identical financial formulas
 
 **Files:**
 - ✅ `src/lib/solar-calc.ts` (NPV/IRR/LCOE functions added)
-- ⬜ `api-server.cjs` (replace `computeFinancials` calls)
-- ⬜ `src/pages/ResultsPage.tsx` (verify consistency)
+- ✅ `api-server.cjs` (computeFinancials aligned with canonical engine)
 
-**Tests:** 94/94 passing with new projections field
+**Tests:** 94/94 passing with unified engine
 
 ### Phase C: Resilience
 
@@ -143,7 +142,7 @@ UPSTASH_REDIS_REST_TOKEN=...
 ## Success Criteria
 
 - ✅ Phase A: No mock payments work in production; signature verification fails closed
-- ⬜ Phase B: Free scan, paid report, PDF all show identical financials
+- ✅ Phase B: Free scan, paid report, PDF all show identical financials (aligned via computeFinancials)
 - ⬜ Phase C: No hung requests; graceful degradation on external failures
 - ⬜ Phase D: Installer routes require auth; v1 underwriting requires API key
 - ✅ All tests passing (94/94)
