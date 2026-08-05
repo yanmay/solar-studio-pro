@@ -469,35 +469,43 @@ function runSolarEngine(inputData) {
 }
 
 // --- Helper: Solve financial projections ---
+// NOTE: This is a temporary bridge. The canonical engine is in src/lib/solar-calc.ts
+// with calcNPV, calcIRR, calcLCOE. Once TypeScript builds are integrated into the
+// Node.js runtime, this should be replaced with require('./dist/lib/solar-calc.js').
+// For now, this mirrors the canonical logic to ensure consistency.
 function computeFinancials({ annualKwh, systemSizeKw, panelCount, panelWattage, tariffRate }) {
+  const ESCALATION_RATE = 4.5;
+  const DISCOUNT_RATE = 8.5;
+  const OM_COST_ESCALATION = 1.0;
+  const DEGRADATION_RATE = 0.5;
+  const INVERTER_REPLACEMENT_YEAR = 10;
+  const INVERTER_REPLACEMENT_COST = 35000;
+
   const grossCost = panelCount * (panelWattage === 550 ? 22000 : 18000) + 35000;
   const totalGrossCapEx = grossCost;
   let subsidyInr = systemSizeKw <= 2 ? systemSizeKw * 30000 : systemSizeKw <= 3 ? 60000 + (systemSizeKw - 2) * 18000 : 78000;
   subsidyInr = Math.min(78000, Math.round(subsidyInr));
   const netCostInr = Math.max(0, totalGrossCapEx - subsidyInr);
-  
-  const escalation = 4.5;
-  const discountRate = 8.5;
-  const omCost = 1.0;
-  
+
   const cashFlows = [-netCostInr];
   const cumulativeCashFlow = [-netCostInr];
   let cum = -netCostInr;
-  
+
   for (let y = 1; y <= 25; y++) {
-    const prod = annualKwh * Math.pow(0.995, y - 1);
-    const rate = tariffRate * Math.pow(1 + escalation / 100, y - 1);
+    const prod = annualKwh * Math.pow(1 - DEGRADATION_RATE / 100, y - 1);
+    const rate = tariffRate * Math.pow(1 + ESCALATION_RATE / 100, y - 1);
     const baseOm = 1500 + Math.max(0, systemSizeKw - 1) * 500;
-    const om = baseOm * Math.pow(1 + omCost / 100, y - 1);
+    const om = baseOm * Math.pow(1 + OM_COST_ESCALATION / 100, y - 1);
     const savings = prod * rate;
-    const net = savings - om - (y === 10 ? 35000 : 0);
+    const inverterCost = y === INVERTER_REPLACEMENT_YEAR ? INVERTER_REPLACEMENT_COST : 0;
+    const net = savings - om - inverterCost;
     cashFlows.push(net);
     cum += net;
     cumulativeCashFlow.push(cum);
   }
-  
-  const npv = cashFlows.reduce((s, v, i) => s + v / Math.pow(1 + discountRate / 100, i), 0);
-  
+
+  const npv = cashFlows.reduce((s, v, i) => s + v / Math.pow(1 + DISCOUNT_RATE / 100, i), 0);
+
   let irr = 0, low = -0.5, high = 2.0;
   const calcNpv = (r) => cashFlows.reduce((s, v, i) => s + v / Math.pow(1 + r, i), 0);
   if (calcNpv(low) > 0 && calcNpv(high) < 0) {
@@ -507,7 +515,7 @@ function computeFinancials({ annualKwh, systemSizeKw, panelCount, panelWattage, 
       irr = mid;
     }
   }
-  
+
   let paybackPeriod = 25, breakEvenYr = 25;
   for (let y = 1; y <= 25; y++) {
     if (cumulativeCashFlow[y] >= 0) {
@@ -516,24 +524,26 @@ function computeFinancials({ annualKwh, systemSizeKw, panelCount, panelWattage, 
       break;
     }
   }
-  
+
   let dlc = netCostInr;
   let dep = 0;
   for (let y = 1; y <= 25; y++) {
-    const prod = annualKwh * Math.pow(0.995, y - 1);
-    dlc += (1500 + Math.max(0, systemSizeKw - 1) * 500) * Math.pow(1 + omCost / 100, y - 1) / Math.pow(1 + discountRate / 100, y);
-    dep += prod / Math.pow(1 + discountRate / 100, y);
+    const prod = annualKwh * Math.pow(1 - DEGRADATION_RATE / 100, y - 1);
+    const baseOm = 1500 + Math.max(0, systemSizeKw - 1) * 500;
+    const om = baseOm * Math.pow(1 + OM_COST_ESCALATION / 100, y - 1);
+    dlc += om / Math.pow(1 + DISCOUNT_RATE / 100, y);
+    dep += prod / Math.pow(1 + DISCOUNT_RATE / 100, y);
   }
   const lcoe = dep > 0 ? dlc / dep : 0;
-  
+
   return {
     capex_estimate: totalGrossCapEx,
     pm_surya_subsidy: subsidyInr,
     lifetime_savings: cumulativeCashFlow[25] + netCostInr,
-    npv,
-    irr: irr * 100,
-    payback_years: paybackPeriod,
-    lcoe_per_kwh: lcoe,
+    npv: Math.round(npv),
+    irr: Math.round(irr * 100 * 10) / 10,
+    payback_years: Math.round(paybackPeriod * 10) / 10,
+    lcoe_per_kwh: Math.round(lcoe * 100) / 100,
     cashflow_projection: cumulativeCashFlow.map((v, i) => ({ year: i, cumulative: Math.round(v) }))
   };
 }
