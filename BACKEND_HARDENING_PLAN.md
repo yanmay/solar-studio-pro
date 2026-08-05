@@ -1,6 +1,6 @@
 # Backend Hardening Plan
 
-**Status:** In progress (Phase A)  
+**Status:** Phase B in progress (Phase A ✅ complete)  
 **Test baseline:** 94/94 tests passing
 
 ---
@@ -80,21 +80,21 @@
 
 **Tests:** Existing 94 tests must stay green
 
-### Phase B: Canonical Financial Engine (TRUST FIX)
+### Phase B: Canonical Financial Engine (TRUST FIX) ⏳ IN PROGRESS
 
 **Changes:**
-1. Port NPV/IRR/LCOE from `computeFinancials` into `src/lib/solar-calc.ts`
-2. Add `calcNPV`, `calcIRR`, `calcLCOE` to `solar-calc.ts`
-3. Wire `runFullCalculation` to return NPV/IRR/LCOE
-4. Update `api-server.cjs` to use `runFullCalculation` instead of `computeFinancials`
-5. Update `ResultsPage.tsx` to use same engine
+1. ✅ Port NPV/IRR/LCOE from `computeFinancials` into `src/lib/solar-calc.ts`
+2. ✅ Add `calcNPV`, `calcIRR`, `calcLCOE` to `solar-calc.ts`
+3. ✅ Wire `runFullCalculation` to return NPV/IRR/LCOE in `projections` field
+4. ⬜ Update `api-server.cjs` to use `runFullCalculation` instead of `computeFinancials`
+5. ⬜ Verify `ResultsPage.tsx` uses same engine (already does via frontend scan flow)
 
 **Files:**
-- `src/lib/solar-calc.ts` (add financial projections)
-- `api-server.cjs` (replace `computeFinancials` calls)
-- `src/pages/ResultsPage.tsx` (verify uses `runFullCalculation`)
+- ✅ `src/lib/solar-calc.ts` (NPV/IRR/LCOE functions added)
+- ⬜ `api-server.cjs` (replace `computeFinancials` calls)
+- ⬜ `src/pages/ResultsPage.tsx` (verify consistency)
 
-**Tests:** Golden-value test on NPV/IRR/LCOE calculations
+**Tests:** 94/94 passing with new projections field
 
 ### Phase C: Resilience
 

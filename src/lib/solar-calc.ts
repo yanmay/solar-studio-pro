@@ -110,6 +110,134 @@ export function calcCO2Impact(annualKwh: number): { annualKg: number; yr25Kg: nu
   return { annualKg, yr25Kg, trees };
 }
 
+// ---------- Advanced Financial Projections ----------
+
+const ESCALATION_RATE = 4.5; // % annual electricity rate increase
+const DISCOUNT_RATE = 8.5; // % discount rate for NPV
+const OM_COST_ESCALATION = 1.0; // % annual O&M cost increase
+const DEGRADATION_RATE = 0.5; // % annual panel degradation
+const INVERTER_REPLACEMENT_YEAR = 10;
+const INVERTER_REPLACEMENT_COST = 35000; // INR
+
+/**
+ * Calculate Net Present Value (NPV) over 25 years
+ * Accounts for degradation, O&M costs, electricity rate escalation, inverter replacement
+ */
+export function calcNPV(
+  annualKwh: number,
+  systemSizeKw: number,
+  netCostInr: number,
+  electricityRate: number
+): number {
+  const cashFlows: number[] = [-netCostInr];
+
+  for (let year = 1; year <= SYSTEM_LIFETIME_YRS; year++) {
+    // Annual production with degradation
+    const production = annualKwh * Math.pow(1 - DEGRADATION_RATE / 100, year - 1);
+
+    // Electricity rate with escalation
+    const rate = electricityRate * Math.pow(1 + ESCALATION_RATE / 100, year - 1);
+
+    // O&M costs (base + per-kW overhead, escalated)
+    const baseOM = 1500 + Math.max(0, systemSizeKw - 1) * 500;
+    const omCost = baseOM * Math.pow(1 + OM_COST_ESCALATION / 100, year - 1);
+
+    // Annual savings minus costs
+    const savings = production * rate;
+    const inverterCost = year === INVERTER_REPLACEMENT_YEAR ? INVERTER_REPLACEMENT_COST : 0;
+    const netCashFlow = savings - omCost - inverterCost;
+
+    cashFlows.push(netCashFlow);
+  }
+
+  // Discount all cash flows to present value
+  const npv = cashFlows.reduce(
+    (sum, cashFlow, index) => sum + cashFlow / Math.pow(1 + DISCOUNT_RATE / 100, index),
+    0
+  );
+
+  return Math.round(npv);
+}
+
+/**
+ * Calculate Internal Rate of Return (IRR) using binary search
+ * Returns IRR as a percentage (e.g., 12.5 for 12.5%)
+ */
+export function calcIRR(
+  annualKwh: number,
+  systemSizeKw: number,
+  netCostInr: number,
+  electricityRate: number
+): number {
+  // Build cash flow array
+  const cashFlows: number[] = [-netCostInr];
+
+  for (let year = 1; year <= SYSTEM_LIFETIME_YRS; year++) {
+    const production = annualKwh * Math.pow(1 - DEGRADATION_RATE / 100, year - 1);
+    const rate = electricityRate * Math.pow(1 + ESCALATION_RATE / 100, year - 1);
+    const baseOM = 1500 + Math.max(0, systemSizeKw - 1) * 500;
+    const omCost = baseOM * Math.pow(1 + OM_COST_ESCALATION / 100, year - 1);
+    const savings = production * rate;
+    const inverterCost = year === INVERTER_REPLACEMENT_YEAR ? INVERTER_REPLACEMENT_COST : 0;
+    const netCashFlow = savings - omCost - inverterCost;
+    cashFlows.push(netCashFlow);
+  }
+
+  // NPV function for a given rate
+  const calcNpvAtRate = (rate: number) =>
+    cashFlows.reduce((sum, cf, i) => sum + cf / Math.pow(1 + rate, i), 0);
+
+  // Binary search for IRR
+  let low = -0.5;
+  let high = 2.0;
+  let irr = 0;
+
+  // Check if IRR exists in range
+  if (calcNpvAtRate(low) > 0 && calcNpvAtRate(high) < 0) {
+    for (let iter = 0; iter < 30; iter++) {
+      const mid = (low + high) / 2;
+      if (calcNpvAtRate(mid) > 0) {
+        low = mid;
+      } else {
+        high = mid;
+      }
+      irr = mid;
+    }
+  }
+
+  return Math.round(irr * 100 * 10) / 10; // Return as percentage
+}
+
+/**
+ * Calculate Levelized Cost of Energy (LCOE) in INR per kWh
+ * LCOE = (Present Value of Costs) / (Present Value of Energy Production)
+ */
+export function calcLCOE(
+  annualKwh: number,
+  systemSizeKw: number,
+  netCostInr: number
+): number {
+  let discountedCosts = netCostInr;
+  let discountedProduction = 0;
+
+  for (let year = 1; year <= SYSTEM_LIFETIME_YRS; year++) {
+    // Annual production with degradation
+    const production = annualKwh * Math.pow(1 - DEGRADATION_RATE / 100, year - 1);
+
+    // O&M costs escalated
+    const baseOM = 1500 + Math.max(0, systemSizeKw - 1) * 500;
+    const omCost = baseOM * Math.pow(1 + OM_COST_ESCALATION / 100, year - 1);
+
+    // Discount to present value
+    const discountFactor = Math.pow(1 + DISCOUNT_RATE / 100, year);
+    discountedCosts += omCost / discountFactor;
+    discountedProduction += production / discountFactor;
+  }
+
+  const lcoe = discountedProduction > 0 ? discountedCosts / discountedProduction : 0;
+  return Math.round(lcoe * 100) / 100; // Round to 2 decimal places
+}
+
 // ---------- Full calculation ----------
 
 export interface SolarAnalysis {
@@ -137,6 +265,11 @@ export interface SolarAnalysis {
     netCostInr: number;
     paybackYears: number;
     roi25yrPercent: number;
+  };
+  projections?: {
+    npv: number;
+    irr: number;
+    lcoe: number;
   };
   environmental: {
     co2AnnualKg: number;
@@ -233,6 +366,11 @@ export function runFullCalculation(
   // Step 5b/c
   const investment = calcInvestment(installedKw, financials.annual);
 
+  // Advanced projections: NPV, IRR, LCOE
+  const npv = calcNPV(annualKwh, installedKw, investment.netCostInr, electricityRate);
+  const irr = calcIRR(annualKwh, installedKw, investment.netCostInr, electricityRate);
+  const lcoe = calcLCOE(annualKwh, installedKw, investment.netCostInr);
+
   // Step 6
   const co2 = calcCO2Impact(annualKwh);
 
@@ -256,6 +394,11 @@ export function runFullCalculation(
       savings25yrInr: financials.yr25,
     },
     investment,
+    projections: {
+      npv,
+      irr,
+      lcoe
+    },
     environmental: {
       co2AnnualKg: co2.annualKg,
       co2_25yrKg: co2.yr25Kg,
