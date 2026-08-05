@@ -35,6 +35,9 @@ describe("Installer Core Features - TDD Test Suite", () => {
   let mockDb: any;
 
   beforeEach(() => {
+    // Allow mock payments in test environment
+    process.env.ALLOW_MOCK_PAYMENTS = 'true';
+
     const apiServer = require("../../api-server.cjs");
     apiServer.inMemoryTables = {
       profiles: [
