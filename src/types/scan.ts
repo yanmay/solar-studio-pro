@@ -3,12 +3,23 @@ export interface RoofPolygon {
   coordinates: [number, number][][];
 }
 
+export interface LatLng {
+  lat: number;
+  lng: number;
+}
+
 export interface ScanInput {
   address: string;
   lat: number;
   lng: number;
   roofPolygon: RoofPolygon[];
   roofAreaM2: number;
+  pitchDegrees?: number;
+  exclusionAreaM2?: number;
+  exclusionZones?: LatLng[][];
+  computedShadingLoss?: number | null;
+  source?: 'manual' | 'osm' | 'photo' | 'none';
+  isExplicitlyFlat?: boolean;
 }
 
 export interface PanelConfig {
@@ -20,6 +31,7 @@ export interface PanelConfig {
   rowAlignment: 'roof_perimeter' | 'geographical_south';
   panelCount: number;
   systemKwp: number;
+  shading?: 'none' | 'partial' | 'heavy' | 'auto';
 }
 
 export interface MonthlyValue {

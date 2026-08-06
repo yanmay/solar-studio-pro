@@ -3,18 +3,12 @@ import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import {
   AreaChart,
-  AreaSeries,
   Area,
-  Gradient,
-  GradientStop,
-  LinearXAxis,
-  LinearXAxisTickSeries,
-  LinearXAxisTickLabel,
-  LinearYAxis,
-  LinearYAxisTickSeries,
-  GridlineSeries,
-  Gridline,
-} from "reaviz";
+  XAxis,
+  YAxis,
+  Grid,
+  ChartTooltip,
+} from "@/components/charts";
 
 const Count = ({
   className,
@@ -114,61 +108,19 @@ export const Component = ({
         </select>
       </div>
 
-      <div className="px-4 flex justify-center">
+      <div className="px-4 flex justify-center w-full h-[200px]">
         <AreaChart
+          data={areaSingleSeriesSimpleData}
+          xDataKey="key"
           height={200}
           width={540}
-          data={areaSingleSeriesSimpleData}
-          series={
-            <AreaSeries
-              area={
-                <Area
-                  gradient={
-                    <Gradient
-                      stops={[
-                        <GradientStop key="1" stopOpacity={0} />,
-                        <GradientStop key="2" offset="100%" stopOpacity={isDarkMode ? 0.4 : 0.2} />, 
-                      ]}
-                    />
-                  }
-                />
-              }
-              colorScheme={chartColorScheme}
-            />
-          }
-          xAxis={
-            <LinearXAxis
-              type="time"
-              tickSeries={
-                <LinearXAxisTickSeries
-                  label={
-                    <LinearXAxisTickLabel
-                      format={(v: Date) =>
-                        new Date(v).toLocaleDateString("en-US", {
-                          month: "numeric",
-                          day: "numeric",
-                        })
-                      }
-                      fill={axisTickColor}
-                    />
-                  }
-                  tickSize={30}
-                />
-              }
-            />
-          }
-          yAxis={
-            <LinearYAxis
-              axisLine={null}
-              tickSeries={
-                <LinearYAxisTickSeries line={null} label={null} tickSize={20} />
-              }
-            />
-          }
-          gridlines={
-            <GridlineSeries line={<Gridline strokeColor={gridlineColor} />} />
-          }
-        />
+        >
+          <Grid horizontal />
+          <XAxis />
+          <YAxis />
+          <Area dataKey="data" stroke={chartColorScheme} fill={chartColorScheme} fillOpacity={0.35} />
+          <ChartTooltip dataKeys={["data"]} colors={[chartColorScheme]} />
+        </AreaChart>
       </div>
 
       <div className="flex w-full pl-8 pr-8 justify-between pb-2 pt-8">

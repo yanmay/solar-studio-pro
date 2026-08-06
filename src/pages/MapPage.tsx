@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { polygon as turfPolygon } from "@turf/helpers";
@@ -34,8 +36,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import ThemeToggle from "@/components/ThemeToggle";
-import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@/hooks/use-toast";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -65,19 +65,23 @@ import { useScanStore } from "@/hooks/use-scan-store";
 import { useGeocode } from "@/hooks/use-geocode";
 import { runFullCalculation, type SolarAnalysis, SolarCalcError } from "@/lib/solar-calc";
 import { computePanelLayout, type PanelRect } from "@/lib/panel-layout";
-import Globe3D, { type Globe3DHandle } from "@/components/Globe3D";
+import { Map, Globe as GlobeIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { encodeScanToUrl } from "@/lib/scan-url";
 import { trackPolygonCompleted, trackConfigStepCompleted } from "@/lib/analytics";
 import { getDiscomTariff } from "@/lib/india-grid";
 import { detectDiscom, type DiscomInfo } from "@/lib/discom-rates";
-import { detectBuildingAt, nearbyBuildings } from "@/lib/osm-buildings";
+import { detectBuildingAt, nearbyBuildings, nearbyOsmBuildings } from "@/lib/osm-buildings";
+import { calcHorizonShadingLoss } from "@/lib/horizon-shading";
 import { recommendBattery, type BackupMode } from "@/lib/battery-calc";
 import { calcTiltAzimuthFactor, type Azimuth, AZIMUTH_LABELS } from "@/lib/tilt-azimuth";
 import PhotoRoofEstimator from "@/components/PhotoRoofEstimator";
 import { ProgressiveFluxLoader } from "@/components/ui/progressive-flux-loader";
 import { useVoiceSearch } from "@/hooks/use-voice-search";
+import { isWebGLSupported } from "@/lib/webgl-detector";
+import GlobeView from "@/components/GlobeView";
+import GlobeErrorBoundary from "@/components/GlobeErrorBoundary";
 import {
   ELECTRICITY_RATE_INR,
   MIN_ELECTRICITY_RATE,
@@ -88,7 +92,7 @@ import {
 } from "@/lib/solar-defaults";
 
 type LatLng = { lat: number; lng: number };
-type DrawState = "IDLE" | "DRAWING" | "COMPLETE";
+type DrawState = "IDLE" | "DRAWING" | "COMPLETE" | "EXCLUSION_IDLE" | "EXCLUSION_DRAWING";
 
 const CLOSE_SNAP_PX = 20;
 const GLOBE_DISMISS_DISTANCE = 250;
@@ -123,6 +127,25 @@ const firstVertexIcon = L.divIcon({
     <div style="position:relative;width:18px;height:18px;">
       <div style="position:absolute;inset:0;background:#22C55E;border-radius:50%;opacity:0.3;animation:startPulse 1.5s ease-in-out infinite;"></div>
       <div style="position:absolute;inset:3px;background:#22C55E;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 6px rgba(0,0,0,0.3);"></div>
+    </div>
+  `,
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
+});
+
+const exclusionVertexIcon = L.divIcon({
+  className: "",
+  html: `<div style="width:10px;height:10px;background:#fff;border:2px solid #EF4444;border-radius:2px;box-shadow:0 1px 4px rgba(0,0,0,0.3);"></div>`,
+  iconSize: [10, 10],
+  iconAnchor: [5, 5],
+});
+
+const exclusionFirstVertexIcon = L.divIcon({
+  className: "",
+  html: `
+    <div style="position:relative;width:18px;height:18px;">
+      <div style="position:absolute;inset:0;background:#EF4444;border-radius:50%;opacity:0.3;animation:startPulse 1.5s ease-in-out infinite;"></div>
+      <div style="position:absolute;inset:3px;background:#EF4444;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 6px rgba(0,0,0,0.3);"></div>
     </div>
   `,
   iconSize: [18, 18],
@@ -228,6 +251,40 @@ async function fetchSuggestions(
   return fetchNominatimSuggestions(query, signal);
 }
 
+// Fallback forward geocoder — queries Nominatim directly, biased to the
+// current map bounds when available. Used when the primary geocoder fails.
+async function geocodeAddress(
+  address: string,
+  bounds?: L.LatLngBounds | null
+): Promise<{ lat: number; lng: number; label: string }> {
+  let url = `/api/geocode?q=${encodeURIComponent(address.trim())}`;
+  if (bounds) {
+    const viewbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
+    url += `&viewbox=${viewbox}`;
+  }
+  const res = await fetch(url, {
+    headers: { "User-Agent": "SunPowerLinkSolarApp/1.0" },
+  });
+  if (!res.ok) throw new Error("Geocoding service unavailable.");
+  let data = await res.json();
+  if (data && !Array.isArray(data)) {
+    data = [{
+      lat: String(data.lat),
+      lon: String(data.lng),
+      display_name: data.formatted_address
+    }];
+  }
+  if (!data || data.length === 0) {
+    throw new Error("Location not found. Try adding details like city or state name.");
+  }
+  const first = data[0];
+  return {
+    lat: parseFloat(first.lat),
+    lng: parseFloat(first.lon),
+    label: first.display_name,
+  };
+}
+
 async function reverseGeocode(lat: number, lng: number): Promise<string> {
   try {
     const nomUrl = `/api/geocode?lat=${lat.toFixed(6)}&lng=${lng.toFixed(6)}`;
@@ -262,6 +319,7 @@ const MapPage = () => {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const { t, i18n } = useTranslation();
+  const { user, signOut } = useAuth();
   
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -352,6 +410,7 @@ const MapPage = () => {
 
   // ── SCN-014: Distinct colors for multi-roof polygons ───
   const [polygons, setPolygons] = useState<{ id: string; vertices: LatLng[]; area: number; polygonLayer: L.Polygon }[]>([]);
+  const [exclusionZones, setExclusionZones] = useState<{ id: string; vertices: LatLng[]; area: number; polygonLayer: L.Polygon }[]>([]);
   const [activeStep, setActiveStep] = useState<number>(1);
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [detectedState, setDetectedState] = useState<string | null>(null);
@@ -371,7 +430,10 @@ const MapPage = () => {
   const [walkways, setWalkways] = useState(false);
   const [setbackM, setSetbackM] = useState(0.5);
   const [panelType, setPanelType] = useState<"compact" | "premium">("compact");
-  const [shading, setShading] = useState<"none" | "partial" | "heavy">("none");
+  const [shading, setShading] = useState<"none" | "partial" | "heavy" | "auto">("auto");
+  const [footprintSource, setFootprintSource] = useState<'manual' | 'osm' | 'photo' | 'none'>('none');
+  const [pitchDegrees, setPitchDegrees] = useState<number>(0);
+  const [isExplicitlyFlat, setIsExplicitlyFlat] = useState<boolean>(false);
 
   // ── Voice search ────────────────────────────────────────
   const voice = useVoiceSearch();
@@ -382,9 +444,84 @@ const MapPage = () => {
   }, [voice.transcript]);
 
   // ── Globe state ─────────────────────────────────────────
-  const [globeVisible, setGlobeVisible] = useState(true);
-  const [globeFadingOut, setGlobeFadingOut] = useState(false);
-  const globeRef = useRef<Globe3DHandle>(null);
+  const { viewMode, setViewMode } = useScanStore();
+  const scanInput = useScanStore((s) => s.scanInput);
+  const [selectedCoords, setSelectedCoords] = useState<{ lat: number; lng: number } | null>(
+    scanInput ? { lat: scanInput.lat, lng: scanInput.lng } : null
+  );
+
+  const [zoom, setZoom] = useState(() => {
+    if (scanInput) return 19;
+    if (!isWebGLSupported()) return 19;
+    return 2.5;
+  });
+
+  const [dimensions, setDimensions] = useState({
+    width: typeof window !== "undefined" ? window.innerWidth : 1000,
+    height: typeof window !== "undefined" ? window.innerHeight : 800,
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setDimensions({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const handleWebGLFailed = useCallback(() => {
+    setZoom(19);
+  }, []);
+
+  const handleGlobeError = useCallback(() => {
+    setZoom(19);
+  }, []);
+
+  // Sync scan store viewMode with our zoom state
+  useEffect(() => {
+    if (zoom <= 3) {
+      setViewMode("3d");
+    } else {
+      setViewMode("2d");
+    }
+  }, [zoom, setViewMode]);
+
+  useEffect(() => {
+    if (!mapRef.current || !selectedCoords) return;
+
+    if (zoom > 3) {
+      const currentCenter = mapRef.current.getCenter();
+      const dist = currentCenter.distanceTo(L.latLng(selectedCoords.lat, selectedCoords.lng));
+      if (dist > 10) {
+        const targetZoom = mapRef.current.getZoom() < 10 ? 19 : mapRef.current.getZoom();
+        mapRef.current.setView([selectedCoords.lat, selectedCoords.lng], targetZoom);
+      }
+    } else {
+      mapRef.current.setView([selectedCoords.lat, selectedCoords.lng], mapRef.current.getZoom());
+    }
+  }, [selectedCoords]);
+
+  // Synchronize Leaflet zoom and interaction handlers based on Globe zoom
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (zoom <= 3) {
+      if (map.getZoom() !== Math.round(zoom)) {
+        map.setZoom(Math.round(zoom));
+      }
+      map.dragging.disable();
+      map.scrollWheelZoom.disable();
+      map.doubleClickZoom.disable();
+    } else {
+      map.dragging.enable();
+      map.scrollWheelZoom.enable();
+      map.doubleClickZoom.enable();
+    }
+  }, [zoom]);
 
   const isMobile = useIsMobile();
   const [mobileWarningDismissed, setMobileWarningDismissed] = useState(false);
@@ -462,8 +599,8 @@ const MapPage = () => {
       zoom: 5,
       zoomControl: false,
       attributionControl: true,
-      scrollWheelZoom: false,
-      dragging: false,
+      scrollWheelZoom: true,
+      dragging: true,
       doubleClickZoom: false,
     });
 
@@ -489,18 +626,22 @@ const MapPage = () => {
     // ── Click handler ──────────────────────────────────────
     const handleMapClick = (e: L.LeafletMouseEvent) => {
       const state = drawStateRef.current;
-      if (state === "COMPLETE") return;
+      if (state === "COMPLETE" || state === "EXCLUSION_IDLE") return;
       if (dblClickGuardRef.current) { dblClickGuardRef.current = false; return; }
 
       const clickLatLng: LatLng = { lat: e.latlng.lat, lng: e.latlng.lng };
 
       // AUTO-CLOSE near first vertex
-      if (state === "DRAWING" && verticesRef.current.length >= 3) {
+      if ((state === "DRAWING" || state === "EXCLUSION_DRAWING") && verticesRef.current.length >= 3) {
         const first = verticesRef.current[0];
         const firstPx = map.latLngToContainerPoint(L.latLng(first.lat, first.lng));
         const clickPx = map.latLngToContainerPoint(e.latlng);
         if (firstPx.distanceTo(clickPx) <= CLOSE_SNAP_PX) {
-          finishPolygon(map);
+          if (state === "EXCLUSION_DRAWING") {
+            finishExclusionPolygon(map);
+          } else {
+            finishPolygon(map);
+          }
           return;
         }
       }
@@ -509,14 +650,19 @@ const MapPage = () => {
       setVertexCount(verticesRef.current.length);
 
       const isFirst = verticesRef.current.length === 1;
-      const marker = L.marker([clickLatLng.lat, clickLatLng.lng], { icon: isFirst ? firstVertexIcon : vertexIcon }).addTo(map);
+      const markerIcon = state === "EXCLUSION_DRAWING"
+        ? (isFirst ? exclusionFirstVertexIcon : exclusionVertexIcon)
+        : (isFirst ? firstVertexIcon : vertexIcon);
+
+      const marker = L.marker([clickLatLng.lat, clickLatLng.lng], { icon: markerIcon }).addTo(map);
       markersRef.current.push(marker);
 
       const coords = verticesRef.current.map((v) => [v.lat, v.lng] as [number, number]);
       if (polylineRef.current) {
         polylineRef.current.setLatLngs(coords);
       } else {
-        polylineRef.current = L.polyline(coords, { color: "#3B82F6", weight: 2 }).addTo(map);
+        const color = state === "EXCLUSION_DRAWING" ? "#EF4444" : "#3B82F6";
+        polylineRef.current = L.polyline(coords, { color, weight: 2 }).addTo(map);
       }
 
       if (drawStateRef.current === "IDLE") setDrawState("DRAWING");
@@ -526,7 +672,8 @@ const MapPage = () => {
 
     // ── Mousemove: rubber-band + closing preview ───────────
     map.on("mousemove", (e: L.LeafletMouseEvent) => {
-      if (drawStateRef.current !== "DRAWING" || verticesRef.current.length === 0) {
+      const state = drawStateRef.current;
+      if ((state !== "DRAWING" && state !== "EXCLUSION_DRAWING") || verticesRef.current.length === 0) {
         previewLineRef.current?.remove(); previewLineRef.current = null;
         closingLineRef.current?.remove(); closingLineRef.current = null;
         return;
@@ -536,13 +683,19 @@ const MapPage = () => {
       const previewCoords: [number, number][] = [[lastV.lat, lastV.lng], [e.latlng.lat, e.latlng.lng]];
 
       if (previewLineRef.current) previewLineRef.current.setLatLngs(previewCoords);
-      else previewLineRef.current = L.polyline(previewCoords, { color: "#3B82F6", weight: 2, dashArray: "6, 8", opacity: 0.5 }).addTo(map);
+      else {
+        const color = state === "EXCLUSION_DRAWING" ? "#EF4444" : "#3B82F6";
+        previewLineRef.current = L.polyline(previewCoords, { color, weight: 2, dashArray: "6, 8", opacity: 0.5 }).addTo(map);
+      }
 
       if (verticesRef.current.length >= 3) {
         const firstV = verticesRef.current[0];
         const closingCoords: [number, number][] = [[e.latlng.lat, e.latlng.lng], [firstV.lat, firstV.lng]];
         if (closingLineRef.current) closingLineRef.current.setLatLngs(closingCoords);
-        else closingLineRef.current = L.polyline(closingCoords, { color: "#22C55E", weight: 2, dashArray: "4, 6", opacity: 0.4 }).addTo(map);
+        else {
+          const color = state === "EXCLUSION_DRAWING" ? "#EF4444" : "#22C55E";
+          closingLineRef.current = L.polyline(closingCoords, { color, weight: 2, dashArray: "4, 6", opacity: 0.4 }).addTo(map);
+        }
 
         const firstPx = map.latLngToContainerPoint(L.latLng(firstV.lat, firstV.lng));
         const cursorPx = map.latLngToContainerPoint(e.latlng);
@@ -558,47 +711,40 @@ const MapPage = () => {
       }
     });
 
+    // Sync Leaflet events back to React state when interactive
+    map.on("zoomend", () => {
+      const currentZoom = map.getZoom();
+      if (currentZoom > 3) {
+        setZoom(currentZoom);
+      }
+    });
+
+    map.on("moveend", () => {
+      const center = map.getCenter();
+      const currentZoom = map.getZoom();
+      if (currentZoom > 3) {
+        setSelectedCoords({ lat: center.lat, lng: center.lng });
+      }
+    });
+
     mapRef.current = map;
     setMapReady(true);
   }, []);
 
-  // ── Globe distance handler (binary fade thresholds) ──────
-  const handleGlobeDistance = useCallback((dist: number) => {
-    if (dist <= GLOBE_DISMISS_DISTANCE) {
-      setGlobeFadingOut(true);
-      setTimeout(() => {
-        setGlobeVisible(false);
-        setGlobeFadingOut(false);
-        if (mapRef.current) {
-          mapRef.current.scrollWheelZoom.enable();
-          mapRef.current.dragging.enable();
-        }
-      }, 600);
-    }
-  }, []);
-
   // ── Search & Pan ─────────────────────────────────────────
   const flyToLocation = useCallback((lat: number, lng: number, label: string) => {
-    const map = mapRef.current;
-    if (!map) return;
-
     setHasSearched(true);
     setSidebarExpanded(true);
     setLocationLabel(label);
+    setSelectedCoords({ lat, lng });
+    setZoom(19);
+    setViewMode("2d");
 
-    if (globeVisible) {
-      setGlobeFadingOut(true);
-      setTimeout(() => {
-        setGlobeVisible(false);
-        setGlobeFadingOut(false);
-        map.scrollWheelZoom.enable();
-        map.dragging.enable();
-        map.setView([lat, lng], 19);
-      }, 600);
-    } else {
+    const map = mapRef.current;
+    if (map) {
       map.setView([lat, lng], 19);
     }
-  }, [globeVisible]);
+  }, [setViewMode]);
 
   // SCN-016: Pre-fill tariff when entering Step 3
   useEffect(() => {
@@ -835,9 +981,15 @@ const MapPage = () => {
     // Clear completed polygons
     polygons.forEach((p) => p.polygonLayer.remove());
     setPolygons([]);
+    
+    // Clear exclusion zones
+    exclusionZones.forEach((ez) => ez.polygonLayer.remove());
+    setExclusionZones([]);
+
     setArea(null);
     setAreaWarning(null);
     setDrawState("IDLE");
+    setFootprintSource("none");
 
     if (panelLayerRef.current) {
       panelLayerRef.current.remove();
@@ -845,7 +997,7 @@ const MapPage = () => {
     }
     setPanelCount(0);
     setShadingNote(null);
-  }, [polygons]);
+  }, [polygons, exclusionZones]);
 
   const removePolygon = (id: string) => {
     setPolygons((prev) => {
@@ -892,6 +1044,7 @@ const MapPage = () => {
       const next = [...prev, newPoly];
       const totalArea = next.reduce((sum, p) => sum + p.area, 0);
       setArea(totalArea);
+      setFootprintSource((src) => (src === "none" ? "manual" : src));
       if (totalArea < MIN_AREA_M2) {
         setAreaWarning(`Total area is only ${totalArea} m². Minimum is ${MIN_AREA_M2} m² for accurate analysis.`);
       } else {
@@ -907,23 +1060,129 @@ const MapPage = () => {
     setDrawState("IDLE");
   }, []);
 
+  const finishExclusionPolygon = useCallback((map?: L.Map) => {
+    const m = map || mapRef.current;
+    if (!m || verticesRef.current.length < 3) return;
+
+    polylineRef.current?.remove(); polylineRef.current = null;
+    previewLineRef.current?.remove(); previewLineRef.current = null;
+    closingLineRef.current?.remove(); closingLineRef.current = null;
+    m.getContainer().style.cursor = "";
+
+    const coords = verticesRef.current.map((v) => [v.lat, v.lng] as [number, number]);
+    const calculatedArea = calcAreaM2(verticesRef.current);
+    const id = `exclusion_${Date.now()}`;
+
+    setExclusionZones((prev) => {
+      const polygonLayer = L.polygon(coords, {
+        color: "#EF4444", fillColor: "#EF4444", fillOpacity: 0.4, weight: 2.5,
+      }).addTo(m);
+
+      polygonLayer.on("click", (e) => {
+        L.popup()
+          .setLatLng(e.latlng)
+          .setContent(() => {
+            const btn = document.createElement("button");
+            btn.innerHTML = "❌ Remove Obstacle";
+            btn.style.cssText = "padding: 6px 12px; background: #ef4444; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 11px;";
+            btn.onclick = () => {
+              polygonLayer.remove();
+              setExclusionZones((old) => old.filter((ez) => ez.id !== id));
+              m.closePopup();
+            };
+            return btn;
+          })
+          .openOn(m);
+      });
+
+      const newEx = {
+        id,
+        vertices: [...verticesRef.current],
+        area: calculatedArea,
+        polygonLayer,
+      };
+      return [...prev, newEx];
+    });
+
+    markersRef.current.forEach((marker) => marker.remove());
+    markersRef.current = [];
+    verticesRef.current = [];
+    setVertexCount(0);
+    setDrawState("EXCLUSION_IDLE");
+  }, []);
+
   const handleDoneDrawing = () => {
     if (polygons.length === 0) return;
+    setDrawState("EXCLUSION_IDLE");
+  };
+
+  const handleDoneExclusion = () => {
     const totalArea = polygons.reduce((sum, p) => sum + p.area, 0);
+    const totalExclusionArea = exclusionZones.reduce((sum, p) => sum + p.area, 0);
     const centroid = calcCentroid(polygons.flatMap((p) => p.vertices));
 
     reverseGeocode(centroid.lat, centroid.lng).then((label) => {
       setLocationLabel(label);
-      useScanStore.getState().setScanInput({
-        address: label,
-        lat: centroid.lat,
-        lng: centroid.lng,
-        roofPolygon: polygons.map((p) => ({
-          type: "Polygon" as const,
-          coordinates: [p.vertices.map((v) => [v.lng, v.lat] as [number, number])],
-        })),
-        roofAreaM2: totalArea,
-      });
+      
+      // Auto-detect shading from nearby buildings when confirming manual/other drawings
+      nearbyOsmBuildings(centroid.lat, centroid.lng, 50)
+        .then((others) => {
+          const AZIMUTH_DEGREES: Record<Azimuth, number> = {
+            N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315
+          };
+          const roofAzimuthDeg = AZIMUTH_DEGREES[azimuth] ?? 180;
+          const loss = calcHorizonShadingLoss(centroid.lat, centroid.lng, others, roofAzimuthDeg);
+          
+          useScanStore.getState().setComputedShadingLoss(loss);
+          useScanStore.getState().setNearbyStructuresCount(others.length);
+          
+          const pct = (loss * 100).toFixed(1);
+          if (others.length === 0) {
+            setShadingNote("Open exposure — no nearby buildings detected.");
+          } else if (loss > 0) {
+            setShadingNote(`Computed Shading Loss: ${pct}% based on ${others.length} nearby structures.`);
+          } else {
+            setShadingNote(`Minimal shading expected (0.0% calculated) from ${others.length} nearby structures.`);
+          }
+
+          useScanStore.getState().setScanInput({
+            address: label,
+            lat: centroid.lat,
+            lng: centroid.lng,
+            roofPolygon: polygons.map((p) => ({
+              type: "Polygon" as const,
+              coordinates: [p.vertices.map((v) => [v.lng, v.lat] as [number, number])],
+            })),
+            roofAreaM2: totalArea,
+            exclusionAreaM2: totalExclusionArea,
+            exclusionZones: exclusionZones.map((ez) => ez.vertices),
+            computedShadingLoss: loss,
+            nearbyStructuresCount: others.length,
+            source: footprintSource,
+            isExplicitlyFlat,
+          });
+        })
+        .catch(() => {
+          useScanStore.getState().setScanInput({
+            address: label,
+            lat: centroid.lat,
+            lng: centroid.lng,
+            roofPolygon: polygons.map((p) => ({
+              type: "Polygon" as const,
+              coordinates: [p.vertices.map((v) => [v.lng, v.lat] as [number, number])],
+            })),
+            roofAreaM2: totalArea,
+            exclusionAreaM2: totalExclusionArea,
+            exclusionZones: exclusionZones.map((ez) => ez.vertices),
+            computedShadingLoss: useScanStore.getState().computedShadingLoss,
+            nearbyStructuresCount: useScanStore.getState().nearbyStructuresCount,
+            source: footprintSource,
+            isExplicitlyFlat,
+          });
+        });
+
+      useScanStore.getState().setExclusionZones(exclusionZones.map((ez) => ez.vertices));
+      useScanStore.getState().setExclusionAreaM2(totalExclusionArea);
     });
 
     setDrawState("COMPLETE");
@@ -967,6 +1226,7 @@ const MapPage = () => {
     const map = mapRef.current;
     if (!map) return;
     clearDrawing();
+    setFootprintSource("photo");
     const center = map.getCenter();
     const side = Math.sqrt(areaM2);
     const halfLat = (side / 2) / 110540;
@@ -1005,6 +1265,7 @@ const MapPage = () => {
         return;
       }
       clearDrawing();
+      setFootprintSource("osm");
       const ring = result.polygon[0].lat === result.polygon[result.polygon.length - 1].lat
                  && result.polygon[0].lng === result.polygon[result.polygon.length - 1].lng
                  ? result.polygon.slice(0, -1)
@@ -1017,19 +1278,33 @@ const MapPage = () => {
       });
       finishPolygon(map);
       
-      nearbyBuildings(center.lat, center.lng, 50)
+      nearbyOsmBuildings(center.lat, center.lng, 50)
         .then((others) => {
+          const AZIMUTH_DEGREES: Record<Azimuth, number> = {
+            N: 0,
+            NE: 45,
+            E: 90,
+            SE: 135,
+            S: 180,
+            SW: 225,
+            W: 270,
+            NW: 315
+          };
+          const roofAzimuthDeg = AZIMUTH_DEGREES[azimuth] ?? 180;
+          const loss = calcHorizonShadingLoss(center.lat, center.lng, others, roofAzimuthDeg);
+          useScanStore.getState().setComputedShadingLoss(loss);
+          useScanStore.getState().setNearbyStructuresCount(others.length);
+
           if (others.length === 0) {
             setShadingNote("Open exposure — no nearby buildings detected.");
             return;
           }
-          const tallNeighbors = others.filter((b) => (b.levels ?? 1) >= 3 && b.distanceM < 25);
-          if (tallNeighbors.length >= 2) {
-            setShadingNote(`⚠️ ${tallNeighbors.length} tall buildings within 25 m — expect 10-25% shading loss in mornings/evenings.`);
-          } else if (tallNeighbors.length === 1) {
-            setShadingNote(`Possible shading from a tall neighbor (${tallNeighbors[0].levels}+ floors at ${Math.round(tallNeighbors[0].distanceM)} m).`);
+          
+          const pct = (loss * 100).toFixed(1);
+          if (loss > 0) {
+            setShadingNote(`Computed Shading Loss: ${pct}% based on ${others.length} nearby structures.`);
           } else {
-            setShadingNote(`${others.length} low-rise neighbors — minimal shading expected.`);
+            setShadingNote(`Minimal shading expected (0.0% calculated) from ${others.length} nearby structures.`);
           }
         })
         .catch(() => {});
@@ -1125,6 +1400,8 @@ const MapPage = () => {
         ? Math.round((panelCount * panelWattage / 1000) * 100) / 100 
         : undefined;
 
+      const totalExclusionArea = exclusionZones.reduce((sum, p) => sum + p.area, 0);
+
       const analysis: SolarAnalysis = runFullCalculation(totalArea, correctedPsh, {
         electricityRate,
         irradianceSource: irradiance.source,
@@ -1137,6 +1414,12 @@ const MapPage = () => {
         orientation,
         walkways,
         setbackM,
+        pitchDegrees,
+        exclusionAreaM2: totalExclusionArea,
+        shading,
+        computedShadingLoss: useScanStore.getState().computedShadingLoss,
+        ws10m: irradiance.ws10m,
+        t2m: irradiance.t2m,
       });
 
       // Battery BESS recommendation sized against daily generation output
@@ -1162,6 +1445,8 @@ const MapPage = () => {
         },
         discom: discomInfo ? { name: discomInfo.discom, autoDetectedRate: discomInfo.defaultTariff } : undefined,
         battery,
+        source: footprintSource,
+        isExplicitlyFlat,
       };
 
       const panelWattageValue = (panelType === "premium" ? 550 : 450) as 450 | 550;
@@ -1175,6 +1460,13 @@ const MapPage = () => {
           coordinates: [p.vertices.map((v) => [v.lng, v.lat] as [number, number])],
         })),
         roofAreaM2: totalArea,
+        pitchDegrees,
+        exclusionAreaM2: totalExclusionArea,
+        exclusionZones: exclusionZones.map((ez) => ez.vertices),
+        computedShadingLoss: useScanStore.getState().computedShadingLoss,
+        nearbyStructuresCount: useScanStore.getState().nearbyStructuresCount,
+        source: footprintSource,
+        isExplicitlyFlat,
       };
 
       const panelConfig = {
@@ -1191,9 +1483,25 @@ const MapPage = () => {
 
       const tariff = { tariffPerKwh: electricityRate };
 
+      // Calculate shading loss to store based on selection
+      let shadingLossVal = 0;
+      let shadingSourceVal: 'auto' | 'manual' = 'auto';
+      if (shading === 'auto') {
+        shadingLossVal = useScanStore.getState().computedShadingLoss ?? 0;
+        shadingSourceVal = 'auto';
+      } else {
+        shadingSourceVal = 'manual';
+        if (shading === 'none') shadingLossVal = 0.0;
+        else if (shading === 'partial') shadingLossVal = 0.15;
+        else if (shading === 'heavy') shadingLossVal = 0.30;
+      }
+      useScanStore.getState().setShadingSource(shadingSourceVal);
+      useScanStore.getState().setShadingLoss(shadingLossVal);
+
       useScanStore.getState().setScanInput(scanInput);
       useScanStore.getState().setPanelConfig(panelConfig);
       useScanStore.getState().setTariff(tariff);
+      useScanStore.getState().setPitchDegrees(pitchDegrees);
       useScanStore.getState().setFullAnalysis(fullResult);
 
       // Hydrate sessionStorage for remote i18n & AR pages
@@ -1249,24 +1557,61 @@ const MapPage = () => {
 
         {/* Map layout wrapper */}
         <div className="relative flex-1 w-full h-full overflow-hidden">
+
+
           
-          {/* ── Floating Controls Bar (Home, Theme, i18n) ─────────────────── */}
-          <div className="absolute top-6 left-4 z-[1000] flex flex-col gap-2">
+          {/* ── Floating Controls Bar (Home & Logo Branding) ─────────────────── */}
+          <div className="absolute top-6 left-4 z-[1000] flex items-center gap-2">
             <button
               onClick={() => navigate("/")}
-              className="flex items-center justify-center w-10 h-10 rounded-xl bg-card/65 backdrop-blur-2xl border border-border/80 shadow-[0_4px_30px_rgba(0,0,0,0.2)] hover:border-primary/80 hover:text-primary hover:shadow-[0_0_15px_rgba(255,107,0,0.3)] hover:scale-105 active:scale-95 transition-all cursor-pointer text-muted-foreground group"
+              className="flex items-center justify-center w-10 h-10 rounded-xl bg-black/80 backdrop-blur-2xl border border-white/10 shadow-lg hover:border-[#FF6600]/80 hover:scale-105 active:scale-95 transition-all cursor-pointer text-white"
               aria-label="Back to Home"
             >
-              <Home className="w-4.5 h-4.5 group-hover:scale-110 transition-transform duration-300" />
+              <img src="/logo.png" alt="SUNPOWER LINK Logo" className="w-6 h-6 object-contain" />
             </button>
-            <div className="flex flex-col gap-2 scale-90 sm:scale-100 origin-top-left">
-              <ThemeToggle />
+            <div className="hidden sm:flex items-center h-10 px-3.5 rounded-xl bg-black/80 backdrop-blur-2xl border border-white/10 shadow-lg text-sm font-bold text-white">
+              SUNPOWER <span className="font-serif italic font-light text-[#FF6600] ml-1">LINK</span>
+            </div>
+            <div className="flex flex-col gap-2 scale-90 sm:scale-100">
               <LanguageSwitcher align="left" />
             </div>
           </div>
 
+          {/* ── Floating Auth Controls ─────────────────── */}
+          <div className="absolute top-6 right-4 z-[1000] flex items-center gap-2">
+            {user ? (
+              <div className="flex items-center gap-2 bg-card/65 backdrop-blur-2xl border border-border/80 p-1.5 rounded-2xl shadow-[0_4px_30px_rgba(0,0,0,0.2)]">
+                <button
+                  onClick={() => navigate("/my-scans")}
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold text-neutral-300 hover:text-white bg-transparent border-none cursor-pointer transition-colors"
+                >
+                  My Scans
+                </button>
+                <button
+                  onClick={() => navigate("/settings")}
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold text-neutral-300 hover:text-white bg-transparent border-none cursor-pointer transition-colors"
+                >
+                  Settings
+                </button>
+                <button
+                  onClick={signOut}
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold text-neutral-400 hover:text-red-400 bg-transparent border-none cursor-pointer transition-colors"
+                >
+                  Sign Out
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => navigate("/auth/signin")}
+                className="flex items-center justify-center h-10 px-4 rounded-xl bg-card/65 backdrop-blur-2xl border border-border/80 shadow-[0_4px_30px_rgba(0,0,0,0.2)] hover:border-primary/80 hover:text-primary text-muted-foreground font-semibold text-xs active:scale-95 transition-all cursor-pointer"
+              >
+                Sign In
+              </button>
+            )}
+          </div>
+
           {/* ── Breadcrumbs ────────────────────────────────────────── */}
-          <div className="absolute top-6 left-18 z-[1000] hidden lg:block bg-card/65 backdrop-blur-2xl border border-border/80 px-4 py-2.5 rounded-2xl shadow-[0_4px_30px_rgba(0,0,0,0.2)] hover:border-primary/40 hover:shadow-[0_0_15px_rgba(255,107,0,0.15)] transition-all duration-300">
+          <div className="absolute top-6 left-16 z-[1000] hidden lg:block bg-card/65 backdrop-blur-2xl border border-border/80 px-4 py-2.5 rounded-2xl shadow-[0_4px_30px_rgba(0,0,0,0.2)] hover:border-primary/40 hover:shadow-[0_0_15px_rgba(255,107,0,0.15)] transition-all duration-300">
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem>
@@ -1288,37 +1633,22 @@ const MapPage = () => {
             aria-label="Interactive satellite map"
           />
 
-          {/* ── Three.js 3D Globe overlay ── */}
-          {(globeVisible || globeFadingOut) && (
-            <div
-              className="absolute inset-0 z-[5]"
-              style={{
-                opacity: globeFadingOut ? 0 : 1,
-                transition: "opacity 0.6s ease-in-out",
-                background: "#000",
-              }}
-            >
-              <Globe3D
-                ref={globeRef}
-                className="w-full h-full"
-                onDistanceChange={handleGlobeDistance}
-                stopRotation={hasSearched}
-              />
-              {!globeFadingOut && (
-                <div
-                  className="absolute bottom-[6%] left-1/2 -translate-x-1/2 flex items-center gap-2 px-5 py-2.5 rounded-full pointer-events-none"
-                  style={{
-                    background: "rgba(255,255,255,0.06)",
-                    backdropFilter: "blur(8px)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                  }}
-                >
-                  <Search className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-xs text-white/60 font-medium tracking-wide">Search a location or scroll to zoom in</span>
-                </div>
-              )}
-            </div>
-          )}
+          {/* ── 3D Globe View Overlay ── */}
+          <GlobeErrorBoundary
+            fallback={null}
+            onError={handleGlobeError}
+          >
+            <GlobeView
+              selectedCoords={selectedCoords}
+              onSelectCoords={setSelectedCoords}
+              locationLabel={locationLabel}
+              width={dimensions.width}
+              height={dimensions.height}
+              zoom={zoom}
+              setZoom={setZoom}
+              onWebGLFailed={handleWebGLFailed}
+            />
+          </GlobeErrorBoundary>
 
           {/* ── Search Bar with Autocomplete suggestions ── */}
           <div
@@ -1326,13 +1656,13 @@ const MapPage = () => {
             className="absolute top-[max(1rem,env(safe-area-inset-top))] sm:top-6 left-14 sm:left-1/2 right-3 sm:right-auto sm:-translate-x-1/2 sm:w-[560px] z-[1000]"
           >
             <div
-              className={`flex items-center bg-card/65 backdrop-blur-2xl border border-border/80 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.15)] overflow-hidden transition-all duration-300 ${
-                guideStep === 1 ? "ring-2 ring-primary ring-offset-2 ring-offset-transparent" : ""
-              } ${searchError ? "ring-2 ring-destructive" : ""} ${showSuggestions && suggestions.length > 0 ? "rounded-b-none" : ""}`}
+              className={`flex items-center overflow-hidden transition-all duration-300 rounded-2xl border border-white/20 bg-black/50 backdrop-blur shadow-[0_8px_32px_rgba(0,0,0,0.15)] ${
+                searchError ? "ring-2 ring-destructive" : ""
+              } ${showSuggestions && suggestions.length > 0 ? "rounded-b-none" : ""}`}
               role="search"
               aria-label="Location search"
             >
-              <div className="pl-4 text-muted-foreground" aria-hidden="true">
+              <div className="pl-4 text-white/50" aria-hidden="true">
                 <Search className="w-4 h-4" />
               </div>
               <input
@@ -1343,7 +1673,7 @@ const MapPage = () => {
                 onKeyDown={handleSearchKeyDown}
                 onFocus={() => { if (suggestions.length > 0 && query.length >= 2) setShowSuggestions(true); }}
                 placeholder={t("map.searchPlaceholder", "Search your rooftop address...")}
-                className="flex-1 bg-transparent border-none outline-none px-3 py-3 text-[14px] text-foreground placeholder:text-muted-foreground font-medium"
+                className="flex-1 bg-transparent border-none outline-none px-3 py-3 text-[14px] font-medium text-white placeholder:text-white/50"
                 aria-label="Search for a location"
                 autoComplete="off"
                 role="combobox"
@@ -1367,7 +1697,7 @@ const MapPage = () => {
                   className={`px-2.5 py-3 text-sm shrink-0 transition-colors ${
                     voice.listening
                       ? "text-red-500 bg-red-500/10 animate-pulse"
-                      : "text-muted-foreground hover:text-primary"
+                      : "text-white/50 hover:text-white"
                   }`}
                   aria-label={voice.listening ? "Stop voice input" : "Start voice input"}
                   title={voice.listening ? "Listening… tap to stop" : "Voice search"}
@@ -1378,7 +1708,7 @@ const MapPage = () => {
               <button
                 onClick={handleSearch}
                 disabled={searching}
-                className="bg-foreground text-background hover:bg-foreground/90 px-3 sm:px-5 py-3 text-[13px] font-bold transition-colors disabled:opacity-70 flex items-center gap-2 shrink-0"
+                className="px-4 sm:px-6 py-3 text-[13px] font-bold transition-all disabled:opacity-70 flex items-center gap-2 shrink-0 border-none outline-none cursor-pointer bg-[#FF6600] text-black hover:bg-orange-500 shadow-lg shadow-[#FF6600]/20 active:scale-95"
                 aria-label="Search"
               >
                 {searching ? (
@@ -1396,7 +1726,7 @@ const MapPage = () => {
             {showSuggestions && suggestions.length > 0 && (
               <div
                 id="search-suggestions"
-                className="bg-card/95 border-x border-b border-border rounded-b-2xl shadow-float overflow-hidden backdrop-blur-2xl"
+                className="border-x border-b rounded-b-2xl shadow-float overflow-hidden backdrop-blur bg-black/90 border-white/10 text-white"
                 role="listbox"
                 aria-label="Location suggestions"
               >
@@ -1407,17 +1737,17 @@ const MapPage = () => {
                       key={s.place_id}
                       id={`suggestion-${index}`}
                       onClick={() => handleSuggestionClick(s)}
-                      className={`w-full text-left px-4 py-3 border-b border-border/40 hover:bg-muted/80 flex items-start gap-3 transition-colors ${
-                        activeSuggestion === index ? "bg-muted" : ""
+                      className={`w-full text-left px-4 py-3 border-b flex items-start gap-3 transition-colors border-white/5 hover:bg-white/10 text-white/95 ${
+                        activeSuggestion === index ? "bg-white/10" : ""
                       }`}
                       role="option"
                       aria-selected={activeSuggestion === index}
                     >
                       <MapPin className="w-4 h-4 text-primary shrink-0 mt-0.5" />
                       <div className="flex-1 min-w-0">
-                        <div className="text-[13px] font-semibold text-foreground truncate">{main}</div>
+                        <div className="text-[13px] font-semibold truncate text-white">{main}</div>
                         {secondary && (
-                          <div className="text-[10px] text-muted-foreground truncate mt-0.5">{secondary}</div>
+                          <div className="text-[10px] truncate mt-0.5 text-white/50">{secondary}</div>
                         )}
                       </div>
                     </button>
@@ -1463,20 +1793,22 @@ const MapPage = () => {
 
           {/* ── Right workspace sidebar config panel ── */}
           <Card
-            className={`absolute top-[100px] bottom-6 right-4 w-[360px] z-[1000] border border-border shadow-[0_10px_40px_rgba(0,0,0,0.35)] flex flex-col overflow-hidden rounded-3xl transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] bg-card/75 backdrop-blur-2xl ${
+            className={`absolute top-[100px] bottom-6 right-4 w-[360px] z-[1000] border border-white/10 shadow-2xl flex flex-col overflow-hidden rounded-3xl transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] bg-[#0A0A0A]/90 backdrop-blur-2xl ${
               sidebarExpanded ? "opacity-100 translate-x-0" : "opacity-0 translate-x-[40px] pointer-events-none"
             }`}
           >
             {/* Sidebar header */}
-            <CardHeader className="p-5 border-b border-border bg-muted/20 shrink-0">
+            <CardHeader className="p-5 border-b border-white/10 bg-black/40 shrink-0">
               <div className="flex justify-between items-start">
                 <div className="space-y-1">
-                  <div className="text-[10px] font-extrabold text-primary uppercase tracking-widest flex items-center gap-1 font-mono">
+                  <div className="text-[10px] font-extrabold text-[#FF6600] uppercase tracking-widest flex items-center gap-1 font-mono">
                     <Sliders className="w-3.5 h-3.5" /> Workspace Config
                   </div>
                   <CardTitle className="text-base font-extrabold text-foreground leading-tight">
                     {drawState === "COMPLETE"
                       ? `Configure Potential`
+                      : drawState === "EXCLUSION_IDLE" || drawState === "EXCLUSION_DRAWING"
+                      ? `Mark Obstacles (Optional)`
                       : `Trace Rooftop Boundary`}
                   </CardTitle>
                 </div>
@@ -1489,13 +1821,15 @@ const MapPage = () => {
               <p className="text-[11px] text-muted-foreground leading-relaxed mt-1">
                 {drawState === "COMPLETE"
                   ? `Adjust panel orientation, mounting angles, and localized rates to simulate your yield.`
+                  : drawState === "EXCLUSION_IDLE" || drawState === "EXCLUSION_DRAWING"
+                  ? `Mark chimneys, staircase rooms, AC units, or water tanks to subtract them from usable solar area.`
                   : `Draw the unshaded borders of your roof. Double-click the map or close the shape to finish.`}
               </p>
             </CardHeader>
 
             {/* Config panel body */}
             <CardContent className="p-5 flex-1 overflow-y-auto space-y-4 scrollbar-thin">
-              {drawState !== "COMPLETE" && (
+              {(drawState === "IDLE" || drawState === "DRAWING") && (
                 <div className="space-y-4">
                   {/* Auto-detect & Photo Area Estimation row */}
                   <div className="grid grid-cols-2 gap-2">
@@ -1505,7 +1839,7 @@ const MapPage = () => {
                       size="sm"
                       className="text-[10px] h-8 rounded-xl flex items-center justify-center gap-1.5 font-bold hover:scale-[1.02] active:scale-[0.98] transition-all border-border"
                       onClick={handleAutoDetect}
-                      disabled={autoDetecting || drawState === "COMPLETE"}
+                      disabled={autoDetecting}
                     >
                       {autoDetecting ? (
                         <><Loader2 className="w-3 h-3 animate-spin" /> {t("map.detecting", "Detecting...")}</>
@@ -1519,7 +1853,6 @@ const MapPage = () => {
                       size="sm"
                       className="text-[10px] h-8 rounded-xl flex items-center justify-center gap-1.5 font-bold hover:scale-[1.02] active:scale-[0.98] transition-all border-border"
                       onClick={() => setPhotoEstOpen(true)}
-                      disabled={drawState === "COMPLETE"}
                     >
                       <Sun className="w-3 h-3 text-primary" />
                       <span>Photo Area</span>
@@ -1538,7 +1871,7 @@ const MapPage = () => {
                   </div>
 
                   {/* Polygons drawing lists */}
-                  {polygons.length > 0 && drawState !== "COMPLETE" && (
+                  {polygons.length > 0 && (
                     <div className="space-y-2.5">
                       <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                         <span>Rooftop Sections</span>
@@ -1596,6 +1929,76 @@ const MapPage = () => {
                     >
                       Done Drawing · Proceed to Specs
                     </Button>
+                  )}
+                </div>
+              )}
+
+              {(drawState === "EXCLUSION_IDLE" || drawState === "EXCLUSION_DRAWING") && (
+                <div className="space-y-4">
+                  <div className="flex gap-2 items-center text-xs text-muted-foreground border-b border-border/30 pb-2">
+                    <Info className="w-4 h-4 text-primary shrink-0" />
+                    <span>Click on map to draw obstacle shapes to exclude. Click the first point to close shape.</span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {drawState === "EXCLUSION_IDLE" && exclusionZones.length < 6 && (
+                      <Button
+                        type="button"
+                        className="w-full text-xs h-9 rounded-xl font-bold bg-primary text-black flex items-center justify-center gap-1.5"
+                        onClick={() => {
+                          setDrawState("EXCLUSION_DRAWING");
+                        }}
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Obstacle Zone ({exclusionZones.length}/6)
+                      </Button>
+                    )}
+                    {drawState === "EXCLUSION_DRAWING" && (
+                      <div className="text-center p-3 bg-muted/40 border border-border/40 rounded-xl">
+                        <Loader2 className="w-4 h-4 animate-spin mx-auto mb-1.5 text-primary" />
+                        <p className="text-xs font-bold text-foreground">Obstacle Drawing Mode Active</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Click vertices on map. Connect back to start point to complete.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {exclusionZones.length > 0 && (
+                    <div className="space-y-2.5">
+                      <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        <span>Obstacle Zones</span>
+                        <span className="font-mono text-foreground font-bold">
+                          {exclusionZones.length}/6
+                        </span>
+                      </div>
+                      <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                        {exclusionZones.map((ex, index) => (
+                          <div key={ex.id} className="flex justify-between items-center bg-red-500/5 px-3 py-2 rounded-xl border border-red-500/25 animate-in fade-in duration-200">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="w-2.5 h-2.5 rounded-sm shrink-0 bg-red-500" />
+                              <span className="text-xs font-semibold text-foreground truncate">Obstacle {index + 1}</span>
+                              <span className="text-[10px] text-muted-foreground font-mono">({ex.area} m²)</span>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground hover:text-destructive rounded-lg"
+                              onClick={() => {
+                                ex.polygonLayer.remove();
+                                setExclusionZones((prev) => prev.filter((ez) => ez.id !== ex.id));
+                              }}
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex justify-between items-center pt-2 border-t border-border/30">
+                        <span className="text-xs text-muted-foreground font-medium">Total Obstacle Area</span>
+                        <span className="font-mono text-red-400 font-bold">
+                          {exclusionZones.reduce((sum, p) => sum + p.area, 0).toFixed(1)} m²
+                        </span>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
@@ -1734,21 +2137,49 @@ const MapPage = () => {
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span className="text-muted-foreground font-medium cursor-help hover:text-foreground transition-colors flex items-center gap-1 text-[11px]">
-                            Roof Shading <Info className="w-3.5 h-3.5 text-muted-foreground/60" />
+                            Shading Estimate <Info className="w-3.5 h-3.5 text-muted-foreground/60" />
                           </span>
                         </TooltipTrigger>
                         <TooltipContent side="left" className="max-w-[200px] text-[10px]">
-                          Select roof shading level (None: 0%, Partial: 15% loss, Heavy: 30% loss).
+                          Select roof shading level (Auto-detected uses dynamic OSM building data; otherwise manual override).
                         </TooltipContent>
                       </Tooltip>
                       <select
                         value={shading}
-                        onChange={(e) => setShading(e.target.value as "none" | "partial" | "heavy")}
+                        onChange={(e) => setShading(e.target.value as any)}
                         className="bg-muted text-foreground text-[10px] font-bold px-2 py-0.5 rounded-lg border border-border/50 focus:outline-none focus:ring-1 focus:ring-primary h-7 w-28 cursor-pointer"
                       >
-                        <option value="none" className="bg-background">None</option>
-                        <option value="partial" className="bg-background">Partial</option>
-                        <option value="heavy" className="bg-background">Heavy</option>
+                        <option value="auto" className="bg-background">Auto-detected from nearby buildings</option>
+                        <option value="none" className="bg-background">None — full sun</option>
+                        <option value="partial" className="bg-background">Partial — moderate shade</option>
+                        <option value="heavy" className="bg-background">Heavy — significant shade</option>
+                      </select>
+                    </div>
+
+                    {/* Roof Pitch Selector */}
+                    <div className="flex justify-between items-center pt-0.5 pb-0.5 gap-2">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-muted-foreground font-medium cursor-help hover:text-foreground transition-colors flex items-center gap-1 text-[11px]">
+                            Roof Pitch <Info className="w-3.5 h-3.5 text-muted-foreground/60" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="left" className="max-w-[200px] text-[10px]">
+                          Select roof pitch angle to correct for satellite plan-area underestimation.
+                        </TooltipContent>
+                      </Tooltip>
+                      <select
+                        value={pitchDegrees}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setPitchDegrees(val);
+                          if (val === 0) setIsExplicitlyFlat(true);
+                        }}
+                        className="bg-muted text-foreground text-[10px] font-bold px-2 py-0.5 rounded-lg border border-border/50 focus:outline-none focus:ring-1 focus:ring-primary h-7 w-28 cursor-pointer"
+                      >
+                        <option value="0" className="bg-background">Flat roof (0°)</option>
+                        <option value="15" className="bg-background">Gently pitched (15°)</option>
+                        <option value="30" className="bg-background">Steeply pitched (30°)</option>
                       </select>
                     </div>
                   </div>
@@ -2008,7 +2439,7 @@ const MapPage = () => {
             </CardContent>
 
             {/* Pinned Card Footer actions */}
-            {((drawState === "DRAWING" && vertexCount >= 0) || (drawState === "COMPLETE" && area !== null)) && (
+            {(drawState === "DRAWING" || drawState === "EXCLUSION_DRAWING" || drawState === "EXCLUSION_IDLE" || (drawState === "COMPLETE" && area !== null)) && (
               <CardFooter className="p-5 border-t border-border bg-card/95 shrink-0 flex flex-col gap-2">
                 {drawState === "DRAWING" && (
                   <div className="flex flex-col gap-2 w-full">
@@ -2052,6 +2483,68 @@ const MapPage = () => {
                       disabled={vertexCount < 3}
                     >
                       {vertexCount >= 3 ? "Complete Outline" : `Need ${3 - vertexCount} more point${3 - vertexCount > 1 ? "s" : ""}`}
+                    </Button>
+                  </div>
+                )}
+                {drawState === "EXCLUSION_DRAWING" && (
+                  <div className="flex flex-col gap-2 w-full">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs h-9 rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all border-border"
+                        onClick={handleDeleteLast}
+                      >
+                        Undo Last
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs h-9 rounded-xl text-destructive hover:text-destructive hover:bg-destructive/5 hover:scale-[1.02] active:scale-[0.98] transition-all border-border"
+                        onClick={() => {
+                          markersRef.current.forEach((marker) => marker.remove());
+                          markersRef.current = [];
+                          verticesRef.current = [];
+                          setVertexCount(0);
+                          polylineRef.current?.remove(); polylineRef.current = null;
+                          previewLineRef.current?.remove(); previewLineRef.current = null;
+                          closingLineRef.current?.remove(); closingLineRef.current = null;
+                          setDrawState("EXCLUSION_IDLE");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                    <Button
+                      variant="default"
+                      className="w-full text-xs h-10 rounded-xl bg-foreground text-background hover:bg-foreground/90 font-bold shadow-sm hover:scale-[1.01] active:scale-[0.99] transition-all"
+                      onClick={() => finishExclusionPolygon()}
+                      disabled={vertexCount < 3}
+                    >
+                      {vertexCount >= 3 ? "Complete Obstacle" : `Need ${3 - vertexCount} more point${3 - vertexCount > 1 ? "s" : ""}`}
+                    </Button>
+                  </div>
+                )}
+                {drawState === "EXCLUSION_IDLE" && (
+                  <div className="flex gap-2 w-full">
+                    <Button
+                      variant="outline"
+                      className="h-11 rounded-xl text-xs font-bold transition-all px-4 hover:scale-[1.03] active:scale-[0.97] border-border"
+                      onClick={() => {
+                        exclusionZones.forEach((ez) => ez.polygonLayer.remove());
+                        setExclusionZones([]);
+                        setDrawState("IDLE");
+                      }}
+                      type="button"
+                    >
+                      Back to Roof
+                    </Button>
+                    <Button
+                      className="btn-primary flex-1 h-11 rounded-xl text-sm font-bold relative overflow-hidden hover:scale-[1.02] active:scale-[0.98] transition-all bg-primary text-black"
+                      onClick={handleDoneExclusion}
+                      type="button"
+                    >
+                      Done — Calculate
                     </Button>
                   </div>
                 )}
@@ -2109,26 +2602,24 @@ const MapPage = () => {
           </Card>
 
           {/* ── Left Zoom Controls ── */}
-          {!globeVisible && (
-            <div className="absolute bottom-6 left-4 z-[1000] flex flex-col gap-2" role="group" aria-label="Map zoom controls">
-              <button
-                onClick={handleZoomIn}
-                className="w-10 h-10 bg-card/65 backdrop-blur-2xl border border-border shadow-md rounded-xl flex items-center justify-center hover:border-primary/80 hover:text-primary active:scale-95 transition-all text-muted-foreground cursor-pointer"
-                aria-label="Zoom in"
-                title="Zoom in"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleZoomOut}
-                className="w-10 h-10 bg-card/65 backdrop-blur-2xl border border-border shadow-md rounded-xl flex items-center justify-center hover:border-primary/80 hover:text-primary active:scale-95 transition-all text-muted-foreground cursor-pointer"
-                aria-label="Zoom out"
-                title="Zoom out"
-              >
-                <Minus className="w-4 h-4" />
-              </button>
-            </div>
-          )}
+          <div className="absolute bottom-6 left-4 z-[1000] flex flex-col gap-2" role="group" aria-label="Map zoom controls">
+            <button
+              onClick={handleZoomIn}
+              className="w-10 h-10 bg-card/65 backdrop-blur-2xl border border-border shadow-md rounded-xl flex items-center justify-center hover:border-primary/80 hover:text-primary active:scale-95 transition-all text-muted-foreground cursor-pointer"
+              aria-label="Zoom in"
+              title="Zoom in"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleZoomOut}
+              className="w-10 h-10 bg-card/65 backdrop-blur-2xl border border-border shadow-md rounded-xl flex items-center justify-center hover:border-primary/80 hover:text-primary active:scale-95 transition-all text-muted-foreground cursor-pointer"
+              aria-label="Zoom out"
+              title="Zoom out"
+            >
+              <Minus className="w-4 h-4" />
+            </button>
+          </div>
 
           {/* ── GIS loading scanner overlay ── */}
           {calculating && (() => {

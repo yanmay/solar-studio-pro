@@ -244,51 +244,61 @@ const RooftopARViewer = ({ installedKw, panelCount, areaM2 }: Props) => {
 
   return (
     <>
-      <div className="bg-gradient-to-br from-violet-500/10 to-fuchsia-500/5 border border-violet-500/20 rounded-2xl p-5 sm:p-6 mb-8" role="region" aria-label="AR rooftop preview">
-        <div className="flex items-start sm:items-center justify-between gap-3 flex-col sm:flex-row">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center shrink-0">
-              <Box className="w-5 h-5 text-violet-500" />
+      <div className="bg-[#0A0A0A]/90 backdrop-blur-2xl border border-white/10 rounded-3xl p-6 sm:p-8 mb-8 text-white shadow-2xl relative overflow-hidden group hover:border-violet-500/40 transition-all duration-300" role="region" aria-label="AR rooftop preview">
+        {/* Top ambient hairline */}
+        <div
+          className="absolute top-0 left-0 right-0 h-px rounded-t-3xl opacity-60 pointer-events-none"
+          style={{ background: "linear-gradient(90deg, transparent, rgba(167,139,250,0.5), transparent)" }}
+          aria-hidden="true"
+        />
+
+        <div className="flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row">
+          <div className="flex items-start gap-3.5">
+            <div className="w-10 h-10 rounded-2xl bg-violet-500/10 border border-violet-500/20 text-violet-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+              <Box className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <h3 className="text-base font-medium text-sunpower-text-primary">See it on your roof</h3>
-              <p className="text-xs text-sunpower-text-muted mt-0.5">
-                Interactive 3D preview of your {installedKw} kWp system{arSupported ? " — launch AR on this device" : ""}.
+              <h3 className="text-base font-bold text-white tracking-tight">Interactive 3D Rooftop Simulation</h3>
+              <p className="text-xs text-white/50 font-light mt-0.5 leading-relaxed">
+                3D array preview of your {installedKw} kWp ({panelCount} panels) geometry{arSupported ? " — WebXR AR available on this device" : ""}.
               </p>
             </div>
           </div>
           <button
             onClick={() => { setOpen(true); track("3D Preview Opened"); }}
-            className="shrink-0 bg-violet-500 hover:bg-violet-600 text-white text-sm font-medium px-4 py-2 rounded-lg active:scale-95 transition-all flex items-center gap-2"
+            className="shrink-0 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:brightness-110 text-white text-xs font-bold uppercase tracking-wider px-5 py-3 rounded-xl active:scale-95 transition-all flex items-center gap-2 border-none shadow-lg shadow-violet-500/20 cursor-pointer"
           >
-            <Maximize2 className="w-4 h-4" /> Open 3D preview
+            <Maximize2 className="w-4 h-4" /> Open 3D Preview
           </button>
         </div>
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-3xl p-0 overflow-hidden h-[85vh] sm:h-[600px]">
-          <DialogHeader className="px-5 pt-4 pb-2">
-            <DialogTitle className="flex items-center gap-2">
-              <Box className="w-5 h-5 text-violet-500" /> 3D Rooftop Preview
+        <DialogContent className="max-w-3xl p-0 overflow-hidden h-[85vh] sm:h-[600px] bg-[#0A0A0A] border border-white/15 rounded-3xl text-white backdrop-blur-3xl shadow-2xl">
+          <DialogHeader className="px-6 pt-5 pb-3 border-b border-white/10">
+            <DialogTitle className="flex items-center gap-2.5 text-lg font-bold text-white">
+              <div className="w-8 h-8 rounded-xl bg-violet-500/10 border border-violet-500/20 text-violet-400 flex items-center justify-center">
+                <Box className="w-4 h-4" />
+              </div>
+              <span>3D Spatial Rooftop Simulation</span>
             </DialogTitle>
-            <DialogDescription>
-              Drag to rotate · pinch / scroll to zoom. Panels scaled 1.6×1 m with 15° tilt.
+            <DialogDescription className="text-xs font-mono text-white/40">
+              Drag to rotate · pinch / scroll to zoom · 15° tilt module arrangement
             </DialogDescription>
           </DialogHeader>
-          <div ref={mountRef} className="flex-1 w-full h-full min-h-[400px] bg-sky-200 relative">
+          <div ref={mountRef} className="flex-1 w-full h-full min-h-[400px] bg-slate-950 relative">
             {arSupported && (
               <button
                 onClick={launchAR}
-                className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-white text-violet-600 font-medium px-5 py-2.5 rounded-full shadow-lg flex items-center gap-2 active:scale-95 transition-all"
+                className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white text-black font-mono font-bold text-xs uppercase tracking-wider px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 active:scale-95 transition-all border-none cursor-pointer hover:bg-neutral-100"
               >
-                <Camera className="w-4 h-4" /> View in AR
+                <Camera className="w-4 h-4 text-violet-600" /> View In WebXR AR
               </button>
             )}
             <button
               onClick={() => setOpen(false)}
-              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/80 hover:bg-white flex items-center justify-center shadow"
-              aria-label="Close"
+              className="absolute top-4 right-4 w-9 h-9 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-white/80 hover:text-white hover:bg-black flex items-center justify-center shadow-lg transition-colors cursor-pointer"
+              aria-label="Close dialog"
             >
               <X className="w-4 h-4" />
             </button>

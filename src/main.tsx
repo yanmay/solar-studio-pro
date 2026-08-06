@@ -39,16 +39,13 @@ function FallbackScreen() {
   );
 }
 
-// Apply stored theme immediately to prevent flash
+// Force dark mode permanently — no light mode
 try {
-  const stored = localStorage.getItem('sunpower-theme');
-  if (stored === 'dark') {
-    document.documentElement.classList.add('dark');
-  } else {
-    document.documentElement.classList.remove('dark');
-  }
+  document.documentElement.classList.add('dark');
+  localStorage.removeItem('sunpower-theme');
+  localStorage.removeItem('theme');
 } catch (error) {
-  console.warn("localStorage theme read failed in entrypoint:", error);
+  // ignore
 }
 
 createRoot(document.getElementById("root")!).render(

@@ -1,7 +1,7 @@
-import { checkRateLimit } from "./_utils/rate-limit";
+import { checkRateLimit } from "./_utils/rate-limit.js";
 
 export const config = {
-  runtime: "edge",
+  runtime: "nodejs",
 };
 
 interface GoogleGeocodingResult {

@@ -1,14 +1,18 @@
 import * as Sentry from "@sentry/node";
-import { checkRateLimit } from "./_utils/rate-limit";
+import { checkRateLimit } from "./_utils/rate-limit.js";
+import { getSupabaseAdmin } from "./_utils/supabase.js";
 
 export const config = {
-  runtime: "edge",
+  runtime: "nodejs",
 };
 
 interface NASAPowerResponse {
   properties: {
     parameter: {
-      ALLSKY_SFC_SW_DWN: Record<string, number>;
+      ALLSKY_SFC_SW_DWN?: Record<string, number>;
+      WS10M?: Record<string, number>;
+      WS50M?: Record<string, number>;
+      T2M?: Record<string, number>;
     };
   };
 }
@@ -79,8 +83,41 @@ export default async function handler(req: Request): Promise<Response> {
     }
   }
 
+  // PART A — NASA POWER cache check
+  const latRounded = Math.round(lat * 100) / 100;
+  const lngRounded = Math.round(lng * 100) / 100;
+  const nowStr = new Date().toISOString();
+
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    try {
+      const { data: cached } = await supabase
+        .from("nasa_power_cache")
+        .select("payload")
+        .eq("lat", latRounded)
+        .eq("lng", lngRounded)
+        .gt("expires_at", nowStr)
+        .maybeSingle();
+
+      if (cached && cached.payload && cached.payload.ws10m !== undefined && cached.payload.t2m_monthly !== undefined) {
+        return new Response(
+          JSON.stringify(cached.payload),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+              "Cache-Control": "public, max-age=86400",
+            },
+          }
+        );
+      }
+    } catch (cacheError) {
+      console.warn("NASA POWER cache lookup failed, proceeding to live API:", cacheError);
+    }
+  }
+
   const nasaBaseUrl = process.env.NASA_POWER_BASE_URL || "https://power.larc.nasa.gov";
-  const nasaUrl = `${nasaBaseUrl}/api/temporal/climatology/point?parameters=ALLSKY_SFC_SW_DWN&community=RE&longitude=${lng.toFixed(4)}&latitude=${lat.toFixed(4)}&format=JSON`;
+  const nasaUrl = `${nasaBaseUrl}/api/temporal/climatology/point?parameters=ALLSKY_SFC_SW_DWN,WS10M,WS50M,T2M&community=RE&longitude=${lng.toFixed(4)}&latitude=${lat.toFixed(4)}&format=JSON`;
 
   try {
     const response = await fetch(nasaUrl, {
@@ -101,17 +138,17 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     const data: NASAPowerResponse = await response.json();
-    const monthly = data.properties?.parameter?.ALLSKY_SFC_SW_DWN;
+    const parameter = data.properties?.parameter;
 
-    if (!monthly) {
-      const err = new Error("Parameter 'ALLSKY_SFC_SW_DWN' is missing in the NASA response.");
+    if (!parameter || !parameter.ALLSKY_SFC_SW_DWN || !parameter.WS10M || !parameter.WS50M || !parameter.T2M) {
+      const err = new Error("Required parameters (ALLSKY_SFC_SW_DWN, WS10M, WS50M, T2M) are missing in the NASA response.");
       if (process.env.VITE_SENTRY_DSN) {
         Sentry.captureException(err, { extra: { lat, lng } });
       }
       return new Response(
         JSON.stringify({
           error: "NASA API unavailable",
-          details: "Parameter 'ALLSKY_SFC_SW_DWN' is missing in the NASA response.",
+          details: "Required meteorological parameters are missing in the NASA response.",
         }),
         {
           status: 502,
@@ -135,10 +172,22 @@ export default async function handler(req: Request): Promise<Response> {
       "DEC",
     ];
     const monthlyGhi: number[] = [];
+    const t2mMonthly: number[] = [];
+    const ws10mMonthly: number[] = [];
+    const ws50mMonthly: number[] = [];
 
     for (const key of monthKeys) {
-      const val = monthly[key];
-      if (typeof val !== "number") {
+      const ghiVal = parameter.ALLSKY_SFC_SW_DWN[key];
+      const ws10mVal = parameter.WS10M[key];
+      const ws50mVal = parameter.WS50M[key];
+      const t2mVal = parameter.T2M[key];
+
+      if (
+        typeof ghiVal !== "number" ||
+        typeof ws10mVal !== "number" ||
+        typeof ws50mVal !== "number" ||
+        typeof t2mVal !== "number"
+      ) {
         const err = new Error(`Missing monthly data value for key: ${key}`);
         if (process.env.VITE_SENTRY_DSN) {
           Sentry.captureException(err, { extra: { lat, lng } });
@@ -154,16 +203,64 @@ export default async function handler(req: Request): Promise<Response> {
           }
         );
       }
-      monthlyGhi.push(val);
+      monthlyGhi.push(ghiVal);
+      t2mMonthly.push(t2mVal);
+      ws10mMonthly.push(ws10mVal);
+      ws50mMonthly.push(ws50mVal);
+    }
+
+    const ws10m = typeof parameter.WS10M.ANN === "number"
+      ? parameter.WS10M.ANN
+      : (ws10mMonthly.reduce((a, b) => a + b, 0) / 12);
+
+    const ws50m = typeof parameter.WS50M.ANN === "number"
+      ? parameter.WS50M.ANN
+      : (ws50mMonthly.reduce((a, b) => a + b, 0) / 12);
+
+    const t2m = typeof parameter.T2M.ANN === "number"
+      ? parameter.T2M.ANN
+      : (t2mMonthly.reduce((a, b) => a + b, 0) / 12);
+
+    const returnedPayload = {
+      monthly_ghi: monthlyGhi,
+      lat,
+      lng,
+      year,
+      ws10m,
+      ws50m,
+      t2m,
+      t2m_monthly: t2mMonthly,
+    };
+
+    if (supabase) {
+      try {
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        const payload = {
+          ...data,
+          ...returnedPayload,
+        };
+        await supabase
+          .from("nasa_power_cache")
+          .insert({
+            cache_key: `nasa_power:${latRounded}:${lngRounded}`,
+            latitude: latRounded,
+            longitude: lngRounded,
+            lat: latRounded,
+            lng: lngRounded,
+            payload: payload,
+            expires_at: expiresAt,
+            monthly_ghi: monthlyGhi,
+            monthly_temperature: t2mMonthly,
+            monthly_wind_speed_10m: ws10mMonthly,
+            monthly_wind_speed_50m: ws50mMonthly,
+          });
+      } catch (cacheInsertError) {
+        console.warn("NASA POWER cache write failed:", cacheInsertError);
+      }
     }
 
     return new Response(
-      JSON.stringify({
-        monthly_ghi: monthlyGhi,
-        lat,
-        lng,
-        year,
-      }),
+      JSON.stringify(returnedPayload),
       {
         status: 200,
         headers: {

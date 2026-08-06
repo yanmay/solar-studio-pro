@@ -18,15 +18,24 @@ CREATE TABLE IF NOT EXISTS profiles (
 -- Table 2: analysis_sessions
 CREATE TABLE IF NOT EXISTS analysis_sessions (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  site_id         TEXT UNIQUE NOT NULL,
+  site_id         TEXT UNIQUE,
 
   user_id         UUID REFERENCES profiles(id) ON DELETE SET NULL,
   session_token   TEXT,
 
-  address         TEXT NOT NULL,
+  address         TEXT,
   plus_code       TEXT,
-  latitude        DOUBLE PRECISION NOT NULL,
-  longitude       DOUBLE PRECISION NOT NULL,
+  latitude        DOUBLE PRECISION,
+  longitude       DOUBLE PRECISION,
+
+  lat             DOUBLE PRECISION,
+  lng             DOUBLE PRECISION,
+  rooftop_area_m2 DOUBLE PRECISION,
+  installed_kw    DOUBLE PRECISION,
+  annual_kwh      DOUBLE PRECISION,
+  system_cost_inr DOUBLE PRECISION,
+  payback_years   DOUBLE PRECISION,
+
   city            TEXT,
   state           TEXT,
   pincode         TEXT,
@@ -192,21 +201,25 @@ CREATE TABLE IF NOT EXISTS lead_assignments (
 -- Table 5: payments
 CREATE TABLE IF NOT EXISTS payments (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id  UUID NOT NULL REFERENCES analysis_sessions(id),
+  session_id  UUID REFERENCES analysis_sessions(id),
   user_id     UUID REFERENCES profiles(id),
   lead_assignment_id UUID REFERENCES lead_assignments(id),
 
-  amount_paise INTEGER NOT NULL,
+  amount_paise INTEGER,
   currency     TEXT NOT NULL DEFAULT 'INR',
-  payment_type TEXT NOT NULL
-               CHECK (payment_type IN ('report_unlock','installer_subscription','lead_purchase')),
+  payment_type TEXT CHECK (payment_type IN ('report_unlock','installer_subscription','lead_purchase')),
 
   razorpay_order_id   TEXT,
   razorpay_payment_id TEXT,
   razorpay_signature  TEXT,
 
+  order_id            TEXT,
+  payment_id          TEXT,
+  amount              INTEGER,
+  scan_hash           TEXT,
+
   status TEXT NOT NULL DEFAULT 'pending'
-         CHECK (status IN ('pending','success','failed','refunded')),
+         CHECK (status IN ('pending','success','failed','refunded','captured')),
 
   gateway_response JSONB,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -258,10 +271,14 @@ CREATE TABLE IF NOT EXISTS subsidy_schemes (
 -- Table 11: nasa_power_cache
 CREATE TABLE IF NOT EXISTS nasa_power_cache (
   id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  cache_key TEXT UNIQUE NOT NULL,
+  cache_key TEXT UNIQUE,
 
-  latitude  FLOAT NOT NULL,
-  longitude FLOAT NOT NULL,
+  latitude  FLOAT,
+  longitude FLOAT,
+
+  lat       FLOAT,
+  lng       FLOAT,
+  payload   JSONB,
 
   monthly_ghi          JSONB,
   monthly_dhi          JSONB,

@@ -47,6 +47,7 @@ scratch_*.png
 scratch_*.txt
 *.png
 *.webp
+*.pptx
 !public/*.png
 !public/*.webp
 test-results/
