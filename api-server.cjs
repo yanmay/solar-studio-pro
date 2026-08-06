@@ -60,7 +60,8 @@ if (!supabase) {
     nasa_power_cache: [],
     analysis_sessions: [],
     solar_reports: [],
-    payments: []
+    payments: [],
+    api_keys: []
   };
   supabase = {
     from: (table) => {
@@ -664,6 +665,105 @@ async function getInstallerByUserId(userId) {
   return rows[0] || null;
 }
 
+// --- Auth: HMAC-signed session tokens (compact JWT-style) ---
+// Signing secret. MUST be set to a strong value in production; startup guard
+// below refuses to run in prod with the insecure default.
+const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-insecure-session-secret';
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
+
+// Fail closed: never run in production with the insecure default signing secret.
+if (IS_PRODUCTION && SESSION_SECRET === 'dev-insecure-session-secret') {
+  console.error('[SECURITY] SESSION_SECRET must be set to a strong value in production. Refusing to start.');
+  throw new Error('SESSION_SECRET not configured for production');
+}
+
+function base64url(input) {
+  return Buffer.from(input).toString('base64')
+    .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+}
+
+/** Issue a signed session token carrying the installer user id. */
+function issueSessionToken(userId) {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = { sub: userId, iat: now, exp: now + SESSION_TTL_SECONDS };
+  const body = base64url(JSON.stringify(payload));
+  const sig = crypto.createHmac('sha256', SESSION_SECRET).update(body).digest('base64')
+    .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+  return `${body}.${sig}`;
+}
+
+/** Verify a session token; returns the payload or null if invalid/expired. */
+function verifySessionToken(token) {
+  if (!token || typeof token !== 'string' || !token.includes('.')) return null;
+  const [body, sig] = token.split('.');
+  if (!body || !sig) return null;
+  const expected = crypto.createHmac('sha256', SESSION_SECRET).update(body).digest('base64')
+    .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+  // Constant-time comparison to avoid signature timing leaks
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString());
+    if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch { return null; }
+}
+
+function getBearerToken(req) {
+  const header = req.headers['authorization'] || req.headers['Authorization'];
+  if (!header || typeof header !== 'string') return null;
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : null;
+}
+
+/**
+ * Resolve the authenticated installer user id for a request.
+ * Production: requires a valid Bearer session token — the token `sub` is authoritative
+ *   and any client-supplied installerUserId that mismatches is rejected.
+ * Dev/test: falls back to the legacy installerUserId param so existing flows/tests work.
+ * Returns { userId } on success, or { error, status } on failure.
+ */
+function authenticateInstaller(req, legacyUserId) {
+  const token = getBearerToken(req);
+  const payload = token ? verifySessionToken(token) : null;
+
+  if (IS_PRODUCTION) {
+    if (!payload) return { error: 'Authentication required', status: 401 };
+    if (legacyUserId && legacyUserId !== payload.sub) {
+      return { error: 'Forbidden', status: 403 };
+    }
+    return { userId: payload.sub };
+  }
+
+  // Non-production: prefer the token if present & valid, else legacy param.
+  if (payload) return { userId: payload.sub };
+  if (legacyUserId) return { userId: legacyUserId };
+  return { error: 'Authentication required', status: 401 };
+}
+
+// --- Auth: DB-backed API keys for v1 underwriting (partner integrations) ---
+// Keys are stored hashed (SHA-256) in the `api_keys` table; the plaintext key is
+// only ever shown once at issuance. Format: `sk_live_<random>` / `sk_test_<random>`.
+function hashApiKey(key) {
+  return crypto.createHash('sha256').update(key).digest('hex');
+}
+
+/**
+ * Verify the API key on a v1 request.
+ * Returns { keyRecord } on success or { error, status } on failure.
+ */
+async function verifyApiKey(req) {
+  const key = getBearerToken(req);
+  if (!key) return { error: 'API key required', status: 401 };
+  const hashed = hashApiKey(key);
+  const rows = await sbSelect('api_keys', { key_hash: hashed });
+  const record = rows[0];
+  if (!record) return { error: 'Invalid API key', status: 401 };
+  if (record.revoked) return { error: 'API key revoked', status: 401 };
+  return { keyRecord: record };
+}
+
 // Export request handler for Vite middleware use
 async function handleRequest(req, res, next) {
   const parsedUrl = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
@@ -691,6 +791,67 @@ async function handleRequest(req, res, next) {
   }
 
   console.log(`[API SERVER] ${req.method} ${pathname}`);
+
+  // HEALTH CHECK
+  if (pathname === '/api/health') {
+    const health = {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      services: {
+        supabase: supabaseUsable() ? 'connected' : 'unavailable',
+        redis: redis ? 'connected' : 'unavailable'
+      }
+    };
+    return sendJSON(res, health, 200);
+  }
+
+  // V1 UNDERWRITING: partner-facing financial viability score (API-key protected)
+  if (pathname === '/api/v1/underwriting/score') {
+    if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+
+    // Require a valid API key
+    const keyAuth = await verifyApiKey(req);
+    if (keyAuth.error) return sendJSON(res, { error: keyAuth.error }, keyAuth.status);
+
+    // Per-key rate limit: 60 requests/min (fail-closed if Redis unavailable)
+    const rlKey = `v1:underwriting:${keyAuth.keyRecord.id}`;
+    try {
+      const current = await redis.get(rlKey);
+      const count = current ? parseInt(current, 10) : 0;
+      if (count >= 60) {
+        return sendJSON(res, { error: 'Rate limit exceeded' }, 429);
+      }
+      await redis.set(rlKey, count + 1, { ex: 60 });
+    } catch (err) {
+      console.error('[SECURITY] Redis rate limit check failed on v1 underwriting:', err);
+      return sendJSON(res, { error: 'Service temporarily unavailable' }, 503);
+    }
+
+    const body = await parseBody(req);
+    const annualKwh = Number(body.annualKwh);
+    const systemSizeKw = Number(body.systemSizeKw);
+    const panelCount = Number(body.panelCount);
+    const panelWattage = Number(body.panelWattage) || 550;
+    const tariffRate = Number(body.tariffRate) || 7.5;
+
+    if (!(annualKwh > 0) || !(systemSizeKw > 0) || !(panelCount > 0)) {
+      return sendJSON(res, { error: 'annualKwh, systemSizeKw and panelCount are required and must be positive' }, 400);
+    }
+
+    const fin = computeFinancials({ annualKwh, systemSizeKw, panelCount, panelWattage, tariffRate });
+
+    // Viability grade from payback period and IRR (canonical engine outputs).
+    let grade = 'D';
+    if (fin.payback_years <= 5 && fin.irr >= 15) grade = 'A';
+    else if (fin.payback_years <= 7 && fin.irr >= 12) grade = 'B';
+    else if (fin.payback_years <= 10 && fin.irr >= 9) grade = 'C';
+
+    return sendJSON(res, {
+      grade,
+      financials: fin,
+      evaluatedAt: new Date().toISOString()
+    }, 200);
+  }
 
   // INSTALLER: GSTIN format verification
   if (pathname === '/api/installer/verify-gstin') {
@@ -1073,6 +1234,23 @@ async function handleRequest(req, res, next) {
   // 4. VERIFY PAYMENT
   if (pathname === '/api/payment/verify') {
     if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+
+    // Rate limit: 10 attempts per IP per minute (fail-closed if Redis unavailable)
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0] || req.socket?.remoteAddress || 'unknown';
+    const rateLimitKey = `payment:verify:${clientIp}`;
+    try {
+      const current = await redis.get(rateLimitKey);
+      const count = current ? parseInt(current, 10) : 0;
+      if (count >= 10) {
+        console.warn(`[SECURITY] Rate limit exceeded for payment verification from ${clientIp}`);
+        return sendJSON(res, { error: 'Too many attempts, please try again later' }, 429);
+      }
+      await redis.set(rateLimitKey, count + 1, { ex: 60 });
+    } catch (err) {
+      console.error('[SECURITY] Redis rate limit check failed, blocking payment verification:', err);
+      return sendJSON(res, { error: 'Service temporarily unavailable' }, 503);
+    }
+
     const body = await parseBody(req);
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, scanId } = body;
 
@@ -1139,6 +1317,23 @@ async function handleRequest(req, res, next) {
   // 5. RESTORE PAYMENT ACCESS
   if (pathname === '/api/payment/restore') {
     if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+
+    // Rate limit: 10 attempts per IP per minute (fail-closed if Redis unavailable)
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0] || req.socket?.remoteAddress || 'unknown';
+    const rateLimitKey = `payment:restore:${clientIp}`;
+    try {
+      const current = await redis.get(rateLimitKey);
+      const count = current ? parseInt(current, 10) : 0;
+      if (count >= 10) {
+        console.warn(`[SECURITY] Rate limit exceeded for payment restore from ${clientIp}`);
+        return sendJSON(res, { error: 'Too many attempts, please try again later' }, 429);
+      }
+      await redis.set(rateLimitKey, count + 1, { ex: 60 });
+    } catch (err) {
+      console.error('[SECURITY] Redis rate limit check failed, blocking payment restore:', err);
+      return sendJSON(res, { error: 'Service temporarily unavailable' }, 503);
+    }
+
     const body = await parseBody(req);
     const paymentId = body.paymentId;
 
@@ -1152,7 +1347,14 @@ async function handleRequest(req, res, next) {
     let isCaptured = false;
     let scanId = 'default';
 
+    // Gate mock payments behind ALLOW_MOCK_PAYMENTS (NEVER in production)
+    const mockPaymentAllowed = !IS_PRODUCTION && process.env.ALLOW_MOCK_PAYMENTS === 'true';
+
     if (paymentId.startsWith('pay_mock_')) {
+      if (!mockPaymentAllowed) {
+        console.error('[SECURITY] Mock payment restore blocked in production');
+        return sendJSON(res, { error: 'Mock payments not allowed' }, 403);
+      }
       isCaptured = true;
     } else if (keyId && keySecret && keySecret !== 'your_razorpay_secret_here') {
       try {
@@ -1225,7 +1427,9 @@ async function handleRequest(req, res, next) {
   // LEADS: installer views open leads in their city, enriched with scan data
   if (pathname === '/api/installer/leads/available') {
     if (req.method !== 'GET') return sendJSON(res, { error: 'Method not allowed' }, 405);
-    const installer = await getInstallerByUserId(parsedUrl.searchParams.get('installerUserId'));
+    const auth = authenticateInstaller(req, parsedUrl.searchParams.get('installerUserId'));
+    if (auth.error) return sendJSON(res, { error: auth.error }, auth.status);
+    const installer = await getInstallerByUserId(auth.userId);
     if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
     const openLeads = await sbSelect('lead_requests', { status: 'open' });
     const leads = [];
@@ -1242,7 +1446,9 @@ async function handleRequest(req, res, next) {
   if (pathname === '/api/installer/leads/purchase') {
     if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
     const body = await parseBody(req);
-    const installer = await getInstallerByUserId(body.installerUserId);
+    const auth = authenticateInstaller(req, body.installerUserId);
+    if (auth.error) return sendJSON(res, { error: auth.error }, auth.status);
+    const installer = await getInstallerByUserId(auth.userId);
     if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
     const lead = (await sbSelect('lead_requests', { id: body.leadRequestId }))[0];
     if (!lead) return sendJSON(res, { error: 'Lead not found' }, 404);
@@ -1266,7 +1472,9 @@ async function handleRequest(req, res, next) {
   // LEADS: installer views leads they purchased (RLS — only their own)
   if (pathname === '/api/installer/leads/purchased') {
     if (req.method !== 'GET') return sendJSON(res, { error: 'Method not allowed' }, 405);
-    const installer = await getInstallerByUserId(parsedUrl.searchParams.get('installerUserId'));
+    const auth = authenticateInstaller(req, parsedUrl.searchParams.get('installerUserId'));
+    if (auth.error) return sendJSON(res, { error: auth.error }, auth.status);
+    const installer = await getInstallerByUserId(auth.userId);
     if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
     const assignments = await sbSelect('lead_assignments', { installer_id: installer.id });
     const ownedLeadIds = new Set(assignments.map((a) => a.lead_request_id));
@@ -1289,7 +1497,9 @@ async function handleRequest(req, res, next) {
   if (pathname === '/api/installer/leads/update-assignment') {
     if (req.method !== 'PATCH') return sendJSON(res, { error: 'Method not allowed' }, 405);
     const body = await parseBody(req);
-    const installer = await getInstallerByUserId(body.installerUserId);
+    const auth = authenticateInstaller(req, body.installerUserId);
+    if (auth.error) return sendJSON(res, { error: auth.error }, auth.status);
+    const installer = await getInstallerByUserId(auth.userId);
     if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
     const assignment = (await sbSelect('lead_assignments', { id: body.assignmentId }))[0];
     if (!assignment) return sendJSON(res, { error: 'Assignment not found' }, 404);
@@ -1309,7 +1519,7 @@ async function handleRequest(req, res, next) {
     return sendJSON(res, { success: true }, 200);
   }
 
-  // INSTALLER: self-serve signup (creates profile + installer_profile)
+  // INSTALLER: self-serve signup (creates profile + installer_profile + session token)
   if (pathname === '/api/installer/signup') {
     if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
     const body = await parseBody(req);
@@ -1330,19 +1540,22 @@ async function handleRequest(req, res, next) {
       trial_scans_remaining: 10,
       white_label: false,
     });
-    return sendJSON(res, { success: true, profileId }, 200);
+    const sessionToken = issueSessionToken(profileId);
+    return sendJSON(res, { success: true, profileId, token: sessionToken }, 200);
   }
 
   // INSTALLER: update white-label branding (logo / custom domain)
   if (pathname === '/api/installer/branding/update') {
     if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
     const body = await parseBody(req);
-    const installer = await getInstallerByUserId(body.installerUserId);
+    const auth = authenticateInstaller(req, body.installerUserId);
+    if (auth.error) return sendJSON(res, { error: auth.error }, auth.status);
+    const installer = await getInstallerByUserId(auth.userId);
     if (!installer) return sendJSON(res, { error: 'Installer not found' }, 404);
     const updates = {};
     if (body.customLogoUrl !== undefined) updates.custom_logo_url = body.customLogoUrl;
     if (body.customDomain !== undefined) updates.custom_domain = body.customDomain;
-    await supabase.from('installer_profiles').update(updates).eq('user_id', body.installerUserId);
+    await supabase.from('installer_profiles').update(updates).eq('user_id', auth.userId);
     return sendJSON(res, { success: true }, 200);
   }
 
@@ -1962,7 +2175,7 @@ async function handleRequest(req, res, next) {
   sendJSON(res, { error: 'Not found' }, 404);
 }
 
-module.exports = { handleRequest, supabase, rankInstallersByWeight, validateGstinFormat, WHITE_LABEL_CNAME_TARGET };
+module.exports = { handleRequest, supabase, rankInstallersByWeight, validateGstinFormat, WHITE_LABEL_CNAME_TARGET, issueSessionToken, verifySessionToken, hashApiKey };
 
 if (require.main === module) {
   const server = http.createServer((req, res) => handleRequest(req, res));
