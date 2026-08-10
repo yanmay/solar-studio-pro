@@ -19,6 +19,7 @@ export interface SolarModel {
   cumulativeCashFlow: number[];
   npv: number;
   irr: number;
+  irrFound: boolean;
   paybackPeriod: number;
   breakEvenYr: number;
   breakEvenFound: boolean;
@@ -41,6 +42,8 @@ export interface ReportMetrics {
   installedKw: number;
   /** Internal rate of return (%). */
   irrPct: number;
+  /** Whether IRR was solvable (search bracketed a root). False ⇒ show N/A, not 0%. */
+  irrFound: boolean;
   /** Levelised cost of energy (₹/kWh). */
   lcoeInrPerKwh: number;
   /** Undiscounted 25-yr cumulative cash position (for the chart). */
@@ -71,6 +74,7 @@ export function deriveMetrics(model: SolarModel): ReportMetrics {
     netCostInr: model.netCostInr,
     installedKw: model.installedKw,
     irrPct: model.irr,
+    irrFound: model.irrFound,
     lcoeInrPerKwh: model.lcoe,
     cumulativeCashFlow: model.cumulativeCashFlow,
   };

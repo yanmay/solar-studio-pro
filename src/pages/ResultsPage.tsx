@@ -89,31 +89,6 @@ import { deriveMetrics } from "@/lib/report-metrics";
 import { formatINR } from "@/lib/format-currency";
 import { REPORT_TOKENS } from "@/lib/report-tokens";
 
-// ─── Color tokens from code.html ─────────────────────────────
-// ─── Institutional Design Tokens ─────────────────────────────
-const C = {
-  // Surfaces — refined dark, softer steps
-  background:          "#0A0A0C",
-  charcoal:            "#131316",
-  surfaceVariant:      "#1A1A1F",
-  surfaceContainerHigh:"#232329",
-  // Borders — cleaner hairlines
-  outlineVariant:      "rgba(255, 255, 255, 0.08)",
-  outline:             "rgba(255, 255, 255, 0.16)",
-  // Text
-  onSurface:           "#F5F5F7",
-  onSurfaceVariant:    "#C8C8CE",
-  mutedSand:           "#86868B",
-  // Accents
-  primary:             "#FF6B00",   // Solar Orange (brand)
-  primaryContainer:    "#E05E00",
-  secondary:           "#30D158",   // green — positive values
-  error:               "#FF453A",   // red — negative / warning
-  // Text on accent surfaces
-  onPrimary:           "#000000",
-  onSecondary:         "#00160A",
-};
-
 interface FullResult extends SolarAnalysis {
   location?: { lat: number; lng: number; label: string };
   panelCount?: number;
@@ -201,9 +176,10 @@ function computeModel({ peakSunHours, pCount, pType, tariff, escalation, discoun
     cum += net; cumulativeCashFlow.push(cum);
   }
   const npv = cashFlows.reduce((s, v, i) => s + v / Math.pow(1 + discountRate / 100, i), 0);
-  let irr = 0, low = -0.5, high = 2.0;
+  let irr = 0, low = -0.5, high = 2.0, irrFound = false;
   const calcNpv = (r: number) => cashFlows.reduce((s, v, i) => s + v / Math.pow(1 + r, i), 0);
   if (calcNpv(low) > 0 && calcNpv(high) < 0) {
+    irrFound = true;
     for (let i = 0; i < 30; i++) {
       const mid = (low + high) / 2;
       calcNpv(mid) > 0 ? low = mid : high = mid;
@@ -226,7 +202,7 @@ function computeModel({ peakSunHours, pCount, pType, tariff, escalation, discoun
   }
   const lcoe = dep > 0 ? dlc / dep : 0;
   return { installedKw, baseAnnualKwh, grossCost, totalGrossCapEx, subsidyInr, netCostInr,
-    cashFlows, cumulativeCashFlow, yearlySavings, yearlyOm, irr: irr * 100, npv, paybackPeriod, breakEvenYr, lcoe, breakEvenFound, shadingLoss };
+    cashFlows, cumulativeCashFlow, yearlySavings, yearlyOm, irr: irr * 100, irrFound, npv, paybackPeriod, breakEvenYr, lcoe, breakEvenFound, shadingLoss };
 }
 
 // ─── Lead form ───────────────────────────────────────────────
@@ -250,32 +226,32 @@ function InstallerLeadForm({ data }: { data: FullResult }) {
     } finally { setSubmitting(false); }
   };
   if (success) return (
-    <div style={{ background: `${C.secondary}10`, border: `1px solid ${C.secondary}40` }} className="p-6 text-center space-y-3">
-      <CheckCircle2 className="w-8 h-8 mx-auto" style={{ color: C.secondary }} />
-      <p className="text-xs font-bold" style={{ color: C.onSurface }}>Partner Quote Requested</p>
-      <p className="text-xs" style={{ color: C.mutedSand }}>Certified installers in your region will contact you shortly.</p>
+    <div style={{ background: `${REPORT_TOKENS.yield}10`, border: `1px solid ${REPORT_TOKENS.yield}40` }} className="p-6 text-center space-y-3">
+      <CheckCircle2 className="w-8 h-8 mx-auto" style={{ color: REPORT_TOKENS.yield }} />
+      <p className="text-xs font-bold" style={{ color: REPORT_TOKENS.text }}>Partner Quote Requested</p>
+      <p className="text-xs" style={{ color: REPORT_TOKENS.muted }}>Certified installers in your region will contact you shortly.</p>
     </div>
   );
   return (
-    <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 rounded-xl">
-      <h3 style={{ color: C.onSurface, borderBottom: `1px solid ${C.outlineVariant}`, paddingBottom: "8px", marginBottom: "12px" }}
+    <div style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-4 rounded-xl">
+      <h3 style={{ color: REPORT_TOKENS.text, borderBottom: `1px solid ${REPORT_TOKENS.graticule}`, paddingBottom: "8px", marginBottom: "12px" }}
         className="text-xs font-bold uppercase tracking-wider font-mono">Request Partner Quotes</h3>
-      <p className="text-xs mb-4" style={{ color: C.mutedSand }}>Get direct quotes from MNRE-certified partners near you.</p>
+      <p className="text-xs mb-4" style={{ color: REPORT_TOKENS.muted }}>Get direct quotes from MNRE-certified partners near you.</p>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
         {[
           { field: "phone", label: "Mobile Number", placeholder: "e.g. 9876543210" },
           { field: "city",  label: "City",          placeholder: "e.g. Mumbai"     },
         ].map(({ field, label, placeholder }) => (
           <div key={field}>
-            <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: C.mutedSand }}>{label}</label>
+            <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: REPORT_TOKENS.muted }}>{label}</label>
             <input {...register(field as any)} type={field === "phone" ? "tel" : "text"} placeholder={placeholder}
-              style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+              style={{ background: REPORT_TOKENS.ink, border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }}
               className="w-full px-3 py-2 text-xs focus:outline-none font-mono" />
-            {(errors as any)[field] && <span className="text-[10px] block mt-0.5" style={{ color: C.error }}>{(errors as any)[field].message}</span>}
+            {(errors as any)[field] && <span className="text-[10px] block mt-0.5" style={{ color: REPORT_TOKENS.cost }}>{(errors as any)[field].message}</span>}
           </div>
         ))}
         <button type="submit" disabled={submitting}
-          style={{ background: C.secondary, color: C.onSecondary }}
+          style={{ background: REPORT_TOKENS.yield, color: REPORT_TOKENS.onAccent }}
           className="w-full py-2.5 text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer font-mono">
           {submitting ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Submitting...</> : "Submit Request"}
         </button>
@@ -290,9 +266,9 @@ function DataList({ rows }: { rows: { label: string; value: string }[] }) {
     <ul className="flex flex-col gap-2 text-xs font-mono">
       {rows.map((r, i) => (
         <li key={i} className="flex justify-between"
-          style={{ borderBottom: i < rows.length - 1 ? `1px solid ${C.outlineVariant}40` : "none", paddingBottom: i < rows.length - 1 ? "6px" : "0" }}>
-          <span style={{ color: C.mutedSand }}>{r.label}</span>
-          <span style={{ color: C.onSurface }}>{r.value}</span>
+          style={{ borderBottom: i < rows.length - 1 ? `1px solid ${REPORT_TOKENS.graticule}40` : "none", paddingBottom: i < rows.length - 1 ? "6px" : "0" }}>
+          <span style={{ color: REPORT_TOKENS.muted }}>{r.label}</span>
+          <span style={{ color: REPORT_TOKENS.text }}>{r.value}</span>
         </li>
       ))}
     </ul>
@@ -302,9 +278,9 @@ function DataList({ rows }: { rows: { label: string; value: string }[] }) {
 // ─── Sidebar card shell ──────────────────────────────────────
 function SideCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 sp-card rounded-xl">
+    <div style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-4 sp-card rounded-xl">
       <h3 className="text-xs font-bold uppercase tracking-wider mb-3 font-mono"
-        style={{ color: C.onSurface, borderBottom: `1px solid ${C.outlineVariant}`, paddingBottom: "8px" }}>{title}</h3>
+        style={{ color: REPORT_TOKENS.text, borderBottom: `1px solid ${REPORT_TOKENS.graticule}`, paddingBottom: "8px" }}>{title}</h3>
       {children}
     </div>
   );
@@ -990,21 +966,21 @@ const ResultsPage = () => {
   };
 
   if (noData) return (
-    <div style={{ background: C.background }} className="min-h-screen flex items-center justify-center px-4">
-      <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="text-center max-w-md p-8 rounded-3xl sp-fade-up">
-        <MapPin className="w-12 h-12 mx-auto mb-4" style={{ color: C.primary }} />
-        <h1 style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif", letterSpacing: "-0.02em", color: C.onSurface }} className="text-2xl font-semibold mb-2">No Analysis Found</h1>
-        <p style={{ color: C.mutedSand }} className="text-sm mb-6">Draw your rooftop on the map first to generate a solar potential analysis report.</p>
-        <button onClick={() => navigate("/map")} style={{ background: C.primaryContainer, color: C.onPrimary }} className="px-6 py-2.5 text-xs font-bold uppercase tracking-wider rounded-xl cursor-pointer">Go to Map →</button>
+    <div style={{ background: REPORT_TOKENS.ink }} className="min-h-screen flex items-center justify-center px-4">
+      <div style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="text-center max-w-md p-8 rounded-3xl sp-fade-up">
+        <MapPin className="w-12 h-12 mx-auto mb-4" style={{ color: REPORT_TOKENS.solar }} />
+        <h1 style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif", letterSpacing: "-0.02em", color: REPORT_TOKENS.text }} className="text-2xl font-semibold mb-2">No Analysis Found</h1>
+        <p style={{ color: REPORT_TOKENS.muted }} className="text-sm mb-6">Draw your rooftop on the map first to generate a solar potential analysis report.</p>
+        <button onClick={() => navigate("/map")} style={{ background: REPORT_TOKENS.solarDim, color: REPORT_TOKENS.onAccent }} className="px-6 py-2.5 text-xs font-bold uppercase tracking-wider rounded-xl cursor-pointer">Go to Map →</button>
       </div>
     </div>
   );
 
   if (loading) return (
-    <div style={{ background: C.background }} className="min-h-screen flex items-center justify-center">
+    <div style={{ background: REPORT_TOKENS.ink }} className="min-h-screen flex items-center justify-center">
       <div className="flex flex-col items-center gap-4">
-        <div style={{ border: `2px solid ${C.outlineVariant}`, borderTopColor: C.secondary }} className="w-8 h-8 rounded-full sp-spin" />
-        <span style={{ color: C.mutedSand }} className="text-xs font-mono uppercase tracking-widest">Loading Report...</span>
+        <div style={{ border: `2px solid ${REPORT_TOKENS.graticule}`, borderTopColor: REPORT_TOKENS.yield }} className="w-8 h-8 rounded-full sp-spin" />
+        <span style={{ color: REPORT_TOKENS.muted }} className="text-xs font-mono uppercase tracking-widest">Loading Report...</span>
       </div>
     </div>
   );
@@ -1039,12 +1015,12 @@ const ResultsPage = () => {
 
   if (rawConfidence >= 0.85) {
     badgeText = `High Confidence · ${confidenceScore}%`;
-    badgeColor = C.secondary; // #41e1b4
-    badgeBg = `${C.secondary}15`;
+    badgeColor = REPORT_TOKENS.yield; // #41e1b4
+    badgeBg = `${REPORT_TOKENS.yield}15`;
   } else if (rawConfidence >= 0.65) {
     badgeText = `Medium Confidence · ${confidenceScore}%`;
-    badgeColor = C.primary; // #ffb87b
-    badgeBg = `${C.primary}15`;
+    badgeColor = REPORT_TOKENS.solar; // #ffb87b
+    badgeBg = `${REPORT_TOKENS.solar}15`;
   }
 
   let footprintText = "Manual trace";
@@ -1180,7 +1156,7 @@ const ResultsPage = () => {
 
         /* ── Navigation ── */
         .sp-nav {
-          background: ${C.background}f4;
+          background: ${REPORT_TOKENS.ink}f4;
           backdrop-filter: blur(16px);
           -webkit-backdrop-filter: blur(16px);
         }
@@ -1192,17 +1168,17 @@ const ResultsPage = () => {
           transition: border-color .25s cubic-bezier(.25,.1,.25,1), transform .25s cubic-bezier(.25,.1,.25,1), box-shadow .25s cubic-bezier(.25,.1,.25,1);
         }
         .sp-card:hover {
-          border-color: ${C.outline} !important;
+          border-color: ${REPORT_TOKENS.graticuleStrong} !important;
           transform: translateY(-2px);
           box-shadow: 0 2px 4px rgba(0,0,0,0.35), 0 16px 44px rgba(0,0,0,0.4);
         }
-        .sp-row:hover td { background: ${C.surfaceVariant} !important; }
+        .sp-row:hover td { background: ${REPORT_TOKENS.parcelHigh} !important; }
 
         /* ── Module toggle buttons ── */
         .sp-toggle {
-          border: 1px solid ${C.outlineVariant};
+          border: 1px solid ${REPORT_TOKENS.graticule};
           background: transparent;
-          color: ${C.mutedSand};
+          color: ${REPORT_TOKENS.muted};
           font-size: 10px;
           font-weight: 600;
           text-transform: uppercase;
@@ -1214,21 +1190,21 @@ const ResultsPage = () => {
           border-radius: 999px;
         }
         .sp-toggle.on {
-          background: ${C.primaryContainer}18;
-          border-color: ${C.primary}60;
-          color: ${C.primary};
+          background: ${REPORT_TOKENS.solarDim}18;
+          border-color: ${REPORT_TOKENS.solar}60;
+          color: ${REPORT_TOKENS.solar};
         }
         .sp-toggle:hover:not(.on) {
-          background: ${C.surfaceVariant};
-          border-color: ${C.outline};
-          color: ${C.onSurface};
+          background: ${REPORT_TOKENS.parcelHigh};
+          border-color: ${REPORT_TOKENS.graticuleStrong};
+          color: ${REPORT_TOKENS.text};
         }
 
         /* ── Chart tab buttons ── */
         .sp-tab {
           background: transparent;
           border: none;
-          color: ${C.mutedSand};
+          color: ${REPORT_TOKENS.muted};
           font-size: 9px;
           font-weight: 600;
           text-transform: uppercase;
@@ -1239,13 +1215,13 @@ const ResultsPage = () => {
           font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
           border-radius: 999px;
         }
-        .sp-tab.on { background: ${C.primary}; color: ${C.onPrimary}; }
-        .sp-tab:hover:not(.on) { color: ${C.onSurface}; }
+        .sp-tab.on { background: ${REPORT_TOKENS.solar}; color: ${REPORT_TOKENS.onAccent}; }
+        .sp-tab:hover:not(.on) { color: ${REPORT_TOKENS.text}; }
 
         /* ── Tooltip ── */
         .sp-tip {
-          background: ${C.surfaceContainerHigh};
-          border: 1px solid ${C.outlineVariant};
+          background: ${REPORT_TOKENS.parcelHigh};
+          border: 1px solid ${REPORT_TOKENS.graticule};
           padding: 8px 12px;
           font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
           font-size: 10px;
@@ -1275,7 +1251,7 @@ const ResultsPage = () => {
           font-weight: 600;
           letter-spacing: .1em;
           text-transform: uppercase;
-          color: ${C.mutedSand};
+          color: ${REPORT_TOKENS.muted};
         }
 
         /* ── Metric value (large number) ── */
@@ -1286,7 +1262,7 @@ const ResultsPage = () => {
           letter-spacing: -0.02em;
           line-height: 1.05;
           font-variant-numeric: tabular-nums;
-          color: ${C.onSurface};
+          color: ${REPORT_TOKENS.text};
         }
 
         /* ── Table ── */
@@ -1296,9 +1272,9 @@ const ResultsPage = () => {
           font-weight: 600;
           text-transform: uppercase;
           letter-spacing: .08em;
-          color: ${C.mutedSand};
+          color: ${REPORT_TOKENS.muted};
           padding: 10px 12px;
-          background: ${C.surfaceVariant};
+          background: ${REPORT_TOKENS.parcelHigh};
           text-align: right;
         }
         .sp-table-header th:first-child { text-align: left; }
@@ -1308,11 +1284,11 @@ const ResultsPage = () => {
           font-variant-numeric: tabular-nums;
           padding: 8px 12px;
           text-align: right;
-          border-bottom: 1px solid ${C.outlineVariant}50;
+          border-bottom: 1px solid ${REPORT_TOKENS.graticule}50;
         }
-        .sp-table-body td:first-child { text-align: left; color: ${C.mutedSand}; font-size: 10px; }
-        .sp-table-body tr:nth-child(even) td { background: ${C.surfaceVariant}30; }
-        .sp-table-body tr:hover td { background: ${C.surfaceVariant} !important; }
+        .sp-table-body td:first-child { text-align: left; color: ${REPORT_TOKENS.muted}; font-size: 10px; }
+        .sp-table-body tr:nth-child(even) td { background: ${REPORT_TOKENS.parcelHigh}30; }
+        .sp-table-body tr:hover td { background: ${REPORT_TOKENS.parcelHigh} !important; }
 
         /* ── Print / PDF optimisation ── */
         @media print {
@@ -1324,48 +1300,48 @@ const ResultsPage = () => {
         }
       `}</style>
 
-      <div className="sp-page min-h-screen" style={{ background: C.background, color: C.onSurface }}>
+      <div className="sp-page min-h-screen" style={{ background: REPORT_TOKENS.ink, color: REPORT_TOKENS.text }}>
 
         {/* ── Header ──────────────────────────────────────────── */}
-        <header className="sp-nav sticky top-0 z-50" style={{ borderBottom: `1px solid ${C.outlineVariant}` }}>
+        <header className="sp-nav sticky top-0 z-50" style={{ borderBottom: `1px solid ${REPORT_TOKENS.graticule}` }}>
           <div className="flex justify-between items-center px-4 md:px-16 py-3 mx-auto max-w-[1280px]">
             <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} className="flex items-center gap-2 group cursor-pointer">
               <img src="/logo.png" alt="SUNPOWER LINK Logo" className="w-10 h-10 object-contain transition-all duration-300 group-hover:scale-105" />
-              <div style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif", color: C.onSurface, fontSize: "19px", fontWeight: 600, letterSpacing: "-0.02em" }}>
-                SUNPOWER <span style={{ color: C.primary }}>LINK</span>
+              <div style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif", color: REPORT_TOKENS.text, fontSize: "19px", fontWeight: 600, letterSpacing: "-0.02em" }}>
+                SUNPOWER <span style={{ color: REPORT_TOKENS.solar }}>LINK</span>
               </div>
             </a>
             <nav className="hidden md:flex gap-6 items-center">
-              <a style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/")}>Home</a>
-              <a style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/market-insights")}>Market Insights</a>
-              <a style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/policy-tracker")}>Policy Tracker</a>
+              <a style={{ color: REPORT_TOKENS.muted }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/")}>Home</a>
+              <a style={{ color: REPORT_TOKENS.muted }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/market-insights")}>Market Insights</a>
+              <a style={{ color: REPORT_TOKENS.muted }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/policy-tracker")}>Policy Tracker</a>
               {user ? (
                 <>
-                  <a style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/my-scans")}>My Scans</a>
-                  <a style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/settings")}>Settings</a>
-                  <a style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-red-400 transition-colors cursor-pointer" onClick={signOut}>Sign Out</a>
+                  <a style={{ color: REPORT_TOKENS.muted }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/my-scans")}>My Scans</a>
+                  <a style={{ color: REPORT_TOKENS.muted }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/settings")}>Settings</a>
+                  <a style={{ color: REPORT_TOKENS.muted }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-red-400 transition-colors cursor-pointer" onClick={signOut}>Sign Out</a>
                 </>
               ) : (
-                <a style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/auth/signin")}>Sign In</a>
+                <a style={{ color: REPORT_TOKENS.muted }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/auth/signin")}>Sign In</a>
               )}
             </nav>
             <div className="flex items-center gap-2 md:gap-3">
               <button onClick={() => navigate("/map")}
                 aria-label="Go back to map"
-                style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+                style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-lg">
                 <ArrowLeft className="w-3 h-3" /> Back
               </button>
               {unlocked && (
                 <>
                   <button onClick={handleDownload} disabled={downloading}
-                    style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+                    style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }}
                     className="hidden md:flex items-center gap-1.5 px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity disabled:opacity-40 cursor-pointer rounded-lg">
                     {downloading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
                     {downloading ? "Generating..." : "Download PDF"}
                   </button>
                   <button onClick={() => setShareModalOpen(true)}
-                    style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+                    style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }}
                     className="hidden md:flex items-center gap-1.5 px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-lg">
                     <span>📱</span> Share on WhatsApp
                   </button>
@@ -1378,7 +1354,7 @@ const ResultsPage = () => {
         <main className="max-w-[1280px] mx-auto px-4 md:px-16 py-4 flex flex-col gap-8">
 
           {downloadError && (
-            <div style={{ background: `${C.error}10`, border: `1px solid ${C.error}30`, color: C.error }} className="p-3 text-xs flex items-center gap-2 sp-fade-up">
+            <div style={{ background: `${REPORT_TOKENS.cost}10`, border: `1px solid ${REPORT_TOKENS.cost}30`, color: REPORT_TOKENS.cost }} className="p-3 text-xs flex items-center gap-2 sp-fade-up">
               <AlertTriangle className="w-4 h-4 shrink-0" />
               <span>{downloadError}</span>
               <button onClick={handleDownload} className="ml-auto underline font-bold">Retry</button>
@@ -1386,7 +1362,7 @@ const ResultsPage = () => {
           )}
 
           {/* ── Section A: Document Header (Report Identity) ──────────────── */}
-          <section className="pb-4 sp-fade-up border-b" style={{ borderColor: C.outlineVariant }}>
+          <section className="pb-4 sp-fade-up border-b" style={{ borderColor: REPORT_TOKENS.graticule }}>
             <div className="flex flex-col md:flex-row justify-between items-baseline gap-2 mb-3">
               <div className="text-lg font-semibold tracking-wider sp-mono text-[#F0EEE9]">
                 SUNPOWER LINK
@@ -1397,7 +1373,7 @@ const ResultsPage = () => {
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t" style={{ borderColor: C.outlineVariant }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t" style={{ borderColor: REPORT_TOKENS.graticule }}>
               <div className="space-y-1">
                 <div className="text-[11px] sp-mono text-[#8A8A99]">
                   Site ID: <span className="text-[#F0EEE9] font-medium">{data.analysisId?.slice(-6).toUpperCase() ?? "DV3ZEF"}</span>
@@ -1521,7 +1497,7 @@ const ResultsPage = () => {
               <section className="py-4 px-6 sp-fade-up-1 grid grid-cols-3 gap-4 border rounded-[6px]" style={{ background: REPORT_TOKENS.parcel, borderColor: REPORT_TOKENS.graticule }}>
                 {[
                   { label: "Net Present Value", value: `${metrics.npvInr >= 0 ? "+" : "−"}${formatINR(Math.abs(metrics.npvInr))}`, color: metrics.npvInr >= 0 ? REPORT_TOKENS.yield : REPORT_TOKENS.cost },
-                  { label: "Internal Rate of Return", value: `${metrics.irrPct.toFixed(1)}%`, color: REPORT_TOKENS.text },
+                  { label: "Internal Rate of Return", value: metrics.irrFound ? `${metrics.irrPct.toFixed(1)}%` : "N/A", color: REPORT_TOKENS.text },
                   { label: "Levelised Cost of Energy", value: `₹${metrics.lcoeInrPerKwh.toFixed(2)}/kWh`, color: REPORT_TOKENS.text },
                 ].map((item, i) => (
                   <div key={i} className="flex flex-col justify-center">
@@ -1538,9 +1514,9 @@ const ResultsPage = () => {
                   (data.location.lat >= 8 && data.location.lat <= 38 && data.location.lng >= 68 && data.location.lng <= 98)
                 );
                 return (
-                  <section className="sp-fade-up-1 grid grid-cols-1 md:grid-cols-2 border-l border-r border-b" style={{ borderColor: C.outlineVariant }}>
+                  <section className="sp-fade-up-1 grid grid-cols-1 md:grid-cols-2 border-l border-r border-b" style={{ borderColor: REPORT_TOKENS.graticule }}>
                     {/* Wind Zone Classification Card */}
-                    <div className="p-5 border-r border-b md:border-b-0 flex flex-col justify-between h-36" style={{ borderColor: C.outlineVariant }}>
+                    <div className="p-5 border-r border-b md:border-b-0 flex flex-col justify-between h-36" style={{ borderColor: REPORT_TOKENS.graticule }}>
                       <div>
                         <div className="sp-section-label mb-1.5">Wind Zone Classification</div>
                         {isIndia ? (
@@ -1565,7 +1541,7 @@ const ResultsPage = () => {
                           {data.ws10m ? `Average Wind Speed (10m): ${data.ws10m.toFixed(2)} m/s` : "No wind data available"}
                         </div>
                         {isIndia && (
-                          <div className="text-xs font-semibold font-mono" style={{ color: C.primary }}>
+                          <div className="text-xs font-semibold font-mono" style={{ color: REPORT_TOKENS.solar }}>
                             Cost Adder: {data.windZone ? `₹${calcWindCostAdder(data.windZone?.zone).toLocaleString()}/kWp` : "₹0/kWp"}
                           </div>
                         )}
@@ -1573,10 +1549,10 @@ const ResultsPage = () => {
                     </div>
 
                     {/* Temperature Adjusted Card */}
-                    <div className="p-5 flex flex-col justify-between h-36" style={{ borderColor: C.outlineVariant }}>
+                    <div className="p-5 flex flex-col justify-between h-36" style={{ borderColor: REPORT_TOKENS.graticule }}>
                       <div>
                         <div className="sp-section-label mb-1.5">Temperature Adjusted Yield</div>
-                        <div className="sp-metric-value text-red-400" style={{ color: C.error }}>
+                        <div className="sp-metric-value text-red-400" style={{ color: REPORT_TOKENS.cost }}>
                           {data.tempDerate ? `-${Math.round((1 - data.tempDerate) * 100)}%` : "0%"} <span className="text-sm font-sans font-normal text-neutral-400">output loss</span>
                         </div>
                       </div>
@@ -1584,7 +1560,7 @@ const ResultsPage = () => {
                         <div className="text-[9px] sp-mono text-neutral-500 mb-0.5">
                           Cell temp: {data.t2m ? `${(data.t2m + 28).toFixed(1)}°C` : "N/A"} (ambient: {data.t2m ? `${data.t2m.toFixed(1)}°C` : "N/A"})
                         </div>
-                        <div className="text-xs font-semibold font-mono text-red-400" style={{ color: C.error }}>
+                        <div className="text-xs font-semibold font-mono text-red-400" style={{ color: REPORT_TOKENS.cost }}>
                           Temp Coefficient: -0.35% / °C above 25°C
                         </div>
                       </div>
@@ -1620,13 +1596,13 @@ const ResultsPage = () => {
                 if (isSystemSizeTooLarge) reasons.push("System size exceeds 10 kWp limit for standard PM-Surya Ghar scheme");
 
                 return (
-                  <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 sp-card rounded-[4px] sp-fade-up-1">
+                  <section style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-6 sp-card rounded-[4px] sp-fade-up-1">
                     <div className="flex justify-between items-start mb-4">
                       <div>
-                        <h3 style={{ color: C.onSurface }} className="text-xs font-bold uppercase tracking-wider font-mono">
+                        <h3 style={{ color: REPORT_TOKENS.text }} className="text-xs font-bold uppercase tracking-wider font-mono">
                           PM-Surya Ghar Subsidy Eligibility
                         </h3>
-                        <p style={{ color: C.mutedSand }} className="text-[11px] mt-1 font-sans">
+                        <p style={{ color: REPORT_TOKENS.muted }} className="text-[11px] mt-1 font-sans">
                           Verify your eligibility under the central government PM-Surya Ghar Muft Bijli Yojana rooftop solar scheme.
                         </p>
                       </div>
@@ -1654,7 +1630,7 @@ const ResultsPage = () => {
                             }}
                             className="w-3.5 h-3.5 rounded border-neutral-600 bg-neutral-900 text-[#E8A020] focus:ring-0 focus:ring-offset-0"
                           />
-                          <span style={{ color: C.onSurface }} className="text-xs font-mono">Residential Property (Domestic)</span>
+                          <span style={{ color: REPORT_TOKENS.text }} className="text-xs font-mono">Residential Property (Domestic)</span>
                         </label>
 
                         <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -1664,18 +1640,18 @@ const ResultsPage = () => {
                             onChange={(e) => setChecklistGridConnected(e.target.checked)}
                             className="w-3.5 h-3.5 rounded border-neutral-600 bg-neutral-900 text-[#E8A020] focus:ring-0 focus:ring-offset-0"
                           />
-                          <span style={{ color: C.onSurface }} className="text-xs font-mono">Grid-Connected System</span>
+                          <span style={{ color: REPORT_TOKENS.text }} className="text-xs font-mono">Grid-Connected System</span>
                         </label>
 
                         {/* State selector */}
                         <div className="flex flex-col gap-1.5">
-                          <label style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono">
+                          <label style={{ color: REPORT_TOKENS.muted }} className="text-[10px] font-bold uppercase tracking-wider font-mono">
                             Select State
                           </label>
                           <select
                             value={eligibilityState}
                             onChange={(e) => setEligibilityState(e.target.value)}
-                            style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+                            style={{ background: REPORT_TOKENS.ink, border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }}
                             className="px-2 py-1.5 rounded text-xs focus:outline-none font-mono w-full"
                           >
                             {INDIAN_STATES.map(s => (
@@ -1692,14 +1668,14 @@ const ResultsPage = () => {
                             readOnly
                             className="w-3.5 h-3.5 rounded border-neutral-600 bg-neutral-900 text-[#E8A020] focus:ring-0 focus:ring-offset-0 opacity-80 cursor-not-allowed"
                           />
-                          <span style={{ color: C.onSurface }} className="text-xs font-mono">
+                          <span style={{ color: REPORT_TOKENS.text }} className="text-xs font-mono">
                             System Size ({model.installedKw.toFixed(2)} kWp) ≤ 10 kWp
                           </span>
                         </div>
                       </div>
 
                       {/* Right: Subsidy Result Output */}
-                      <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 rounded-[4px] flex flex-col justify-between">
+                      <div style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-4 rounded-[4px] flex flex-col justify-between">
                         <div>
                           <div className="text-[10px] font-bold uppercase tracking-wider font-mono text-neutral-400">
                             Calculation Output
@@ -1707,7 +1683,7 @@ const ResultsPage = () => {
                           
                           {isEligibleForSubsidy ? (
                             <div className="mt-3">
-                              <div className="text-2xl font-bold font-mono text-emerald-400" style={{ color: C.secondary }}>
+                              <div className="text-2xl font-bold font-mono text-emerald-400" style={{ color: REPORT_TOKENS.yield }}>
                                 ₹{subsidyAmt.toLocaleString()}
                               </div>
                               <p className="text-[10px] text-neutral-400 font-sans mt-1">
@@ -1716,7 +1692,7 @@ const ResultsPage = () => {
                             </div>
                           ) : (
                             <div className="mt-3">
-                              <div className="text-xs font-bold text-red-400 uppercase font-mono" style={{ color: C.error }}>
+                              <div className="text-xs font-bold text-red-400 uppercase font-mono" style={{ color: REPORT_TOKENS.cost }}>
                                 Not Eligible
                               </div>
                               <ul className="text-[10px] text-neutral-400 list-disc pl-4 mt-2 space-y-1 font-mono">
@@ -1742,7 +1718,7 @@ const ResultsPage = () => {
                               });
                               toast({ title: "Application Form Pre-Filled", description: "Downloaded pre-filled PDF application form." });
                             }}
-                            style={{ background: C.secondary, color: C.onSecondary }}
+                            style={{ background: REPORT_TOKENS.yield, color: REPORT_TOKENS.onAccent }}
                             className="mt-4 w-full py-2.5 text-[10px] font-bold uppercase tracking-wider rounded-lg hover:opacity-90 transition-opacity font-mono cursor-pointer flex items-center justify-center gap-1.5 border-none"
                           >
                             <Download className="w-3.5 h-3.5" />
@@ -1760,45 +1736,45 @@ const ResultsPage = () => {
                 const shareDetails = getReferralShareContent(referralState.referralCode, data?.location?.label || "my roof");
                 
                 return (
-                  <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 mt-4 sp-card rounded-[4px] sp-fade-up-1">
+                  <section style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-6 mt-4 sp-card rounded-[4px] sp-fade-up-1">
                     <div className="flex flex-col md:flex-row justify-between items-start gap-6">
                       
                       {/* Left: Share Details & Actions */}
                       <div className="flex-1 space-y-4 w-full">
                         <div>
-                          <h3 style={{ color: C.onSurface }} className="text-xs font-bold uppercase tracking-wider font-mono">
+                          <h3 style={{ color: REPORT_TOKENS.text }} className="text-xs font-bold uppercase tracking-wider font-mono">
                             Share Solar Potential & Earn
                           </h3>
-                          <p style={{ color: C.mutedSand }} className="text-[11px] mt-1 font-sans">
+                          <p style={{ color: REPORT_TOKENS.muted }} className="text-[11px] mt-1 font-sans">
                             Refer your friends or neighbours to SolarScan. You earn <span className="font-bold text-[#E8A020]">₹50 cashback</span> for every paid report they unlock, and they get <span className="font-bold text-emerald-400">₹20 off</span> their first scan.
                           </p>
                         </div>
 
                         {/* Stats indicator */}
                         <div className="grid grid-cols-3 gap-3">
-                          <div style={{ background: C.background, border: `1px solid ${C.outlineVariant}` }} className="p-2.5 rounded text-center">
-                            <span style={{ color: C.mutedSand }} className="text-[9px] font-bold block uppercase font-mono">My Code</span>
-                            <span style={{ color: C.primary }} className="text-xs font-bold font-mono block mt-0.5">{referralState.referralCode}</span>
+                          <div style={{ background: REPORT_TOKENS.ink, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-2.5 rounded text-center">
+                            <span style={{ color: REPORT_TOKENS.muted }} className="text-[9px] font-bold block uppercase font-mono">My Code</span>
+                            <span style={{ color: REPORT_TOKENS.solar }} className="text-xs font-bold font-mono block mt-0.5">{referralState.referralCode}</span>
                           </div>
-                          <div style={{ background: C.background, border: `1px solid ${C.outlineVariant}` }} className="p-2.5 rounded text-center">
-                            <span style={{ color: C.mutedSand }} className="text-[9px] font-bold block uppercase font-mono">Referred Scans</span>
-                            <span style={{ color: C.onSurface }} className="text-xs font-bold font-mono block mt-0.5">{referralState.referredScansCount}</span>
+                          <div style={{ background: REPORT_TOKENS.ink, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-2.5 rounded text-center">
+                            <span style={{ color: REPORT_TOKENS.muted }} className="text-[9px] font-bold block uppercase font-mono">Referred Scans</span>
+                            <span style={{ color: REPORT_TOKENS.text }} className="text-xs font-bold font-mono block mt-0.5">{referralState.referredScansCount}</span>
                           </div>
-                          <div style={{ background: C.background, border: `1px solid ${C.outlineVariant}` }} className="p-2.5 rounded text-center">
-                            <span style={{ color: C.mutedSand }} className="text-[9px] font-bold block uppercase font-mono">Cashback Earned</span>
-                            <span style={{ color: C.secondary }} className="text-xs font-bold font-mono block mt-0.5">₹{referralState.cashbackEarnedInr}</span>
+                          <div style={{ background: REPORT_TOKENS.ink, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-2.5 rounded text-center">
+                            <span style={{ color: REPORT_TOKENS.muted }} className="text-[9px] font-bold block uppercase font-mono">Cashback Earned</span>
+                            <span style={{ color: REPORT_TOKENS.yield }} className="text-xs font-bold font-mono block mt-0.5">₹{referralState.cashbackEarnedInr}</span>
                           </div>
                         </div>
 
                         {/* Referral Link & Copy */}
                         <div className="flex flex-col gap-1.5">
-                          <span style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono">My Referral Link</span>
+                          <span style={{ color: REPORT_TOKENS.muted }} className="text-[10px] font-bold uppercase tracking-wider font-mono">My Referral Link</span>
                           <div className="flex gap-2">
                             <input
                               type="text"
                               readOnly
                               value={shareDetails.referralLink}
-                              style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+                              style={{ background: REPORT_TOKENS.ink, border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }}
                               className="px-3 py-1.5 rounded text-xs focus:outline-none font-mono flex-1 min-w-0"
                             />
                             <button
@@ -1806,7 +1782,7 @@ const ResultsPage = () => {
                                 navigator.clipboard.writeText(shareDetails.referralLink);
                                 toast({ title: "Link Copied", description: "Referral URL copied to clipboard." });
                               }}
-                              style={{ border: `1px solid ${C.outlineVariant}`, color: C.onSurface, background: "transparent" }}
+                              style={{ border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text, background: "transparent" }}
                               className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg hover:bg-neutral-800 transition-colors cursor-pointer font-mono border"
                             >
                               Copy
@@ -1850,10 +1826,10 @@ const ResultsPage = () => {
                       </div>
 
                       {/* Right: Leaderboard */}
-                      <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 rounded-[4px] w-full md:w-80 shrink-0">
+                      <div style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-4 rounded-[4px] w-full md:w-80 shrink-0">
                         <div className="text-[10px] font-bold uppercase tracking-wider font-mono text-neutral-400 border-b border-neutral-800 pb-2 mb-2 flex justify-between">
                           <span>Leaderboard Standing</span>
-                          <span style={{ color: C.secondary }}>Monthly Prizes</span>
+                          <span style={{ color: REPORT_TOKENS.yield }}>Monthly Prizes</span>
                         </div>
                         <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                           {MONTHLY_LEADERBOARD.map((item) => (
@@ -1862,10 +1838,10 @@ const ResultsPage = () => {
                                 <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold ${item.rank <= 3 ? "bg-[#E8A020] text-black" : "bg-neutral-800 text-neutral-400"}`}>
                                   {item.rank}
                                 </span>
-                                <span style={{ color: C.onSurface }} className="truncate max-w-[90px]">{item.name}</span>
+                                <span style={{ color: REPORT_TOKENS.text }} className="truncate max-w-[90px]">{item.name}</span>
                               </div>
-                              <span style={{ color: C.mutedSand }}>{item.referrals} refs</span>
-                              <span style={{ color: C.secondary }} className="text-[8px] font-bold truncate max-w-[90px] text-right">{item.prize}</span>
+                              <span style={{ color: REPORT_TOKENS.muted }}>{item.referrals} refs</span>
+                              <span style={{ color: REPORT_TOKENS.yield }} className="text-[8px] font-bold truncate max-w-[90px] text-right">{item.prize}</span>
                             </div>
                           ))}
                         </div>
@@ -1879,8 +1855,8 @@ const ResultsPage = () => {
               {/* ── Section C: Suitability & Roof Grid ──────────────── */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sp-fade-up-2">
                 {/* Suitability Score Gauge */}
-                <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 flex flex-col items-center justify-center relative sp-card rounded-[4px]">
-                  <div className="absolute top-4 left-4 text-[9px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>Suitability Score</div>
+                <section style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-6 flex flex-col items-center justify-center relative sp-card rounded-[4px]">
+                  <div className="absolute top-4 left-4 text-[9px] font-bold uppercase tracking-wider font-mono" style={{ color: REPORT_TOKENS.muted }}>Suitability Score</div>
                   <div className="mt-4 flex items-center justify-center">
                     <Gauge
                       value={suitability}
@@ -1905,8 +1881,8 @@ const ResultsPage = () => {
                 </section>
 
                 {/* Factor Breakdown */}
-                <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 flex flex-col sp-card rounded-[4px] justify-between">
-                  <div className="text-[9px] font-bold uppercase tracking-wider font-mono mb-4" style={{ color: C.mutedSand }}>Factor Breakdown</div>
+                <section style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-6 flex flex-col sp-card rounded-[4px] justify-between">
+                  <div className="text-[9px] font-bold uppercase tracking-wider font-mono mb-4" style={{ color: REPORT_TOKENS.muted }}>Factor Breakdown</div>
                   <div className="flex flex-col gap-3.5 my-auto">
                     {[
                       { label: "Solar Orientation", pct: orientationScore },
@@ -1915,29 +1891,29 @@ const ResultsPage = () => {
                       { label: "Structural",         pct: structuralScore },
                     ].map((f) => (
                       <div key={f.label} className="flex items-center gap-3">
-                        <span className="text-[11px] font-mono shrink-0 text-left" style={{ color: C.mutedSand, width: 115 }}>{f.label}</span>
+                        <span className="text-[11px] font-mono shrink-0 text-left" style={{ color: REPORT_TOKENS.muted, width: 115 }}>{f.label}</span>
                         <div className="flex-1 h-1 bg-neutral-800 rounded-none overflow-hidden">
-                          <div style={{ width: `${f.pct}%`, background: C.secondary, height: "100%", transition: "width 1.2s cubic-bezier(.2,.8,.4,1)" }} />
+                          <div style={{ width: `${f.pct}%`, background: REPORT_TOKENS.yield, height: "100%", transition: "width 1.2s cubic-bezier(.2,.8,.4,1)" }} />
                         </div>
-                        <span className="text-[11px] font-mono tabular-nums w-8 text-right" style={{ color: C.secondary }}>{f.pct}%</span>
+                        <span className="text-[11px] font-mono tabular-nums w-8 text-right" style={{ color: REPORT_TOKENS.yield }}>{f.pct}%</span>
                       </div>
                     ))}
                   </div>
                 </section>
 
                 {/* Roof Utilization */}
-                <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 flex flex-col sp-card rounded-[4px] justify-between">
-                  <div className="text-[9px] font-bold uppercase tracking-wider font-mono mb-4" style={{ color: C.mutedSand }}>Roof Utilization</div>
+                <section style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-6 flex flex-col sp-card rounded-[4px] justify-between">
+                  <div className="text-[9px] font-bold uppercase tracking-wider font-mono mb-4" style={{ color: REPORT_TOKENS.muted }}>Roof Utilization</div>
                   <div className="flex flex-col gap-4 mt-auto">
                     <div className="w-full h-6 flex overflow-hidden rounded-none">
-                      <div style={{ background: C.secondary,       width: `${roofUsable}%`,  transition: "width 1.2s ease" }} />
-                      <div style={{ background: C.outline,         width: `${roofObst}%`,    transition: "width 1.2s ease .1s" }} />
-                      <div style={{ background: C.primary,         width: `${roofAccess}%`,  transition: "width 1.2s ease .2s" }} />
+                      <div style={{ background: REPORT_TOKENS.yield,       width: `${roofUsable}%`,  transition: "width 1.2s ease" }} />
+                      <div style={{ background: REPORT_TOKENS.graticuleStrong,         width: `${roofObst}%`,    transition: "width 1.2s ease .1s" }} />
+                      <div style={{ background: REPORT_TOKENS.solar,         width: `${roofAccess}%`,  transition: "width 1.2s ease .2s" }} />
                     </div>
-                    <div className="grid grid-cols-3 gap-1 text-[10px] font-mono" style={{ color: C.mutedSand }}>
-                      <div className="flex items-center gap-1"><div style={{ background: C.secondary,       width: 6, height: 6 }} className="rounded-none" /> {roofUsable}% Use</div>
-                      <div className="flex items-center gap-1"><div style={{ background: C.outline,         width: 6, height: 6 }} className="rounded-none" /> {roofObst}% Obs</div>
-                      <div className="flex items-center gap-1"><div style={{ background: C.primary,         width: 6, height: 6 }} className="rounded-none" /> {roofAccess}% Acc</div>
+                    <div className="grid grid-cols-3 gap-1 text-[10px] font-mono" style={{ color: REPORT_TOKENS.muted }}>
+                      <div className="flex items-center gap-1"><div style={{ background: REPORT_TOKENS.yield,       width: 6, height: 6 }} className="rounded-none" /> {roofUsable}% Use</div>
+                      <div className="flex items-center gap-1"><div style={{ background: REPORT_TOKENS.graticuleStrong,         width: 6, height: 6 }} className="rounded-none" /> {roofObst}% Obs</div>
+                      <div className="flex items-center gap-1"><div style={{ background: REPORT_TOKENS.solar,         width: 6, height: 6 }} className="rounded-none" /> {roofAccess}% Acc</div>
                     </div>
                   </div>
                 </section>
@@ -2006,11 +1982,11 @@ const ResultsPage = () => {
 
                   {/* ROI Tuning Console */}
                   <section>
-                    <div style={{ borderBottom: `1px solid ${C.outlineVariant}` }} className="flex justify-between items-baseline pb-2 mb-4">
+                    <div style={{ borderBottom: `1px solid ${REPORT_TOKENS.graticule}` }} className="flex justify-between items-baseline pb-2 mb-4">
                       <h2 className="sp-serif text-[#F0EEE9] text-lg font-bold">ROI Tuning Console</h2>
                       <span className="text-[10px] font-bold uppercase tracking-wider font-mono text-[#8A8A99]">Live Recalculation</span>
                     </div>
-                    <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 rounded-[4px]">
+                    <div style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-6 rounded-[4px]">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-2">
                         <SnappySlider values={[3,5,7.5,10,12,15]} defaultValue={7.5} value={tariff} min={3} max={15} step={0.5} onChange={setTariff} label="Electricity Tariff" prefix="₹" suffix=" / kWh" />
                         <SnappySlider values={[1,5,10,15,maxPanelsRef.current]} defaultValue={15} value={pCount} min={1} max={maxPanelsRef.current} step={1} onChange={setPCount} label="Active Panels" suffix={` / ${maxPanelsRef.current}`} />
@@ -2029,7 +2005,7 @@ const ResultsPage = () => {
                             <div className="text-[10px] font-bold uppercase tracking-wider mb-1.5 font-mono text-[#8A8A99]">BESS Storage</div>
                             <button onClick={() => setBatteryStorage(!batteryStorage)} className={cn("sp-toggle w-full flex items-center justify-between px-3 cursor-pointer", batteryStorage && "on")}>
                               <span>Hybrid Battery (+₹85k CapEx)</span>
-                              <span style={{ width: 10, height: 10, borderRadius: "50%", border: `2px solid ${batteryStorage ? C.primaryContainer : C.outlineVariant}`, background: batteryStorage ? C.primaryContainer : "transparent", display: "inline-block", transition: "all .15s" }} />
+                              <span style={{ width: 10, height: 10, borderRadius: "50%", border: `2px solid ${batteryStorage ? REPORT_TOKENS.solarDim : REPORT_TOKENS.graticule}`, background: batteryStorage ? REPORT_TOKENS.solarDim : "transparent", display: "inline-block", transition: "all .15s" }} />
                             </button>
                           </div>
                           <div>
@@ -2037,7 +2013,7 @@ const ResultsPage = () => {
                             <select
                               value={shading}
                               onChange={(e) => handleShadingChange(e.target.value as any)}
-                              style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+                              style={{ background: REPORT_TOKENS.ink, border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }}
                               className="w-full px-3 py-2 text-xs focus:outline-none font-mono cursor-pointer rounded-[4px]"
                             >
                               <option value="auto" className="bg-[#0E0E0F]">Auto-detected from nearby buildings</option>
@@ -2045,7 +2021,7 @@ const ResultsPage = () => {
                               <option value="partial" className="bg-[#0E0E0F]">Partial — moderate shade</option>
                               <option value="heavy" className="bg-[#0E0E0F]">Heavy — significant shade</option>
                             </select>
-                            <div className="text-xs font-bold font-mono mt-1.5" style={{ color: C.onSurface }}>
+                            <div className="text-xs font-bold font-mono mt-1.5" style={{ color: REPORT_TOKENS.text }}>
                               Shading Loss: {Math.round(model.shadingLoss * 100)}%
                             </div>
                             <div className="text-[10px] text-muted-foreground mt-0.5 font-mono">
@@ -2061,7 +2037,7 @@ const ResultsPage = () => {
 
                   {/* Solar Simulator */}
                   <section className="mb-8">
-                    <div style={{ borderBottom: `1px solid ${C.outlineVariant}` }} className="flex justify-between items-baseline pb-2 mb-4">
+                    <div style={{ borderBottom: `1px solid ${REPORT_TOKENS.graticule}` }} className="flex justify-between items-baseline pb-2 mb-4">
                       <h2 className="sp-serif text-[#F0EEE9] text-lg font-bold">Interactive Solar Simulator</h2>
                       <span className="text-[10px] font-bold uppercase tracking-wider font-mono text-[#8A8A99]">Simulate Cash Flow</span>
                     </div>
@@ -2070,41 +2046,41 @@ const ResultsPage = () => {
 
                   {/* Financial Forecasts charts */}
                   <section>
-                    <div style={{ borderBottom: `1px solid ${C.outlineVariant}` }} className="flex justify-between items-baseline pb-2 mb-4">
+                    <div style={{ borderBottom: `1px solid ${REPORT_TOKENS.graticule}` }} className="flex justify-between items-baseline pb-2 mb-4">
                       <h2 className="sp-serif text-[#F0EEE9] text-lg font-bold">Financial Forecasts</h2>
-                      <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="flex rounded-none overflow-hidden border">
+                      <div style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="flex rounded-none overflow-hidden border">
                         {[{ k: "roi", l: "Cumulative ROI" }, { k: "yield", l: "Degradation" }, { k: "monthly", l: "Climatology" }].map(t => (
                           <button key={t.k} onClick={() => setActiveTab(t.k as any)} className={cn("sp-tab", activeTab === t.k && "on")}>{t.l}</button>
                         ))}
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="h-64 p-4 rounded-[4px]">
+                      <div style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="h-64 p-4 rounded-[4px]">
                         {activeTab === "roi" ? (
                           <AreaChart data={roiData} xDataKey="year" margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                             <CartesianGrid />
                             <XAxis tickFormatter={v => Number(v)===0?"Yr 0":Number(v)%5===0?`Yr ${v}`:""} />
                             <YAxis tickFormatter={v => v>=100000?`₹${(v/100000).toFixed(0)}L`:v<=-100000?`-₹${(Math.abs(v)/100000).toFixed(0)}L`:`₹${(v/1000).toFixed(0)}k`} />
-                            <ReferenceLine y={0} stroke={C.outlineVariant} />
-                            {model.breakEvenFound && <ReferenceLine x={model.breakEvenYr} stroke={C.primary} />}
-                            <Area dataKey="cumulative" stroke={C.secondary} fill={C.secondary} fillOpacity={0.12} strokeWidth={2} />
-                            <ChartTooltip dataKeys={["cumulative"]} colors={[C.secondary]} formatter={(v, _k) => [`₹${Math.abs(Number(v)).toLocaleString()}`, Number(v) >= 0 ? "Cumulative ROI" : "Net Investment"]} />
+                            <ReferenceLine y={0} stroke={REPORT_TOKENS.graticule} />
+                            {model.breakEvenFound && <ReferenceLine x={model.breakEvenYr} stroke={REPORT_TOKENS.solar} />}
+                            <Area dataKey="cumulative" stroke={REPORT_TOKENS.yield} fill={REPORT_TOKENS.yield} fillOpacity={0.12} strokeWidth={2} />
+                            <ChartTooltip dataKeys={["cumulative"]} colors={[REPORT_TOKENS.yield]} formatter={(v, _k) => [`₹${Math.abs(Number(v)).toLocaleString()}`, Number(v) >= 0 ? "Cumulative ROI" : "Net Investment"]} />
                           </AreaChart>
                         ) : activeTab === "yield" ? (
                           <ComposedChart data={yieldData} xDataKey="year" margin={{ top: 10, right: -10, left: -20, bottom: 0 }}>
                             <CartesianGrid />
                             <XAxis tickFormatter={(v, _i) => Number(v)%5===0?v:""} />
                             <YAxis tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
-                            <Bar dataKey="production" fill={C.secondary} opacity={0.35} radius={[2, 2, 0, 0]} />
-                            <Line dataKey="efficiency" stroke={C.primary} strokeWidth={2} dot={false} />
+                            <Bar dataKey="production" fill={REPORT_TOKENS.yield} opacity={0.35} radius={[2, 2, 0, 0]} />
+                            <Line dataKey="efficiency" stroke={REPORT_TOKENS.solar} strokeWidth={2} dot={false} />
                           </ComposedChart>
                         ) : (
                           <ComposedChart data={monthlyData} xDataKey="label" margin={{ top: 10, right: -10, left: -20, bottom: 0 }}>
                             <CartesianGrid />
                             <XAxis />
                             <YAxis />
-                            <Bar dataKey="generation" fill={C.secondary} opacity={0.4} radius={[2, 2, 0, 0]} />
-                            <Line dataKey="psh" stroke={C.primary} strokeWidth={1.5} dot={false} />
+                            <Bar dataKey="generation" fill={REPORT_TOKENS.yield} opacity={0.4} radius={[2, 2, 0, 0]} />
+                            <Line dataKey="psh" stroke={REPORT_TOKENS.solar} strokeWidth={1.5} dot={false} />
                           </ComposedChart>
                         )}
                       </div>
@@ -2140,29 +2116,29 @@ const ResultsPage = () => {
                         const breakEvenYr = model.breakEvenYr;
 
                         return (
-                          <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-5 flex flex-col sp-card rounded-[4px]">
+                          <div style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-5 flex flex-col sp-card rounded-[4px]">
                             <div className="flex items-center justify-between mb-1">
-                              <span className="text-sm font-bold uppercase tracking-widest font-mono" style={{ color: C.onSurface }}>Cashflow Waterfall</span>
-                              <span className="text-xs font-mono" style={{ color: C.mutedSand }}>Yr 0 – Yr 12 · Net annual + cumulative</span>
+                              <span className="text-sm font-bold uppercase tracking-widest font-mono" style={{ color: REPORT_TOKENS.text }}>Cashflow Waterfall</span>
+                              <span className="text-xs font-mono" style={{ color: REPORT_TOKENS.muted }}>Yr 0 – Yr 12 · Net annual + cumulative</span>
                             </div>
 
                             <div className="flex items-center gap-4 flex-wrap mb-3">
                               <div className="flex items-center gap-1.5">
-                                <span style={{ width: 10, height: 10, background: C.secondary }} className="rounded-none inline-block" />
-                                <span className="text-[10px] font-mono font-semibold" style={{ color: C.secondary }}>Annual Savings</span>
+                                <span style={{ width: 10, height: 10, background: REPORT_TOKENS.yield }} className="rounded-none inline-block" />
+                                <span className="text-[10px] font-mono font-semibold" style={{ color: REPORT_TOKENS.yield }}>Annual Savings</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span style={{ width: 10, height: 10, background: C.error }} className="rounded-none inline-block" />
-                                <span className="text-[10px] font-mono font-semibold" style={{ color: C.error }}>CapEx / Outflow</span>
+                                <span style={{ width: 10, height: 10, background: REPORT_TOKENS.cost }} className="rounded-none inline-block" />
+                                <span className="text-[10px] font-mono font-semibold" style={{ color: REPORT_TOKENS.cost }}>CapEx / Outflow</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span style={{ width: 20, height: 2, background: C.primary }} className="rounded-none inline-block" />
-                                <span className="text-[10px] font-mono font-semibold" style={{ color: C.primary }}>Cumulative</span>
+                                <span style={{ width: 20, height: 2, background: REPORT_TOKENS.solar }} className="rounded-none inline-block" />
+                                <span className="text-[10px] font-mono font-semibold" style={{ color: REPORT_TOKENS.solar }}>Cumulative</span>
                               </div>
                               {model.breakEvenFound && (
                                 <div className="flex items-center gap-1.5 ml-auto">
-                                  <span style={{ width: 2, height: 10, background: C.primary }} className="inline-block" />
-                                  <span className="text-[10px] font-mono font-semibold" style={{ color: C.primary }}>
+                                  <span style={{ width: 2, height: 10, background: REPORT_TOKENS.solar }} className="inline-block" />
+                                  <span className="text-[10px] font-mono font-semibold" style={{ color: REPORT_TOKENS.solar }}>
                                     Break-even Yr {model.breakEvenYr} ({model.paybackPeriod.toFixed(1)} yrs)
                                   </span>
                                 </div>
@@ -2172,12 +2148,12 @@ const ResultsPage = () => {
                             <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
                               <defs>
                                 <linearGradient id="cfGainGrad" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor={C.secondary} stopOpacity={0.95} />
-                                  <stop offset="100%" stopColor={C.secondary} stopOpacity={0.4} />
+                                  <stop offset="0%" stopColor={REPORT_TOKENS.yield} stopOpacity={0.95} />
+                                  <stop offset="100%" stopColor={REPORT_TOKENS.yield} stopOpacity={0.4} />
                                 </linearGradient>
                                 <linearGradient id="cfLossGrad" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor={C.error} stopOpacity={0.5} />
-                                  <stop offset="100%" stopColor={C.error} stopOpacity={0.95} />
+                                  <stop offset="0%" stopColor={REPORT_TOKENS.cost} stopOpacity={0.5} />
+                                  <stop offset="100%" stopColor={REPORT_TOKENS.cost} stopOpacity={0.95} />
                                 </linearGradient>
                               </defs>
 
@@ -2189,14 +2165,14 @@ const ResultsPage = () => {
                                   <g key={frac}>
                                     <line
                                       x1={PAD_L} x2={W - PAD_R} y1={y} y2={y}
-                                      stroke={isZero ? C.onSurface : `${C.outlineVariant}60`}
+                                      stroke={isZero ? REPORT_TOKENS.text : `${REPORT_TOKENS.graticule}60`}
                                       strokeWidth={isZero ? 1.5 : 0.7}
                                       strokeDasharray={isZero ? undefined : "4 4"}
                                     />
                                     <text
                                       x={PAD_L - 8} y={y + 4.5}
                                       textAnchor="end" fontSize="13" fontFamily="monospace"
-                                      fill={isZero ? C.onSurface : C.mutedSand}
+                                      fill={isZero ? REPORT_TOKENS.text : REPORT_TOKENS.muted}
                                       fontWeight={isZero ? "700" : "400"}
                                     >
                                       {isZero ? "₹0" : (val > 0 ? "+" : "") + fmt(val)}
@@ -2220,14 +2196,14 @@ const ResultsPage = () => {
                                       <rect
                                         x={x - 2} y={PAD_T}
                                         width={bw + 4} height={chartH}
-                                        fill={`${C.primary}10`}
+                                        fill={`${REPORT_TOKENS.solar}10`}
                                       />
                                     )}
 
                                     <rect
                                       x={x} y={y} width={bw} height={barH}
                                       fill={isPos ? "url(#cfGainGrad)" : "url(#cfLossGrad)"}
-                                      stroke={isPos ? C.secondary : C.error}
+                                      stroke={isPos ? REPORT_TOKENS.yield : REPORT_TOKENS.cost}
                                       strokeWidth="0.8"
                                       rx="2"
                                     />
@@ -2236,7 +2212,7 @@ const ResultsPage = () => {
                                       <text
                                         x={x + bw / 2} y={isPos ? y - 6 : y + barH + 14}
                                         textAnchor="middle" fontSize="11" fontFamily="monospace"
-                                        fill={isBreak ? C.primary : C.onSurface}
+                                        fill={isBreak ? REPORT_TOKENS.solar : REPORT_TOKENS.text}
                                         fontWeight="600"
                                       >
                                         {fmt(cf)}
@@ -2246,7 +2222,7 @@ const ResultsPage = () => {
                                     <text
                                       x={x + bw / 2} y={H - PAD_B + 18}
                                       textAnchor="middle" fontSize="11" fontFamily="monospace"
-                                      fill={isBreak ? C.primary : C.mutedSand}
+                                      fill={isBreak ? REPORT_TOKENS.solar : REPORT_TOKENS.muted}
                                       fontWeight={isBreak ? "700" : "400"}
                                     >
                                       Yr{i}
@@ -2255,11 +2231,11 @@ const ResultsPage = () => {
                                 );
                               })}
 
-                              <path d={cumPath} fill="none" stroke={C.primary} strokeWidth="2.5" />
+                              <path d={cumPath} fill="none" stroke={REPORT_TOKENS.solar} strokeWidth="2.5" />
                               {cum.map((v, i) => (
                                 <circle
                                   key={i} cx={barX(i) + bw / 2} cy={valToY(v)} r="3.5"
-                                  fill={C.background} stroke={C.primary} strokeWidth="2"
+                                  fill={REPORT_TOKENS.ink} stroke={REPORT_TOKENS.solar} strokeWidth="2"
                                 />
                               ))}
                             </svg>
@@ -2270,12 +2246,12 @@ const ResultsPage = () => {
                   </section>
 
                   {/* Cash Flow Table */}
-                  <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 rounded-[4px]">
+                  <section style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-6 rounded-[4px]">
                     <div className="flex flex-col sm:flex-row justify-between items-baseline gap-2 mb-4">
                       <h3 className="sp-serif text-[#F0EEE9] text-base font-bold">25-Year Operational Balance Sheet</h3>
                       <button
                         onClick={() => setShowAllYears(!showAllYears)}
-                        style={{ border: `1px solid ${C.outlineVariant}`, background: C.surfaceVariant, color: C.onSurface }}
+                        style={{ border: `1px solid ${REPORT_TOKENS.graticule}`, background: REPORT_TOKENS.parcelHigh, color: REPORT_TOKENS.text }}
                         className="px-3 py-1.5 text-[9px] font-bold tracking-wider sp-mono uppercase hover:opacity-80 transition-opacity rounded-lg"
                       >
                         {showAllYears ? "Show Key Years Only" : "Expand Full 25-Year Ledger"}
@@ -2305,7 +2281,7 @@ const ResultsPage = () => {
                             const net = savings - om - maintRes + taxBenefit;
                             const cumNpv = model.cumulativeCashFlow[yr];
                             return (
-                              <tr key={yr} className="sp-row border-b" style={{ borderColor: `${C.outlineVariant}50` }}>
+                              <tr key={yr} className="sp-row border-b" style={{ borderColor: `${REPORT_TOKENS.graticule}50` }}>
                                 <td className="py-2 px-3 text-left font-bold" style={{ color: REPORT_TOKENS.muted }}>{yr}</td>
                                 <td className="py-2 px-3 text-right" style={{ color: REPORT_TOKENS.text }}>{Math.round(prod).toLocaleString()}</td>
                                 <td className="py-2 px-3 text-right" style={{ color: REPORT_TOKENS.yield }}>{formatINR(savings, { decimals: 2 })}</td>
@@ -2327,7 +2303,7 @@ const ResultsPage = () => {
                   </section>
 
                   {/* Lead capture CTA card */}
-                  <div className="border p-6 sm:p-8 text-center sp-fade-up-4 rounded-[4px]" style={{ background: C.charcoal, borderColor: C.outlineVariant }}>
+                  <div className="border p-6 sm:p-8 text-center sp-fade-up-4 rounded-[4px]" style={{ background: REPORT_TOKENS.parcel, borderColor: REPORT_TOKENS.graticule }}>
                     <div className="max-w-xl mx-auto">
                       <div className="inline-flex items-center gap-2 bg-neutral-800/40 px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest sp-mono text-neutral-400 mb-3">
                         <CheckCircle2 className="w-3.5 h-3.5 text-[#2BD4A0]" /> Verified MNRE installers active
@@ -2340,7 +2316,7 @@ const ResultsPage = () => {
                       </p>
                       <button
                         onClick={() => setLeadFormOpen(true)}
-                        style={{ background: C.primary, color: C.onPrimary }}
+                        style={{ background: REPORT_TOKENS.solar, color: REPORT_TOKENS.onAccent }}
                         className="inline-flex items-center gap-2 font-bold px-6 py-2.5 rounded-lg hover:opacity-90 active:scale-95 transition-all text-xs uppercase cursor-pointer tracking-wider sp-mono"
                       >
                         <PhoneCall className="w-4 h-4" />
@@ -2359,24 +2335,24 @@ const ResultsPage = () => {
                   </div>
 
                   {/* Closing CTA */}
-                  <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-8 text-center flex flex-col items-center rounded-[4px]">
+                  <section style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-8 text-center flex flex-col items-center rounded-[4px]">
                     <span className="material-symbols-outlined text-4xl mb-3 text-neutral-400">solar_power</span>
                     <h2 className="sp-serif text-[#F0EEE9] text-2xl font-bold mb-2">Get 3 Verified Installer Quotes</h2>
-                    <p style={{ color: C.mutedSand }} className="text-xs max-w-2xl mb-6 leading-relaxed">Take the next step in realizing your projected ₹{savings25L}L in lifetime savings. Get competitive installation rates in minutes.</p>
+                    <p style={{ color: REPORT_TOKENS.muted }} className="text-xs max-w-2xl mb-6 leading-relaxed">Take the next step in realizing your projected ₹{savings25L}L in lifetime savings. Get competitive installation rates in minutes.</p>
                     <div className="flex flex-wrap justify-center gap-3">
-                      <button onClick={() => setLeadFormOpen(true)} style={{ background: C.secondary, color: C.onSecondary }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-90 transition-opacity cursor-pointer rounded-lg font-mono">
+                      <button onClick={() => setLeadFormOpen(true)} style={{ background: REPORT_TOKENS.yield, color: REPORT_TOKENS.onAccent }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-90 transition-opacity cursor-pointer rounded-lg font-mono">
                         <span className="material-symbols-outlined text-sm">request_quote</span>
                         Request Quotes — Free
                       </button>
-                      <button onClick={() => setLeadFormOpen(true)} style={{ background: C.surfaceVariant, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-lg font-mono">
+                      <button onClick={() => setLeadFormOpen(true)} style={{ background: REPORT_TOKENS.parcelHigh, border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-lg font-mono">
                         <span className="material-symbols-outlined text-sm">calendar_month</span>
                         Schedule Consultation
                       </button>
-                      <button onClick={handleDownload} disabled={downloading} style={{ background: C.surfaceVariant, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity disabled:opacity-40 cursor-pointer rounded-lg font-mono">
+                      <button onClick={handleDownload} disabled={downloading} style={{ background: REPORT_TOKENS.parcelHigh, border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity disabled:opacity-40 cursor-pointer rounded-lg font-mono">
                         {downloading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                         {downloading ? "Generating..." : "Download PDF"}
                       </button>
-                      <button onClick={() => setShareModalOpen(true)} style={{ background: C.surfaceVariant, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-lg font-mono">
+                      <button onClick={() => setShareModalOpen(true)} style={{ background: REPORT_TOKENS.parcelHigh, border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-lg font-mono">
                         <span>📱</span> Share on WhatsApp
                       </button>
                     </div>
@@ -2386,8 +2362,8 @@ const ResultsPage = () => {
                 {/* Right Sidebar */}
                 <aside className="lg:col-span-3 flex flex-col gap-4 sp-fade-up-4">
                   {/* Energy Grade */}
-                  <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 flex flex-col items-center text-center sp-card rounded-[4px]">
-                    <div style={{ width: 70, height: 70, borderRadius: "50%", background: `${C.secondary}08`, border: `1px solid ${C.secondary}`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+                  <div style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-4 flex flex-col items-center text-center sp-card rounded-[4px]">
+                    <div style={{ width: 70, height: 70, borderRadius: "50%", background: `${REPORT_TOKENS.yield}08`, border: `1px solid ${REPORT_TOKENS.yield}`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
                       <span className="sp-serif text-2xl text-emerald-400 font-bold">A+</span>
                     </div>
                     <h3 className="text-xs font-bold uppercase tracking-wider sp-mono text-[#F0EEE9]">Energy Grade</h3>
@@ -2433,30 +2409,30 @@ const ResultsPage = () => {
                   </SideCard>
 
                   {/* Installer Readiness */}
-                  <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-4 sp-card rounded-[4px]">
+                  <div style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-4 sp-card rounded-[4px]">
                     <h3 className="text-[9px] font-bold uppercase tracking-wider mb-3 font-mono"
-                      style={{ color: C.onSurface, borderBottom: `1px solid ${C.outlineVariant}`, paddingBottom: "8px" }}>Installer Readiness</h3>
+                      style={{ color: REPORT_TOKENS.text, borderBottom: `1px solid ${REPORT_TOKENS.graticule}`, paddingBottom: "8px" }}>Installer Readiness</h3>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-mono" style={{ color: C.mutedSand }}>Risk Assessment</span>
-                      <span className="text-[11px] font-mono font-bold" style={{ color: data.highWindWarning ? C.error : C.secondary }}>
+                      <span className="text-[11px] font-mono" style={{ color: REPORT_TOKENS.muted }}>Risk Assessment</span>
+                      <span className="text-[11px] font-mono font-bold" style={{ color: data.highWindWarning ? REPORT_TOKENS.cost : REPORT_TOKENS.yield }}>
                         {data.highWindWarning ? "HIGH" : "LOW"}
                       </span>
                     </div>
-                    <div style={{ background: C.surfaceVariant }} className="w-full h-1 rounded-none overflow-hidden mb-3">
-                      <div style={{ background: data.highWindWarning ? C.error : C.secondary, width: data.highWindWarning ? "75%" : "25%" }} className="h-full" />
+                    <div style={{ background: REPORT_TOKENS.parcelHigh }} className="w-full h-1 rounded-none overflow-hidden mb-3">
+                      <div style={{ background: data.highWindWarning ? REPORT_TOKENS.cost : REPORT_TOKENS.yield, width: data.highWindWarning ? "75%" : "25%" }} className="h-full" />
                     </div>
-                    <ul className="flex flex-col gap-1.5 text-[11px] font-mono" style={{ color: C.mutedSand }}>
+                    <ul className="flex flex-col gap-1.5 text-[11px] font-mono" style={{ color: REPORT_TOKENS.muted }}>
                       {data.highWindWarning ? (
-                        <li className="flex items-start gap-2 leading-relaxed" style={{ color: C.error }}>
-                          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: C.error }} />
+                        <li className="flex items-start gap-2 leading-relaxed" style={{ color: REPORT_TOKENS.cost }}>
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: REPORT_TOKENS.cost }} />
                           <span>High Wind Structural Risk Warning: Exceeds threshold for &gt;4 consecutive months.</span>
                         </li>
                       ) : (
                         <li className="flex items-center gap-2 text-neutral-300">✓ Structural Integrity OK</li>
                       )}
                       {data.windZone === "Zone 5/6" && (
-                        <li className="flex items-start gap-2 mt-1" style={{ color: C.primary }}>
-                          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: C.primary }} />
+                        <li className="flex items-start gap-2 mt-1" style={{ color: REPORT_TOKENS.solar }}>
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: REPORT_TOKENS.solar }} />
                           <span>Needs concrete ballast anchor modeling.</span>
                         </li>
                       )}
@@ -2472,7 +2448,7 @@ const ResultsPage = () => {
                       </div>
                       <div style={{ background: REPORT_TOKENS.parcelHigh, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-2.5 rounded-lg">
                         <div style={{ color: REPORT_TOKENS.muted }} className="mb-1 text-[8px] uppercase tracking-wider font-bold">Rate of Return</div>
-                        <div style={{ color: REPORT_TOKENS.text }} className="font-bold text-sm">{metrics.irrPct.toFixed(1)}% IRR</div>
+                        <div style={{ color: REPORT_TOKENS.text }} className="font-bold text-sm">{metrics.irrFound ? `${metrics.irrPct.toFixed(1)}% IRR` : "N/A"}</div>
                       </div>
                     </div>
                   </SideCard>
@@ -2488,19 +2464,19 @@ const ResultsPage = () => {
             <div className="space-y-8 sp-fade-up-1">
               {/* AI Summary + metrics strip */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }}
+                <div style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}` }}
                   className="lg:col-span-1 p-6 flex flex-col gap-4 sp-card animate-slide-up rounded-[4px]">
                   <div className="flex items-center gap-2 text-[#2BD4A0]">
                     <Satellite className="w-5 h-5" />
                     <h2 className="sp-serif text-base font-bold">AI Summary</h2>
                   </div>
-                  <div style={{ background: `${C.secondary}10`, border: `1px solid ${C.secondary}25` }} className="flex items-center gap-1.5 px-3 py-1 w-fit rounded-lg">
-                    <div style={{ background: C.secondary, width: 5, height: 5, borderRadius: "50%" }} />
-                    <span style={{ color: C.secondary }} className="text-[9px] font-bold uppercase tracking-widest font-mono">Geospatial Active</span>
+                  <div style={{ background: `${REPORT_TOKENS.yield}10`, border: `1px solid ${REPORT_TOKENS.yield}25` }} className="flex items-center gap-1.5 px-3 py-1 w-fit rounded-lg">
+                    <div style={{ background: REPORT_TOKENS.yield, width: 5, height: 5, borderRadius: "50%" }} />
+                    <span style={{ color: REPORT_TOKENS.yield }} className="text-[9px] font-bold uppercase tracking-widest font-mono">Geospatial Active</span>
                   </div>
-                  <p style={{ color: C.onSurfaceVariant }} className="text-xs leading-relaxed">
+                  <p style={{ color: REPORT_TOKENS.text }} className="text-xs leading-relaxed">
                     Based on geospatial analysis, this property exhibits excellent solar irradiance. The unshaded roof area supports a system capable of offsetting approximately{" "}
-                    <span style={{ color: C.onSurface, fontWeight: 600 }}>92%</span> of historical energy consumption.
+                    <span style={{ color: REPORT_TOKENS.text, fontWeight: 600 }}>92%</span> of historical energy consumption.
                   </p>
                 </div>
 
@@ -2511,14 +2487,14 @@ const ResultsPage = () => {
                     { label: "25-Yr Savings",     value: `₹${Math.round(data.financials.savings25yrInr/100000).toLocaleString()}L+`, unit: undefined, highlight: true },
                   ].map(({ label, value, unit, highlight }) => (
                     <div key={label}
-                      style={{ background: C.charcoal, border: `1px solid ${highlight ? C.secondary+"35" : C.outlineVariant}` }}
+                      style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${highlight ? REPORT_TOKENS.yield+"35" : REPORT_TOKENS.graticule}` }}
                       className="sp-card p-6 flex flex-col justify-between relative overflow-hidden rounded-[4px]">
-                      <span className="text-[9px] font-bold uppercase tracking-widest font-mono" style={{ color: highlight ? C.secondary : C.mutedSand }}>{label}</span>
+                      <span className="text-[9px] font-bold uppercase tracking-widest font-mono" style={{ color: highlight ? REPORT_TOKENS.yield : REPORT_TOKENS.muted }}>{label}</span>
                       <div className="mt-4 flex items-baseline gap-1.5">
-                        <span style={{ color: highlight ? C.secondary : C.onSurface }} className="sp-serif text-3xl font-bold leading-none tabular-nums">
+                        <span style={{ color: highlight ? REPORT_TOKENS.yield : REPORT_TOKENS.text }} className="sp-serif text-3xl font-bold leading-none tabular-nums">
                           {value}
                         </span>
-                        {unit && <span className="text-xs font-mono" style={{ color: C.mutedSand }}>{unit}</span>}
+                        {unit && <span className="text-xs font-mono" style={{ color: REPORT_TOKENS.muted }}>{unit}</span>}
                       </div>
                     </div>
                   ))}
@@ -2526,36 +2502,36 @@ const ResultsPage = () => {
               </div>
 
               {/* Locked paywall teaser container */}
-              <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, minHeight: "500px" }} className="relative w-full overflow-hidden sp-fade-up-2 rounded-[4px]">
+              <div style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}`, minHeight: "500px" }} className="relative w-full overflow-hidden sp-fade-up-2 rounded-[4px]">
                 {/* Faux content (blurred behind) */}
                 <div className="absolute inset-0 p-8 opacity-10 pointer-events-none select-none flex flex-col gap-6">
-                  <div style={{ borderBottom: `1px solid ${C.outlineVariant}` }} className="flex justify-between items-end pb-3">
+                  <div style={{ borderBottom: `1px solid ${REPORT_TOKENS.graticule}` }} className="flex justify-between items-end pb-3">
                     <h3 className="sp-serif text-lg text-[#F0EEE9]">Cashflow & ROI Projection</h3>
                     <div className="flex gap-2">
-                      <div style={{ background: C.surfaceVariant, height: 20, width: 80 }} />
-                      <div style={{ background: C.surfaceVariant, height: 20, width: 80 }} />
+                      <div style={{ background: REPORT_TOKENS.parcelHigh, height: 20, width: 80 }} />
+                      <div style={{ background: REPORT_TOKENS.parcelHigh, height: 20, width: 80 }} />
                     </div>
                   </div>
-                  <div style={{ borderLeft: `1px solid ${C.outlineVariant}`, borderBottom: `1px solid ${C.outlineVariant}` }} className="flex-grow w-full relative flex items-end gap-3 px-4 pb-0">
-                    <div style={{ background: `${C.surfaceVariant}80`, width: "11%" }} className="sp-lbar-1" />
-                    <div style={{ background: `${C.surfaceVariant}80`, width: "11%" }} className="sp-lbar-2" />
-                    <div style={{ background: `${C.secondary}30`,      width: "11%" }} className="sp-lbar-3" />
-                    <div style={{ background: `${C.secondary}30`,      width: "11%" }} className="sp-lbar-4" />
-                    <div style={{ background: `${C.secondary}30`,      width: "11%" }} className="sp-lbar-5" />
+                  <div style={{ borderLeft: `1px solid ${REPORT_TOKENS.graticule}`, borderBottom: `1px solid ${REPORT_TOKENS.graticule}` }} className="flex-grow w-full relative flex items-end gap-3 px-4 pb-0">
+                    <div style={{ background: `${REPORT_TOKENS.parcelHigh}80`, width: "11%" }} className="sp-lbar-1" />
+                    <div style={{ background: `${REPORT_TOKENS.parcelHigh}80`, width: "11%" }} className="sp-lbar-2" />
+                    <div style={{ background: `${REPORT_TOKENS.yield}30`,      width: "11%" }} className="sp-lbar-3" />
+                    <div style={{ background: `${REPORT_TOKENS.yield}30`,      width: "11%" }} className="sp-lbar-4" />
+                    <div style={{ background: `${REPORT_TOKENS.yield}30`,      width: "11%" }} className="sp-lbar-5" />
                   </div>
                 </div>
 
                 {/* Fade overlay */}
-                <div style={{ background: `linear-gradient(to bottom, transparent, ${C.charcoal}fc)` }} className="absolute inset-0 pointer-events-none" />
+                <div style={{ background: `linear-gradient(to bottom, transparent, ${REPORT_TOKENS.parcel}fc)` }} className="absolute inset-0 pointer-events-none" />
 
                 {/* Upgrade panel */}
                 <div className="absolute bottom-0 left-0 w-full p-8 flex flex-col items-center justify-center text-center z-10">
-                  <div style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, maxWidth: 540, width: "100%" }}
+                  <div style={{ background: REPORT_TOKENS.ink, border: `1px solid ${REPORT_TOKENS.graticule}`, maxWidth: 540, width: "100%" }}
                     className="p-8 flex flex-col items-center gap-5 rounded-[4px] border">
-                    <Lock style={{ color: C.primary, width: 32, height: 32 }} />
+                    <Lock style={{ color: REPORT_TOKENS.solar, width: 32, height: 32 }} />
 
                     <div className="flex w-full max-w-xs gap-1">
-                      {[C.secondary, C.secondary, C.primaryContainer, C.outlineVariant, C.outlineVariant].map((col, i) => (
+                      {[REPORT_TOKENS.yield, REPORT_TOKENS.yield, REPORT_TOKENS.solarDim, REPORT_TOKENS.graticule, REPORT_TOKENS.graticule].map((col, i) => (
                         <div key={i} style={{ height: 2, flex: 1, background: col }} />
                       ))}
                     </div>
@@ -2564,28 +2540,28 @@ const ResultsPage = () => {
                       <h3 className="sp-serif text-[#F0EEE9] text-xl font-bold leading-snug">
                         Unlock Your Full Solar Intelligence Report
                       </h3>
-                      <p style={{ color: C.onSurfaceVariant }} className="text-xs leading-relaxed max-w-sm mx-auto">
+                      <p style={{ color: REPORT_TOKENS.text }} className="text-xs leading-relaxed max-w-sm mx-auto">
                         Access detailed financial models, itemized equipment specifications, 3D interactive viewer, and certified installer readiness breakdown.
                       </p>
                     </div>
 
                     <div className="flex flex-wrap justify-center gap-1.5">
                       {["25-Yr Cashflow Model","3D AR Preview","BESS Battery Config","PDF Export"].map(f => (
-                        <div key={f} style={{ border: `1px solid ${C.secondary}30`, color: C.secondary, background: `${C.secondary}05` }} className="text-[9px] font-bold uppercase tracking-wider font-mono px-2.5 py-0.5 rounded-lg">
+                        <div key={f} style={{ border: `1px solid ${REPORT_TOKENS.yield}30`, color: REPORT_TOKENS.yield, background: `${REPORT_TOKENS.yield}05` }} className="text-[9px] font-bold uppercase tracking-wider font-mono px-2.5 py-0.5 rounded-lg">
                           {f}
                         </div>
                       ))}
                     </div>
 
                     <button onClick={() => setCheckoutOpen(true)}
-                      style={{ background: C.primary, color: C.onPrimary }}
+                      style={{ background: REPORT_TOKENS.solar, color: REPORT_TOKENS.onAccent }}
                       className="flex items-center gap-2 px-6 py-3 font-bold text-xs uppercase tracking-wider transition-all hover:opacity-90 active:scale-[0.98] rounded-lg cursor-pointer font-mono">
                       Unlock Report — ₹{payPerScanPrice} {hasReferralDiscount && "(₹20 off applied)"}
                       <ArrowRight className="w-4 h-4" />
                     </button>
 
-                    <div className="flex items-center gap-2 text-[10px] font-mono" style={{ color: C.mutedSand }}>
-                      <ShieldCheck className="w-3.5 h-3.5" style={{ color: C.secondary }} />
+                    <div className="flex items-center gap-2 text-[10px] font-mono" style={{ color: REPORT_TOKENS.muted }}>
+                      <ShieldCheck className="w-3.5 h-3.5" style={{ color: REPORT_TOKENS.yield }} />
                       Secure checkout. Immediate access.
                     </div>
                   </div>
@@ -2595,56 +2571,56 @@ const ResultsPage = () => {
           )}
 
           {/* Footnote */}
-          <div className="mt-4 text-center text-[8px] font-mono uppercase tracking-widest" style={{ color: C.mutedSand }}>
+          <div className="mt-4 text-center text-[8px] font-mono uppercase tracking-widest" style={{ color: REPORT_TOKENS.muted }}>
             SUNPOWER LINK Solar Estimation Engine · Grid loss factor: 14% · Climatology: NASA POWER API satellite profile · RCC flatness tilt structural calibration active
           </div>
         </main>
 
         {/* Footer */}
-        <footer style={{ background: C.background, borderTop: `1px solid ${C.outlineVariant}` }} className="flex flex-col md:flex-row justify-between items-center px-4 md:px-16 py-4 gap-6 mt-4">
+        <footer style={{ background: REPORT_TOKENS.ink, borderTop: `1px solid ${REPORT_TOKENS.graticule}` }} className="flex flex-col md:flex-row justify-between items-center px-4 md:px-16 py-4 gap-6 mt-4">
           <div className="flex flex-col gap-1.5 max-w-xl text-left">
             <div className="sp-serif text-[#8A8A99] text-sm font-bold">SUNPOWER LINK</div>
-            <p className="text-[11px]" style={{ color: C.mutedSand }}>© {new Date().getFullYear()} SUNPOWER LINK. Financial intelligence driven by geospatial AI.</p>
+            <p className="text-[11px]" style={{ color: REPORT_TOKENS.muted }}>© {new Date().getFullYear()} SUNPOWER LINK. Financial intelligence driven by geospatial AI.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate("/map")} style={{ background: C.secondary, color: C.onSecondary }} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-95 transition-opacity cursor-pointer rounded-lg font-mono">
+            <button onClick={() => navigate("/map")} style={{ background: REPORT_TOKENS.yield, color: REPORT_TOKENS.onAccent }} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-95 transition-opacity cursor-pointer rounded-lg font-mono">
               Analyze Another Rooftop
             </button>
-            <button onClick={() => navigate("/")} style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-lg font-mono">
+            <button onClick={() => navigate("/")} style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-lg font-mono">
               Back to Home
             </button>
           </div>
           <div className="flex flex-col md:flex-row gap-6">
             {["Methodology","Data Sources","Terms","Privacy"].map(link => (
-              <a key={link} href="#" className="text-[9px] font-bold uppercase tracking-wider font-mono transition-colors hover:text-white" style={{ color: C.mutedSand }}>{link}</a>
+              <a key={link} href="#" className="text-[9px] font-bold uppercase tracking-wider font-mono transition-colors hover:text-white" style={{ color: REPORT_TOKENS.muted }}>{link}</a>
             ))}
           </div>
         </footer>
 
         {/* ── Checkout Dialog ───────────────────────────────────── */}
         <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
-          <DialogContent style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="sm:max-w-[420px] rounded-[4px] shadow-2xl p-6 focus:outline-none border">
+          <DialogContent style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }} className="sm:max-w-[420px] rounded-[4px] shadow-2xl p-6 focus:outline-none border">
             <DialogHeader className="space-y-1.5 text-left">
-              <DialogTitle className="text-xs font-bold flex items-center gap-2 font-mono uppercase tracking-wider" style={{ color: C.primary }}>
-                <Sparkles className="w-3.5 h-3.5" style={{ color: C.primary }} />
+              <DialogTitle className="text-xs font-bold flex items-center gap-2 font-mono uppercase tracking-wider" style={{ color: REPORT_TOKENS.solar }}>
+                <Sparkles className="w-3.5 h-3.5" style={{ color: REPORT_TOKENS.solar }} />
                 Secure Report Checkout
               </DialogTitle>
-              <DialogDescription className="text-[10px]" style={{ color: C.mutedSand }}>
+              <DialogDescription className="text-[10px]" style={{ color: REPORT_TOKENS.muted }}>
                 Scan ID: <span className="font-mono font-bold text-neutral-300">{data.analysisId}</span>
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-3.5 my-3 text-left">
-              <div className="text-[9px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>Select tier</div>
+              <div className="text-[9px] font-bold uppercase tracking-wider font-mono" style={{ color: REPORT_TOKENS.muted }}>Select tier</div>
               <div className="grid grid-cols-2 gap-3">
                 {[
                   { key: "pay_per_scan", label: "Single Scan", price: `₹${payPerScanPrice}`, sub: hasReferralDiscount ? "₹20 Referral Off" : "One-time payment" },
                   { key: "pro_monthly",  label: "Pro Monthly", price: "₹999/mo", sub: "Unlimited Scans", highlight: true },
                 ].map(plan => (
                   <button key={plan.key} onClick={() => setPaymentPlan(plan.key as any)}
-                    style={{ background: paymentPlan === plan.key ? `${C.primary}05` : "transparent", border: `1px solid ${paymentPlan === plan.key ? C.primary : C.outlineVariant}`, color: C.onSurface }}
+                    style={{ background: paymentPlan === plan.key ? `${REPORT_TOKENS.solar}05` : "transparent", border: `1px solid ${paymentPlan === plan.key ? REPORT_TOKENS.solar : REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }}
                     className="p-3 text-left flex flex-col justify-between h-20 transition-all font-mono rounded-lg cursor-pointer">
-                    <span className="text-[8px] font-bold uppercase tracking-wider" style={{ color: C.mutedSand }}>{plan.label}</span>
+                    <span className="text-[8px] font-bold uppercase tracking-wider" style={{ color: REPORT_TOKENS.muted }}>{plan.label}</span>
                     <span className="font-bold sp-serif text-base">{plan.price}</span>
                     <span className="text-[8px] text-[#2BD4A0]">{plan.sub}</span>
                   </button>
@@ -2653,11 +2629,11 @@ const ResultsPage = () => {
             </div>
 
             <div className="space-y-3 my-2 text-left">
-              <div className="text-[9px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>Payment details</div>
-              <div style={{ background: C.background, border: `1px solid ${C.outlineVariant}` }} className="flex p-0.5 rounded-lg">
+              <div className="text-[9px] font-bold uppercase tracking-wider font-mono" style={{ color: REPORT_TOKENS.muted }}>Payment details</div>
+              <div style={{ background: REPORT_TOKENS.ink, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="flex p-0.5 rounded-lg">
                 {["card","upi"].map(m => (
                   <button key={m} onClick={() => setPaymentMethod(m as any)}
-                    style={{ background: paymentMethod===m ? C.primaryContainer : "transparent", color: paymentMethod===m ? C.onPrimary : C.mutedSand }}
+                    style={{ background: paymentMethod===m ? REPORT_TOKENS.solarDim : "transparent", color: paymentMethod===m ? REPORT_TOKENS.onAccent : REPORT_TOKENS.muted }}
                     className="flex-1 text-[9px] py-1 font-bold uppercase transition-all font-mono rounded-md cursor-pointer border-none outline-none">
                     {m === "card" ? "Card" : "UPI"}
                   </button>
@@ -2666,45 +2642,45 @@ const ResultsPage = () => {
               {paymentMethod === "card" ? (
                 <div className="space-y-3">
                   <div>
-                    <label className="text-[8px] font-bold uppercase font-mono block mb-1" style={{ color: C.mutedSand }}>Card number</label>
+                    <label className="text-[8px] font-bold uppercase font-mono block mb-1" style={{ color: REPORT_TOKENS.muted }}>Card number</label>
                     <input type="text" placeholder="4000 1234 5678 9010" value={cardNumber} onChange={e => setCardNumber(e.target.value)}
-                      style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+                      style={{ background: REPORT_TOKENS.ink, border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }}
                       className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#E8A020] rounded-lg border" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[8px] font-bold uppercase font-mono block mb-1" style={{ color: C.mutedSand }}>Expiry</label>
+                      <label className="text-[8px] font-bold uppercase font-mono block mb-1" style={{ color: REPORT_TOKENS.muted }}>Expiry</label>
                       <input type="text" placeholder="MM/YY" value={cardExpiry} onChange={e => setCardExpiry(e.target.value)}
-                        style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+                        style={{ background: REPORT_TOKENS.ink, border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }}
                         className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#E8A020] rounded-lg border" />
                     </div>
                     <div>
-                      <label className="text-[8px] font-bold uppercase font-mono block mb-1" style={{ color: C.mutedSand }}>CVV</label>
+                      <label className="text-[8px] font-bold uppercase font-mono block mb-1" style={{ color: REPORT_TOKENS.muted }}>CVV</label>
                       <input type="password" placeholder="•••" value={cardCvv} onChange={e => setCardCvv(e.target.value)}
-                        style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+                        style={{ background: REPORT_TOKENS.ink, border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }}
                         className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#E8A020] rounded-lg border" />
                     </div>
                   </div>
                 </div>
               ) : (
                 <div className="text-center py-4">
-                  <div style={{ border: `1px dashed ${C.secondary}30`, width: 120, height: 120, margin: "0 auto 8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <span className="text-[8px] font-mono uppercase" style={{ color: C.secondary }}>SolarScan Sandbox QR</span>
+                  <div style={{ border: `1px dashed ${REPORT_TOKENS.yield}30`, width: 120, height: 120, margin: "0 auto 8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <span className="text-[8px] font-mono uppercase" style={{ color: REPORT_TOKENS.yield }}>SolarScan Sandbox QR</span>
                   </div>
-                  <div className="text-[8px] font-mono uppercase" style={{ color: C.mutedSand }}>Scan with any UPI app</div>
+                  <div className="text-[8px] font-mono uppercase" style={{ color: REPORT_TOKENS.muted }}>Scan with any UPI app</div>
                 </div>
               )}
             </div>
 
-            <div style={{ borderTop: `1px solid ${C.outlineVariant}` }} className="space-y-2 pt-4 mt-4">
+            <div style={{ borderTop: `1px solid ${REPORT_TOKENS.graticule}` }} className="space-y-2 pt-4 mt-4">
               <button onClick={handleSandboxCheckout} disabled={paymentProcessing || paymentSuccess}
-                style={{ background: C.primary, color: C.onPrimary }}
+                style={{ background: REPORT_TOKENS.solar, color: REPORT_TOKENS.onAccent }}
                 className="w-full text-[10px] font-bold py-2.5 flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity uppercase tracking-wider rounded-lg cursor-pointer border-none outline-none font-mono">
                 {paymentProcessing ? <><RefreshCw className="w-4 h-4 animate-spin" />Processing...</> : paymentSuccess ? <><CheckCircle2 className="w-4 h-4" />Unlocking...</> : "Simulate Instant Sandbox Unlock"}
               </button>
               <button onClick={() => { setCheckoutOpen(false); initiatePayment({ plan: paymentPlan, scanId: data?.analysisId, onSuccess: refreshUnlock }); }}
                 disabled={paymentProcessing || paymentSuccess || isPaymentGatewayLoading}
-                style={{ background: "transparent", border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+                style={{ background: "transparent", border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }}
                 className="w-full text-[10px] font-bold py-2.5 flex items-center justify-center gap-2 hover:bg-[#141416] transition-colors disabled:opacity-50 uppercase tracking-wider rounded-lg cursor-pointer font-mono">
                 {isPaymentGatewayLoading ? <><RefreshCw className="w-4 h-4 animate-spin" />Connecting...</> : "Launch Razorpay"}
               </button>
@@ -2714,20 +2690,20 @@ const ResultsPage = () => {
 
         {/* ── WhatsApp Share Dialog ───────────────────────────────── */}
         <Dialog open={shareModalOpen} onOpenChange={setShareModalOpen}>
-          <DialogContent style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="sm:max-w-[400px] rounded-[4px] shadow-2xl p-6 focus:outline-none border">
+          <DialogContent style={{ background: REPORT_TOKENS.parcel, border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }} className="sm:max-w-[400px] rounded-[4px] shadow-2xl p-6 focus:outline-none border">
             <DialogHeader className="space-y-1.5 text-left">
-              <DialogTitle className="text-xs font-bold flex items-center gap-2 font-mono uppercase tracking-wider" style={{ color: C.secondary }}>
+              <DialogTitle className="text-xs font-bold flex items-center gap-2 font-mono uppercase tracking-wider" style={{ color: REPORT_TOKENS.yield }}>
                 <span>📱</span>
                 Share Proposal via WhatsApp
               </DialogTitle>
-              <DialogDescription className="text-[10px]" style={{ color: C.mutedSand }}>
+              <DialogDescription className="text-[10px]" style={{ color: REPORT_TOKENS.muted }}>
                 Generate a clean solar proposal message and open wa.me link.
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4 my-4 text-left">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>
+                <label className="text-[10px] font-bold uppercase tracking-wider font-mono" style={{ color: REPORT_TOKENS.muted }}>
                   Homeowner WhatsApp Number
                 </label>
                 <input
@@ -2738,7 +2714,7 @@ const ResultsPage = () => {
                     setSharePhone(e.target.value);
                     setSharePhoneError("");
                   }}
-                  style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+                  style={{ background: REPORT_TOKENS.ink, border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }}
                   className="px-3 py-2 text-xs font-mono rounded-lg focus:outline-none focus:ring-1 focus:ring-[#E2E8F0]"
                 />
                 {sharePhoneError && (
@@ -2751,7 +2727,7 @@ const ResultsPage = () => {
               <button
                 onClick={handleWhatsAppShare}
                 disabled={isSharing}
-                style={{ background: C.primary, color: C.onPrimary }}
+                style={{ background: REPORT_TOKENS.solar, color: REPORT_TOKENS.onAccent }}
                 className="w-full text-[10px] font-bold py-2.5 flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity uppercase tracking-wider rounded-lg cursor-pointer border-none outline-none font-mono"
               >
                 {isSharing ? (
@@ -2766,7 +2742,7 @@ const ResultsPage = () => {
               <button
                 onClick={() => setShareModalOpen(false)}
                 disabled={isSharing}
-                style={{ background: "transparent", border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
+                style={{ background: "transparent", border: `1px solid ${REPORT_TOKENS.graticule}`, color: REPORT_TOKENS.text }}
                 className="w-full text-[10px] font-bold py-2.5 flex items-center justify-center gap-2 hover:bg-[#141416] transition-colors disabled:opacity-50 uppercase tracking-wider rounded-lg cursor-pointer font-mono"
               >
                 Cancel

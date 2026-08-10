@@ -124,6 +124,7 @@ export async function generatePDFReport(
             netCostInr: analysis.investment.netCostInr,
             installedKw: analysis.energy.installedCapacityKw,
             irrPct: 0,
+            irrFound: false,
             lcoeInrPerKwh: 0,
             cumulativeCashFlow: [] as number[],
           };

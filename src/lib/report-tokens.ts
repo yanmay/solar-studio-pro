@@ -19,6 +19,7 @@ export const REPORT_TOKENS = {
 
   // Semantic accents — each meaning is exclusive
   solar: "#FF6B00", // brand / CTA / accent
+  solarDim: "#E05E00", // pressed / hover shade of solar
   yield: "#34C759", // positive cashflow / savings ONLY
   cost:  "#FF453A", // cost / outflow / negative ONLY
 
@@ -38,6 +39,7 @@ export const REPORT_RGB = {
   parcelHigh: [30, 34, 38],
   graticule:  [46, 52, 58],   // solid approximation of the 8% hairline
   solar:      [255, 107, 0],
+  solarDim:   [224, 94, 0],
   yield:      [52, 199, 89],
   cost:       [255, 69, 58],
   text:       [245, 245, 247],
