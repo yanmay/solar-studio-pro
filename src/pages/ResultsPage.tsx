@@ -85,30 +85,33 @@ import TimeOfUseCard from "@/components/TimeOfUseCard";
 import RooftopARViewer from "@/components/RooftopARViewer";
 import SolarSimulator from "@/components/SolarSimulator";
 import { recommendBattery, type BackupMode } from "@/lib/battery-calc";
+import { deriveMetrics } from "@/lib/report-metrics";
+import { formatINR } from "@/lib/format-currency";
+import { REPORT_TOKENS } from "@/lib/report-tokens";
 
 // ─── Color tokens from code.html ─────────────────────────────
 // ─── Institutional Design Tokens ─────────────────────────────
 const C = {
-  // Surfaces
-  background:          "#050505",
-  charcoal:            "#0A0A0A",
-  surfaceVariant:      "#121215",
-  surfaceContainerHigh:"#1A1A1E",
-  // Borders
-  outlineVariant:      "rgba(255, 255, 255, 0.1)",
-  outline:             "rgba(255, 255, 255, 0.15)",
+  // Surfaces — refined dark, softer steps
+  background:          "#0A0A0C",
+  charcoal:            "#131316",
+  surfaceVariant:      "#1A1A1F",
+  surfaceContainerHigh:"#232329",
+  // Borders — cleaner hairlines
+  outlineVariant:      "rgba(255, 255, 255, 0.08)",
+  outline:             "rgba(255, 255, 255, 0.16)",
   // Text
-  onSurface:           "#F0EEE9",
-  onSurfaceVariant:    "#C8C4BC",
-  mutedSand:           "#8A8A99",
+  onSurface:           "#F5F5F7",
+  onSurfaceVariant:    "#C8C8CE",
+  mutedSand:           "#86868B",
   // Accents
-  primary:             "#FF6600",   // Solar Orange
-  primaryContainer:    "#E05800",
-  secondary:           "#2BD4A0",   // teal — positive values
-  error:               "#FF6B6B",   // red — negative / warning
+  primary:             "#FF6B00",   // Solar Orange (brand)
+  primaryContainer:    "#E05E00",
+  secondary:           "#30D158",   // green — positive values
+  error:               "#FF453A",   // red — negative / warning
   // Text on accent surfaces
   onPrimary:           "#000000",
-  onSecondary:         "#001A12",
+  onSecondary:         "#00160A",
 };
 
 interface FullResult extends SolarAnalysis {
@@ -311,19 +314,25 @@ function SideCard({ title, children }: { title: string; children: React.ReactNod
 function RoofLayoutDiagram({
   polygons,
   panelConfig,
+  width = 244,
+  height = 130,
+  showCount = true,
 }: {
   polygons: { type: "Polygon"; coordinates: [number, number][][] }[];
   panelConfig: {
     tiltAngle?: number; setbackM?: number; walkwayM?: number;
     panelWattage?: 450 | 550; orientation?: string; rowAlignment?: string;
   } | null;
+  width?: number;
+  height?: number;
+  showCount?: boolean;
 }) {
-  const W = 244, H = 130, PAD = 10;
+  const W = width, H = height, PAD = Math.round(Math.min(width, height) * 0.06) + 4;
 
   if (!polygons || polygons.length === 0 || (polygons[0]?.coordinates[0]?.length ?? 0) === 0) {
     return (
-      <div style={{ background: `${C.surfaceVariant}30`, border: `1px solid ${C.outlineVariant}`, height: 96 }} className="flex items-center justify-center rounded-lg">
-        <span className="text-xs font-mono" style={{ color: C.mutedSand }}>No roof data available</span>
+      <div style={{ background: REPORT_TOKENS.parcelHigh, border: `1px solid ${REPORT_TOKENS.graticule}`, height: H }} className="flex items-center justify-center rounded-lg">
+        <span className="text-xs font-mono" style={{ color: REPORT_TOKENS.muted }}>No roof data available</span>
       </div>
     );
   }
@@ -368,60 +377,55 @@ function RoofLayoutDiagram({
   });
 
   const panelCount = allPanelSVG.length;
+  const gridSize = Math.max(10, Math.round(W / 20));
 
   return (
-    <div style={{ border: `1px solid ${C.outlineVariant}`, overflow: "hidden" }} className="rounded-lg">
-      <svg width={W} height={H} style={{ display: "block", background: "#0c1018" }}>
+    <div style={{ border: `1px solid ${REPORT_TOKENS.graticule}`, overflow: "hidden" }} className="rounded-lg w-full h-full">
+      <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block", background: REPORT_TOKENS.ink }}>
         <defs>
-          <pattern id="rld-grid" width="12" height="12" patternUnits="userSpaceOnUse">
-            <path d="M 12 0 L 0 0 0 12" fill="none" stroke="#1a2233" strokeWidth="0.4" />
+          <pattern id="rld-grid" width={gridSize} height={gridSize} patternUnits="userSpaceOnUse">
+            <path d={`M ${gridSize} 0 L 0 0 0 ${gridSize}`} fill="none" stroke={REPORT_TOKENS.graticule} strokeWidth="0.5" />
           </pattern>
         </defs>
         <rect width={W} height={H} fill="url(#rld-grid)" />
 
+        {/* Roof parcel — cadastral outline */}
         {polygons.map((poly, pi) => {
           const coords = (poly.coordinates[0] ?? []).map(([lng, lat]) => project(lng, lat));
           return (
             <polygon
               key={`roof-${pi}`}
               points={coords.map(([x, y]) => `${x},${y}`).join(" ")}
-              fill="#2e2420"
-              stroke="#6b5040"
+              fill={REPORT_TOKENS.parcelHigh}
+              stroke={REPORT_TOKENS.graticuleStrong}
               strokeWidth="1"
             />
           );
         })}
 
+        {/* Solar array — brand-colored panels */}
         {allPanelSVG.map((corners, i) => (
           <polygon
             key={`panel-${i}`}
             points={corners.map(([x, y]) => `${x},${y}`).join(" ")}
-            fill="#1a3a6e"
-            stroke="#0c1f40"
+            fill={`${REPORT_TOKENS.solar}CC`}
+            stroke={REPORT_TOKENS.solar}
             strokeWidth="0.4"
           />
         ))}
 
-        <rect x={W - 52} y={H - 18} width={48} height={14} fill="#00000080" rx="1" />
-        <text x={W - 28} y={H - 7} textAnchor="middle" fill={C.secondary} fontSize="7" fontFamily="monospace">
-          {panelCount} panels
-        </text>
+        {showCount && (
+          <>
+            <rect x={W - 56} y={H - 20} width={50} height={15} fill="#000000AA" rx="1" />
+            <text x={W - 31} y={H - 9} textAnchor="middle" fill={REPORT_TOKENS.solar} fontSize="7.5" fontFamily="monospace">
+              {panelCount} panels
+            </text>
+          </>
+        )}
       </svg>
     </div>
   );
 }
-
-const formatLakhsCr = (val: number) => {
-  const abs = Math.abs(val);
-  const sign = val < 0 ? "-" : "";
-  if (abs >= 1_00_00_000) {
-    return `${sign}₹${(abs / 1_00_00_000).toFixed(2)} Cr`;
-  }
-  if (abs >= 1_00_000) {
-    return `${sign}₹${(abs / 1_00_00_000).toFixed(2)} L`;
-  }
-  return `${sign}₹${Math.round(abs).toLocaleString("en-IN")}`;
-};
 
 const INDIAN_STATES = [
   "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
@@ -875,6 +879,10 @@ const ResultsPage = () => {
     tempDerate: data?.tempDerate
   });
 
+  // Canonical metrics — ONE value per metric, used by every widget
+  // below and passed to the PDF. Never recompute a metric inline.
+  const metrics = deriveMetrics(model);
+
   const handleDownload = async () => {
     if (!data) return; setDownloading(true); setDownloadError(null);
     try {
@@ -887,7 +895,7 @@ const ResultsPage = () => {
       }
 
       await generatePDFReport(
-        { ...data, energy: { ...data.energy, installedCapacityKw: model.installedKw, annualKwh: model.baseAnnualKwh }, financials: { electricityRateInr: tariff, monthlySavingsInr: Math.round(model.yearlySavings[0]/12), annualSavingsInr: Math.round(model.yearlySavings[0]), savings25yrInr: Math.round(model.cumulativeCashFlow[25]+model.netCostInr) }, panelCount: pCount, panelType: pType } as any,
+        { ...data, energy: { ...data.energy, installedCapacityKw: model.installedKw, annualKwh: model.baseAnnualKwh }, financials: { electricityRateInr: tariff, monthlySavingsInr: Math.round(model.yearlySavings[0]/12), annualSavingsInr: Math.round(model.yearlySavings[0]), savings25yrInr: Math.round(metrics.lifetimeSavingsInr) }, panelCount: pCount, panelType: pType } as any,
         { locationLabel: data.location?.label || "India", brandConfig: activeBrandConfig },
         model
       );
@@ -931,7 +939,7 @@ const ResultsPage = () => {
       const shareUrl = `${window.location.origin}/results?scan=${enc || ""}`;
       const shortUrl = await shortenUrl(shareUrl);
       
-      const savings25yr = model ? (model.cumulativeCashFlow[25] + model.netCostInr) : data.financials.savings25yrInr;
+      const savings25yr = metrics.lifetimeSavingsInr;
       const savingsLakh = parseFloat((savings25yr / 100000).toFixed(1));
       
       const rawConfidence = calcConfidenceScore({
@@ -985,7 +993,7 @@ const ResultsPage = () => {
     <div style={{ background: C.background }} className="min-h-screen flex items-center justify-center px-4">
       <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="text-center max-w-md p-8 rounded-3xl sp-fade-up">
         <MapPin className="w-12 h-12 mx-auto mb-4" style={{ color: C.primary }} />
-        <h1 style={{ fontFamily: "Sora, sans-serif", color: C.onSurface }} className="text-2xl font-semibold mb-2">No Analysis Found</h1>
+        <h1 style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif", letterSpacing: "-0.02em", color: C.onSurface }} className="text-2xl font-semibold mb-2">No Analysis Found</h1>
         <p style={{ color: C.mutedSand }} className="text-sm mb-6">Draw your rooftop on the map first to generate a solar potential analysis report.</p>
         <button onClick={() => navigate("/map")} style={{ background: C.primaryContainer, color: C.onPrimary }} className="px-6 py-2.5 text-xs font-bold uppercase tracking-wider rounded-xl cursor-pointer">Go to Map →</button>
       </div>
@@ -1052,7 +1060,7 @@ const ResultsPage = () => {
     const days = i===1?28:[3,5,8,10].includes(i)?30:31;
     return { label: MONTH_LABELS[i], psh: parseFloat(mPsh.toFixed(2)), generation: Math.round(model.installedKw * mPsh * days * 0.86) };
   });
-  const savings25L  = Math.round((model.cumulativeCashFlow[25] + model.netCostInr) / 100000);
+  const savings25L  = Math.round(metrics.lifetimeSavingsInr / 100000);
 
   // Dynamic Suitability Score Calculations
   const lat = data.location?.lat ?? 19.0;
@@ -1137,11 +1145,10 @@ const ResultsPage = () => {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
 
         .sp-page * { box-sizing: border-box; }
-        .sp-page { font-family: 'Inter', system-ui, sans-serif; }
+        .sp-page { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
 
         /* ── Animations (minimal — institutional) ── */
         @keyframes sp-fade-up  { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
@@ -1179,8 +1186,16 @@ const ResultsPage = () => {
         }
 
         /* ── Cards ── */
-        .sp-card { transition: border-color .18s; }
-        .sp-card:hover { border-color: ${C.outline} !important; }
+        .sp-card {
+          border-radius: 16px;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 28px rgba(0,0,0,0.28);
+          transition: border-color .25s cubic-bezier(.25,.1,.25,1), transform .25s cubic-bezier(.25,.1,.25,1), box-shadow .25s cubic-bezier(.25,.1,.25,1);
+        }
+        .sp-card:hover {
+          border-color: ${C.outline} !important;
+          transform: translateY(-2px);
+          box-shadow: 0 2px 4px rgba(0,0,0,0.35), 0 16px 44px rgba(0,0,0,0.4);
+        }
         .sp-row:hover td { background: ${C.surfaceVariant} !important; }
 
         /* ── Module toggle buttons ── */
@@ -1192,11 +1207,11 @@ const ResultsPage = () => {
           font-weight: 600;
           text-transform: uppercase;
           letter-spacing: .06em;
-          padding: 6px 14px;
+          padding: 7px 16px;
           cursor: pointer;
-          transition: all .15s;
-          font-family: 'JetBrains Mono', monospace;
-          border-radius: 4px;
+          transition: all .2s cubic-bezier(.25,.1,.25,1);
+          font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+          border-radius: 999px;
         }
         .sp-toggle.on {
           background: ${C.primaryContainer}18;
@@ -1220,8 +1235,9 @@ const ResultsPage = () => {
           letter-spacing: .06em;
           padding: 5px 14px;
           cursor: pointer;
-          transition: all .15s;
-          font-family: 'JetBrains Mono', monospace;
+          transition: all .2s cubic-bezier(.25,.1,.25,1);
+          font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+          border-radius: 999px;
         }
         .sp-tab.on { background: ${C.primary}; color: ${C.onPrimary}; }
         .sp-tab:hover:not(.on) { color: ${C.onSurface}; }
@@ -1231,15 +1247,16 @@ const ResultsPage = () => {
           background: ${C.surfaceContainerHigh};
           border: 1px solid ${C.outlineVariant};
           padding: 8px 12px;
-          font-family: 'JetBrains Mono', monospace;
+          font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
           font-size: 10px;
-          border-radius: 3px;
+          border-radius: 10px;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.4);
         }
 
         /* ── Typography utilities ── */
         .tabular-nums { font-variant-numeric: tabular-nums; }
-        .sp-serif { font-family: 'DM Serif Display', Georgia, serif; }
-        .sp-mono  { font-family: 'JetBrains Mono', monospace; }
+        .sp-serif { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif; font-weight: 600; letter-spacing: -0.02em; }
+        .sp-mono  { font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace; }
         .material-symbols-outlined {
           font-family: 'Material Symbols Outlined';
           font-style: normal;
@@ -1253,7 +1270,7 @@ const ResultsPage = () => {
 
         /* ── Section header label ── */
         .sp-section-label {
-          font-family: 'JetBrains Mono', monospace;
+          font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
           font-size: 9px;
           font-weight: 600;
           letter-spacing: .1em;
@@ -1263,16 +1280,18 @@ const ResultsPage = () => {
 
         /* ── Metric value (large number) ── */
         .sp-metric-value {
-          font-family: 'DM Serif Display', Georgia, serif;
-          font-size: 26px;
-          line-height: 1.1;
+          font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+          font-size: 28px;
+          font-weight: 600;
+          letter-spacing: -0.02em;
+          line-height: 1.05;
           font-variant-numeric: tabular-nums;
           color: ${C.onSurface};
         }
 
         /* ── Table ── */
         .sp-table-header th {
-          font-family: 'JetBrains Mono', monospace;
+          font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
           font-size: 9px;
           font-weight: 600;
           text-transform: uppercase;
@@ -1284,7 +1303,7 @@ const ResultsPage = () => {
         }
         .sp-table-header th:first-child { text-align: left; }
         .sp-table-body td {
-          font-family: 'JetBrains Mono', monospace;
+          font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
           font-size: 11px;
           font-variant-numeric: tabular-nums;
           padding: 8px 12px;
@@ -1312,8 +1331,8 @@ const ResultsPage = () => {
           <div className="flex justify-between items-center px-4 md:px-16 py-3 mx-auto max-w-[1280px]">
             <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} className="flex items-center gap-2 group cursor-pointer">
               <img src="/logo.png" alt="SUNPOWER LINK Logo" className="w-10 h-10 object-contain transition-all duration-300 group-hover:scale-105" />
-              <div style={{ fontFamily: "Sora, sans-serif", color: C.mutedSand, fontSize: "20px", fontWeight: 500, letterSpacing: "-0.01em" }}>
-                SUNPOWER <span style={{ fontStyle: "italic", fontWeight: 300 }}>LINK</span>
+              <div style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif", color: C.onSurface, fontSize: "19px", fontWeight: 600, letterSpacing: "-0.02em" }}>
+                SUNPOWER <span style={{ color: C.primary }}>LINK</span>
               </div>
             </a>
             <nav className="hidden md:flex gap-6 items-center">
@@ -1410,90 +1429,104 @@ const ResultsPage = () => {
                UNLOCKED STATE
             ================================================================ */
             <>
-              {/* ── Section B: Executive Summary Metric Grid ──────────────── */}
-              <section className="sp-fade-up-1 grid grid-cols-1 md:grid-cols-4 border-l border-t" style={{ borderColor: C.outlineVariant }}>
-                {/* 1. System Size */}
-                <div className="p-5 border-r border-b flex flex-col justify-between h-36" style={{ borderColor: C.outlineVariant }}>
-                  <div>
-                    <div className="sp-section-label mb-1">System Size</div>
-                    <div className="sp-metric-value">{model.installedKw.toFixed(1)} <span className="text-sm font-sans font-normal text-neutral-400">kWp</span></div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-[9px] sp-mono text-neutral-500 mb-1">
-                      <span>Roof Utilization</span>
-                      <span>{Math.round((pCount / maxPanelsRef.current) * 100)}%</span>
+              {/* ═══ TIER 0 — HERO: Rooftop array site-plan + payback ═══ */}
+              <section className="sp-fade-up-1 grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] border rounded-[6px] overflow-hidden" style={{ borderColor: REPORT_TOKENS.graticule, background: REPORT_TOKENS.parcel }}>
+                {/* Rooftop parcel — the signature visualization */}
+                <div className="relative min-h-[300px] lg:min-h-[380px]" style={{ borderColor: REPORT_TOKENS.graticule }}>
+                  <RoofLayoutDiagram
+                    polygons={store.scanInput?.roofPolygon ?? []}
+                    panelConfig={store.panelConfig}
+                    width={520}
+                    height={380}
+                    showCount={false}
+                  />
+                  {/* Site-plan corner stamps */}
+                  <div className="absolute top-4 left-4 flex flex-col gap-1 pointer-events-none">
+                    <div className="text-[9px] font-bold uppercase tracking-[0.14em] font-mono" style={{ color: REPORT_TOKENS.muted }}>Array Site Plan</div>
+                    <div className="text-[10px] font-mono" style={{ color: REPORT_TOKENS.text }}>
+                      {data.location?.label ? data.location.label.split(",").slice(0, 2).join(",") : "20.8251, 77.3409"}
                     </div>
-                    <div className="h-1 w-full bg-neutral-800 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(pCount / maxPanelsRef.current) * 100}%`, background: C.secondary }} />
-                    </div>
                   </div>
-                </div>
-
-                {/* 2. Annual Production */}
-                <div className="p-5 border-r border-b flex flex-col justify-between h-36" style={{ borderColor: C.outlineVariant }}>
-                  <div>
-                    <div className="sp-section-label mb-1">Annual Prod</div>
-                    <div className="sp-metric-value">{Math.round(model.baseAnnualKwh).toLocaleString()} <span className="text-sm font-sans font-normal text-neutral-400">kWh</span></div>
-                  </div>
-                  <div className="flex items-end justify-between gap-2">
-                    <span className="text-[9px] sp-mono text-neutral-500">25-Yr Decline</span>
-                    <svg className="w-24 h-6 opacity-60" viewBox="0 0 100 20">
-                      <path
-                        d="M0,2 L10,3 L20,4 L30,5 L40,5 L50,6 L60,7 L70,8 L80,9 L90,10 L100,11"
-                        fill="none"
-                        stroke={C.secondary}
-                        strokeWidth="1.5"
-                      />
-                    </svg>
-                  </div>
-                </div>
-
-                {/* 3. Payback Period */}
-                <div className="p-5 border-r border-b flex flex-col justify-between h-36" style={{ borderColor: C.outlineVariant }}>
-                  <div>
-                    <div className="sp-section-label mb-1">Payback Period</div>
-                    <div className="sp-metric-value">{model.paybackPeriod.toFixed(1)} <span className="text-sm font-sans font-normal text-neutral-400">Years</span></div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-[9px] sp-mono text-neutral-500 mb-1">
-                      <span>ROI Threshold</span>
-                      <span>{model.paybackPeriod.toFixed(1)} / 25 Yrs</span>
-                    </div>
-                    <div className="h-1 w-full bg-neutral-800 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, (model.paybackPeriod / 25) * 100)}%`, background: C.primary }} />
+                  <div className="absolute bottom-4 left-4 flex gap-4 pointer-events-none">
+                    <div className="flex items-center gap-1.5">
+                      <span style={{ background: REPORT_TOKENS.solar, width: 10, height: 10 }} className="rounded-[2px] inline-block" />
+                      <span className="text-[9px] font-mono uppercase tracking-wider" style={{ color: REPORT_TOKENS.muted }}>{pCount} panels · {model.installedKw.toFixed(1)} kWp</span>
                     </div>
                   </div>
                 </div>
 
-                {/* 4. Lifetime Savings */}
-                <div className="p-5 border-r border-b flex flex-col justify-between h-36" style={{ borderColor: C.outlineVariant }}>
-                  <div>
-                    <div className="sp-section-label mb-1 text-[#E8A020]">Lifetime Savings</div>
-                    <div className="sp-metric-value text-[#E8A020]">₹{savings25L} <span className="text-sm font-sans font-normal text-[#E8A020]/75">Lakhs</span></div>
+                {/* Hero metric — payback period */}
+                <div className="flex flex-col justify-between p-8 lg:border-l" style={{ borderColor: REPORT_TOKENS.graticule, background: REPORT_TOKENS.parcelHigh }}>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] font-mono" style={{ color: REPORT_TOKENS.muted }}>
+                    Investment Payback
                   </div>
-                  <div className="flex items-end justify-between">
-                    <span className="text-[9px] sp-mono text-neutral-500">Waterfall Trend</span>
-                    <div className="flex items-end gap-1.5 h-6">
-                      <div className="w-2.5 bg-red-500/80 rounded-sm" style={{ height: "40%" }} />
-                      <div className="w-2.5 bg-emerald-500/80 rounded-sm" style={{ height: "20%" }} />
-                      <div className="w-2.5 bg-emerald-500/80 rounded-sm" style={{ height: "45%" }} />
-                      <div className="w-2.5 bg-emerald-500/80 rounded-sm" style={{ height: "70%" }} />
-                      <div className="w-2.5 bg-emerald-500/80 rounded-sm" style={{ height: "95%" }} />
+                  <div className="my-6">
+                    <div className="flex items-baseline gap-2">
+                      <span style={{ color: REPORT_TOKENS.text, fontSize: 64, fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1 }} className="tabular-nums font-sans">
+                        {metrics.paybackFound ? metrics.paybackYears.toFixed(1) : "25+"}
+                      </span>
+                      <span className="text-lg font-sans" style={{ color: REPORT_TOKENS.muted }}>years</span>
+                    </div>
+                    <p className="mt-3 text-[12px] leading-relaxed" style={{ color: REPORT_TOKENS.muted }}>
+                      Time to fully recover your net capital outlay of{" "}
+                      <span style={{ color: REPORT_TOKENS.text }} className="font-mono">{formatINR(metrics.netCostInr)}</span>{" "}
+                      from energy savings.
+                    </p>
+                  </div>
+                  {/* Payback progress against the 25-yr horizon */}
+                  <div>
+                    <div className="flex justify-between text-[9px] font-mono uppercase tracking-wider mb-1.5" style={{ color: REPORT_TOKENS.muted }}>
+                      <span>Recovered</span>
+                      <span>{metrics.paybackFound ? metrics.paybackYears.toFixed(1) : "25+"} / 25 yrs</span>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full overflow-hidden" style={{ background: REPORT_TOKENS.graticule }}>
+                      <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.min(100, (metrics.paybackYears / 25) * 100)}%`, background: REPORT_TOKENS.solar }} />
                     </div>
                   </div>
                 </div>
               </section>
 
-              {/* Auxiliary Financial Highlight strip */}
-              <section className="py-3 px-5 sp-fade-up-1 grid grid-cols-3 gap-4 border-l border-r border-b" style={{ background: `${C.surfaceVariant}22`, borderColor: C.outlineVariant }}>
+              {/* ═══ TIER 1 — Secondary KPIs ═══ */}
+              <section className="sp-fade-up-1 grid grid-cols-1 md:grid-cols-3 border-l border-t rounded-[6px] overflow-hidden" style={{ borderColor: REPORT_TOKENS.graticule }}>
+                {/* Lifetime Savings — positive → yield */}
+                <div className="p-6 border-r border-b flex flex-col justify-between h-36" style={{ borderColor: REPORT_TOKENS.graticule, background: REPORT_TOKENS.parcel }}>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] font-mono" style={{ color: REPORT_TOKENS.muted }}>Lifetime Savings · 25 yr</div>
+                  <div className="tabular-nums font-sans" style={{ color: REPORT_TOKENS.yield, fontSize: 30, fontWeight: 700, letterSpacing: "-0.02em" }}>
+                    {formatINR(metrics.lifetimeSavingsInr)}
+                  </div>
+                  <div className="text-[9px] font-mono" style={{ color: REPORT_TOKENS.muted }}>Net of upfront cost, nominal</div>
+                </div>
+
+                {/* Annual Production — neutral */}
+                <div className="p-6 border-r border-b flex flex-col justify-between h-36" style={{ borderColor: REPORT_TOKENS.graticule, background: REPORT_TOKENS.parcel }}>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] font-mono" style={{ color: REPORT_TOKENS.muted }}>Annual Production</div>
+                  <div className="tabular-nums font-sans" style={{ color: REPORT_TOKENS.text, fontSize: 30, fontWeight: 700, letterSpacing: "-0.02em" }}>
+                    {Math.round(metrics.annualProductionKwh).toLocaleString("en-IN")} <span className="text-sm font-normal" style={{ color: REPORT_TOKENS.muted }}>kWh</span>
+                  </div>
+                  <div className="text-[9px] font-mono" style={{ color: REPORT_TOKENS.muted }}>Year one, before 0.5%/yr decline</div>
+                </div>
+
+                {/* Net Cost — money out → cost color context */}
+                <div className="p-6 border-r border-b flex flex-col justify-between h-36" style={{ borderColor: REPORT_TOKENS.graticule, background: REPORT_TOKENS.parcel }}>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] font-mono" style={{ color: REPORT_TOKENS.muted }}>Net Capital Outlay</div>
+                  <div className="tabular-nums font-sans" style={{ color: REPORT_TOKENS.text, fontSize: 30, fontWeight: 700, letterSpacing: "-0.02em" }}>
+                    {formatINR(metrics.netCostInr)}
+                  </div>
+                  <div className="text-[9px] font-mono" style={{ color: REPORT_TOKENS.muted }}>After {formatINR(model.subsidyInr)} subsidy</div>
+                </div>
+              </section>
+
+
+              {/* Secondary financial indicators — distinct from Tier 1 */}
+              <section className="py-4 px-6 sp-fade-up-1 grid grid-cols-3 gap-4 border rounded-[6px]" style={{ background: REPORT_TOKENS.parcel, borderColor: REPORT_TOKENS.graticule }}>
                 {[
-                  { label: "Net Capital Outlay", value: `₹${Math.round(model.netCostInr).toLocaleString()}`, color: C.onSurface },
-                  { label: "Net Present Value (NPV)", value: `${model.npv >= 0 ? "+" : ""}₹${Math.round(model.npv).toLocaleString()}`, color: model.npv >= 0 ? C.secondary : C.error },
-                  { label: "PM Surya Ghar Subsidy", value: `₹${model.subsidyInr.toLocaleString()}`, color: C.primary },
+                  { label: "Net Present Value", value: `${metrics.npvInr >= 0 ? "+" : "−"}${formatINR(Math.abs(metrics.npvInr))}`, color: metrics.npvInr >= 0 ? REPORT_TOKENS.yield : REPORT_TOKENS.cost },
+                  { label: "Internal Rate of Return", value: `${metrics.irrPct.toFixed(1)}%`, color: REPORT_TOKENS.text },
+                  { label: "Levelised Cost of Energy", value: `₹${metrics.lcoeInrPerKwh.toFixed(2)}/kWh`, color: REPORT_TOKENS.text },
                 ].map((item, i) => (
                   <div key={i} className="flex flex-col justify-center">
-                    <div className="text-[9px] font-bold uppercase tracking-wider mb-0.5 font-mono text-neutral-500">{item.label}</div>
-                    <div className="tabular-nums font-semibold text-sm sp-mono" style={{ color: item.color }}>{item.value}</div>
+                    <div className="text-[9px] font-bold uppercase tracking-[0.12em] mb-1 font-mono" style={{ color: REPORT_TOKENS.muted }}>{item.label}</div>
+                    <div className="tabular-nums font-semibold text-base font-mono" style={{ color: item.color }}>{item.value}</div>
                   </div>
                 ))}
               </section>
@@ -1710,7 +1743,7 @@ const ResultsPage = () => {
                               toast({ title: "Application Form Pre-Filled", description: "Downloaded pre-filled PDF application form." });
                             }}
                             style={{ background: C.secondary, color: C.onSecondary }}
-                            className="mt-4 w-full py-2.5 text-[10px] font-bold uppercase tracking-wider rounded-[3px] hover:opacity-90 transition-opacity font-mono cursor-pointer flex items-center justify-center gap-1.5 border-none"
+                            className="mt-4 w-full py-2.5 text-[10px] font-bold uppercase tracking-wider rounded-lg hover:opacity-90 transition-opacity font-mono cursor-pointer flex items-center justify-center gap-1.5 border-none"
                           >
                             <Download className="w-3.5 h-3.5" />
                             Download Pre-filled Application Form
@@ -1774,7 +1807,7 @@ const ResultsPage = () => {
                                 toast({ title: "Link Copied", description: "Referral URL copied to clipboard." });
                               }}
                               style={{ border: `1px solid ${C.outlineVariant}`, color: C.onSurface, background: "transparent" }}
-                              className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-[3px] hover:bg-neutral-800 transition-colors cursor-pointer font-mono border"
+                              className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg hover:bg-neutral-800 transition-colors cursor-pointer font-mono border"
                             >
                               Copy
                             </button>
@@ -1788,7 +1821,7 @@ const ResultsPage = () => {
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{ background: "#25D366", color: "#075E54" }}
-                            className="flex-1 min-w-[120px] py-2 text-[10px] font-bold uppercase tracking-wider rounded-[3px] text-center hover:opacity-90 transition-opacity font-mono flex items-center justify-center gap-1.5 cursor-pointer decoration-none"
+                            className="flex-1 min-w-[120px] py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg text-center hover:opacity-90 transition-opacity font-mono flex items-center justify-center gap-1.5 cursor-pointer decoration-none"
                           >
                             <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.625 1.451 5.403.002 9.792-4.382 9.795-9.79.001-2.621-1.013-5.086-2.856-6.93C16.328 2.05 13.87 1.037 11.26 1.036c-5.4.001-9.791 4.384-9.793 9.793-.001 1.543.41 3.05 1.194 4.376l-1.018 3.722 3.834-.997c1.3.7 2.6 1.07 4.17 1.026z"/></svg>
                             Share on WhatsApp
@@ -1799,7 +1832,7 @@ const ResultsPage = () => {
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{ background: "#1DA1F2", color: "#FFFFFF" }}
-                            className="flex-1 min-w-[120px] py-2 text-[10px] font-bold uppercase tracking-wider rounded-[3px] text-center hover:opacity-90 transition-opacity font-mono flex items-center justify-center gap-1.5 cursor-pointer decoration-none"
+                            className="flex-1 min-w-[120px] py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg text-center hover:opacity-90 transition-opacity font-mono flex items-center justify-center gap-1.5 cursor-pointer decoration-none"
                           >
                             Share on X
                           </a>
@@ -1809,7 +1842,7 @@ const ResultsPage = () => {
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{ background: "#1877F2", color: "#FFFFFF" }}
-                            className="flex-1 min-w-[120px] py-2 text-[10px] font-bold uppercase tracking-wider rounded-[3px] text-center hover:opacity-90 transition-opacity font-mono flex items-center justify-center gap-1.5 cursor-pointer decoration-none"
+                            className="flex-1 min-w-[120px] py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg text-center hover:opacity-90 transition-opacity font-mono flex items-center justify-center gap-1.5 cursor-pointer decoration-none"
                           >
                             Share on Facebook
                           </a>
@@ -2243,7 +2276,7 @@ const ResultsPage = () => {
                       <button
                         onClick={() => setShowAllYears(!showAllYears)}
                         style={{ border: `1px solid ${C.outlineVariant}`, background: C.surfaceVariant, color: C.onSurface }}
-                        className="px-3 py-1.5 text-[9px] font-bold tracking-wider sp-mono uppercase hover:opacity-80 transition-opacity rounded-[3px]"
+                        className="px-3 py-1.5 text-[9px] font-bold tracking-wider sp-mono uppercase hover:opacity-80 transition-opacity rounded-lg"
                       >
                         {showAllYears ? "Show Key Years Only" : "Expand Full 25-Year Ledger"}
                       </button>
@@ -2252,14 +2285,14 @@ const ResultsPage = () => {
                       <table className="w-full text-xs text-left font-mono">
                         <thead>
                           <tr className="sp-table-header">
-                            <th className="py-2.5 px-3 rounded-none text-left" style={{ background: "#0F172A", color: "#FFFFFF" }}>Yr</th>
-                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: "#0F172A", color: "#FFFFFF" }}>Yield (kWh)</th>
-                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: "#0F172A", color: "#FFFFFF" }}>Savings</th>
-                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: "#0F172A", color: "#FFFFFF" }}>O&M Cost</th>
-                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: "#0F172A", color: "#FFFFFF" }}>Maint. Res</th>
-                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: "#0F172A", color: "#FFFFFF" }}>Tax Benefit</th>
-                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: "#0F172A", color: "#FFFFFF" }}>Net Cashflow</th>
-                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: "#0F172A", color: "#FFFFFF" }}>Cumulative</th>
+                            <th className="py-2.5 px-3 rounded-none text-left" style={{ background: REPORT_TOKENS.parcelHigh, color: REPORT_TOKENS.muted }}>Yr</th>
+                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: REPORT_TOKENS.parcelHigh, color: REPORT_TOKENS.muted }}>Yield (kWh)</th>
+                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: REPORT_TOKENS.parcelHigh, color: REPORT_TOKENS.muted }}>Savings</th>
+                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: REPORT_TOKENS.parcelHigh, color: REPORT_TOKENS.muted }}>O&M Cost</th>
+                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: REPORT_TOKENS.parcelHigh, color: REPORT_TOKENS.muted }}>Maint. Res</th>
+                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: REPORT_TOKENS.parcelHigh, color: REPORT_TOKENS.muted }}>Tax Benefit</th>
+                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: REPORT_TOKENS.parcelHigh, color: REPORT_TOKENS.muted }}>Net Cashflow</th>
+                            <th className="py-2.5 px-3 rounded-none text-right" style={{ background: REPORT_TOKENS.parcelHigh, color: REPORT_TOKENS.muted }}>Cumulative</th>
                           </tr>
                         </thead>
                         <tbody className="sp-table-body">
@@ -2273,17 +2306,17 @@ const ResultsPage = () => {
                             const cumNpv = model.cumulativeCashFlow[yr];
                             return (
                               <tr key={yr} className="sp-row border-b" style={{ borderColor: `${C.outlineVariant}50` }}>
-                                <td className="py-2 px-3 text-left font-bold" style={{ color: C.mutedSand }}>{yr}</td>
-                                <td className="py-2 px-3 text-right" style={{ color: C.onSurface }}>{Math.round(prod).toLocaleString()}</td>
-                                <td className="py-2 px-3 text-right" style={{ color: C.secondary }}>{formatLakhsCr(savings)}</td>
-                                <td className="py-2 px-3 text-right animate-in fade-in" style={{ color: C.error }}>({formatLakhsCr(om)})</td>
-                                <td className="py-2 px-3 text-right" style={{ color: C.error }}>{maintRes > 0 ? `(${formatLakhsCr(maintRes)})` : "—"}</td>
+                                <td className="py-2 px-3 text-left font-bold" style={{ color: REPORT_TOKENS.muted }}>{yr}</td>
+                                <td className="py-2 px-3 text-right" style={{ color: REPORT_TOKENS.text }}>{Math.round(prod).toLocaleString()}</td>
+                                <td className="py-2 px-3 text-right" style={{ color: REPORT_TOKENS.yield }}>{formatINR(savings, { decimals: 2 })}</td>
+                                <td className="py-2 px-3 text-right animate-in fade-in" style={{ color: REPORT_TOKENS.cost }}>({formatINR(om, { decimals: 2 })})</td>
+                                <td className="py-2 px-3 text-right" style={{ color: REPORT_TOKENS.cost }}>{maintRes > 0 ? `(${formatINR(maintRes, { decimals: 2 })})` : "—"}</td>
                                 <td className="py-2 px-3 text-right text-neutral-500">—</td>
-                                <td className="py-2 px-3 text-right font-medium" style={{ color: net > 0 ? C.secondary : C.error }}>
-                                  {net > 0 ? "+" : ""}{formatLakhsCr(net)}
+                                <td className="py-2 px-3 text-right font-medium" style={{ color: net > 0 ? REPORT_TOKENS.yield : REPORT_TOKENS.cost }}>
+                                  {net > 0 ? "+" : ""}{formatINR(net, { decimals: 2 })}
                                 </td>
-                                <td className="py-2 px-3 text-right font-semibold" style={{ color: cumNpv >= 0 ? C.onSurface : C.error }}>
-                                  {cumNpv >= 0 ? "+" : ""}{formatLakhsCr(cumNpv)}
+                                <td className="py-2 px-3 text-right font-semibold" style={{ color: cumNpv >= 0 ? REPORT_TOKENS.text : REPORT_TOKENS.cost }}>
+                                  {cumNpv >= 0 ? "+" : ""}{formatINR(cumNpv, { decimals: 2 })}
                                 </td>
                               </tr>
                             );
@@ -2296,7 +2329,7 @@ const ResultsPage = () => {
                   {/* Lead capture CTA card */}
                   <div className="border p-6 sm:p-8 text-center sp-fade-up-4 rounded-[4px]" style={{ background: C.charcoal, borderColor: C.outlineVariant }}>
                     <div className="max-w-xl mx-auto">
-                      <div className="inline-flex items-center gap-2 bg-neutral-800/40 px-3 py-1 rounded-[3px] text-[10px] font-bold uppercase tracking-widest sp-mono text-neutral-400 mb-3">
+                      <div className="inline-flex items-center gap-2 bg-neutral-800/40 px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest sp-mono text-neutral-400 mb-3">
                         <CheckCircle2 className="w-3.5 h-3.5 text-[#2BD4A0]" /> Verified MNRE installers active
                       </div>
                       <h2 className="sp-serif text-2xl sm:text-3xl mb-2 font-bold leading-tight text-[#F0EEE9]">
@@ -2308,7 +2341,7 @@ const ResultsPage = () => {
                       <button
                         onClick={() => setLeadFormOpen(true)}
                         style={{ background: C.primary, color: C.onPrimary }}
-                        className="inline-flex items-center gap-2 font-bold px-6 py-2.5 rounded-[3px] hover:opacity-90 active:scale-95 transition-all text-xs uppercase cursor-pointer tracking-wider sp-mono"
+                        className="inline-flex items-center gap-2 font-bold px-6 py-2.5 rounded-lg hover:opacity-90 active:scale-95 transition-all text-xs uppercase cursor-pointer tracking-wider sp-mono"
                       >
                         <PhoneCall className="w-4 h-4" />
                         Talk to an installer
@@ -2331,19 +2364,19 @@ const ResultsPage = () => {
                     <h2 className="sp-serif text-[#F0EEE9] text-2xl font-bold mb-2">Get 3 Verified Installer Quotes</h2>
                     <p style={{ color: C.mutedSand }} className="text-xs max-w-2xl mb-6 leading-relaxed">Take the next step in realizing your projected ₹{savings25L}L in lifetime savings. Get competitive installation rates in minutes.</p>
                     <div className="flex flex-wrap justify-center gap-3">
-                      <button onClick={() => setLeadFormOpen(true)} style={{ background: C.secondary, color: C.onSecondary }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-90 transition-opacity cursor-pointer rounded-[3px] font-mono">
+                      <button onClick={() => setLeadFormOpen(true)} style={{ background: C.secondary, color: C.onSecondary }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-90 transition-opacity cursor-pointer rounded-lg font-mono">
                         <span className="material-symbols-outlined text-sm">request_quote</span>
                         Request Quotes — Free
                       </button>
-                      <button onClick={() => setLeadFormOpen(true)} style={{ background: C.surfaceVariant, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-[3px] font-mono">
+                      <button onClick={() => setLeadFormOpen(true)} style={{ background: C.surfaceVariant, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-lg font-mono">
                         <span className="material-symbols-outlined text-sm">calendar_month</span>
                         Schedule Consultation
                       </button>
-                      <button onClick={handleDownload} disabled={downloading} style={{ background: C.surfaceVariant, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity disabled:opacity-40 cursor-pointer rounded-[3px] font-mono">
+                      <button onClick={handleDownload} disabled={downloading} style={{ background: C.surfaceVariant, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity disabled:opacity-40 cursor-pointer rounded-lg font-mono">
                         {downloading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                         {downloading ? "Generating..." : "Download PDF"}
                       </button>
-                      <button onClick={() => setShareModalOpen(true)} style={{ background: C.surfaceVariant, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-[3px] font-mono">
+                      <button onClick={() => setShareModalOpen(true)} style={{ background: C.surfaceVariant, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="flex items-center gap-2 px-5 py-2 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-lg font-mono">
                         <span>📱</span> Share on WhatsApp
                       </button>
                     </div>
@@ -2431,15 +2464,15 @@ const ResultsPage = () => {
                     </ul>
                   </div>
 
-                  <SideCard title="Purchase vs Loan">
+                  <SideCard title="Headline Returns">
                     <div className="grid grid-cols-2 gap-2 text-[10px] text-center font-mono">
-                      <div style={{ background: `${C.secondary}08`, border: `1px solid ${C.secondary}20` }} className="p-2.5 rounded-[3px]">
-                        <div style={{ color: C.mutedSand }} className="mb-1 text-[8px] uppercase tracking-wider font-bold">Cash</div>
-                        <div style={{ color: C.onSurface }} className="font-bold sp-serif text-sm">₹{Math.round(Math.abs(model.npv)/100000).toFixed(1)}L NPV</div>
+                      <div style={{ background: REPORT_TOKENS.parcelHigh, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-2.5 rounded-lg">
+                        <div style={{ color: REPORT_TOKENS.muted }} className="mb-1 text-[8px] uppercase tracking-wider font-bold">Net Present Value</div>
+                        <div style={{ color: metrics.npvInr >= 0 ? REPORT_TOKENS.yield : REPORT_TOKENS.cost }} className="font-bold text-sm">{metrics.npvInr >= 0 ? "+" : "−"}{formatINR(Math.abs(metrics.npvInr))}</div>
                       </div>
-                      <div style={{ background: `${C.primary}08`, border: `1px solid ${C.primary}20` }} className="p-2.5 rounded-[3px]">
-                        <div style={{ color: C.mutedSand }} className="mb-1 text-[8px] uppercase tracking-wider font-bold">Loan (7yr)</div>
-                        <div style={{ color: C.onSurface }} className="font-bold sp-serif text-sm">₹{Math.round(Math.abs(model.npv)*0.78/100000).toFixed(1)}L NPV</div>
+                      <div style={{ background: REPORT_TOKENS.parcelHigh, border: `1px solid ${REPORT_TOKENS.graticule}` }} className="p-2.5 rounded-lg">
+                        <div style={{ color: REPORT_TOKENS.muted }} className="mb-1 text-[8px] uppercase tracking-wider font-bold">Rate of Return</div>
+                        <div style={{ color: REPORT_TOKENS.text }} className="font-bold text-sm">{metrics.irrPct.toFixed(1)}% IRR</div>
                       </div>
                     </div>
                   </SideCard>
@@ -2461,7 +2494,7 @@ const ResultsPage = () => {
                     <Satellite className="w-5 h-5" />
                     <h2 className="sp-serif text-base font-bold">AI Summary</h2>
                   </div>
-                  <div style={{ background: `${C.secondary}10`, border: `1px solid ${C.secondary}25` }} className="flex items-center gap-1.5 px-3 py-1 w-fit rounded-[3px]">
+                  <div style={{ background: `${C.secondary}10`, border: `1px solid ${C.secondary}25` }} className="flex items-center gap-1.5 px-3 py-1 w-fit rounded-lg">
                     <div style={{ background: C.secondary, width: 5, height: 5, borderRadius: "50%" }} />
                     <span style={{ color: C.secondary }} className="text-[9px] font-bold uppercase tracking-widest font-mono">Geospatial Active</span>
                   </div>
@@ -2538,7 +2571,7 @@ const ResultsPage = () => {
 
                     <div className="flex flex-wrap justify-center gap-1.5">
                       {["25-Yr Cashflow Model","3D AR Preview","BESS Battery Config","PDF Export"].map(f => (
-                        <div key={f} style={{ border: `1px solid ${C.secondary}30`, color: C.secondary, background: `${C.secondary}05` }} className="text-[9px] font-bold uppercase tracking-wider font-mono px-2.5 py-0.5 rounded-[3px]">
+                        <div key={f} style={{ border: `1px solid ${C.secondary}30`, color: C.secondary, background: `${C.secondary}05` }} className="text-[9px] font-bold uppercase tracking-wider font-mono px-2.5 py-0.5 rounded-lg">
                           {f}
                         </div>
                       ))}
@@ -2546,7 +2579,7 @@ const ResultsPage = () => {
 
                     <button onClick={() => setCheckoutOpen(true)}
                       style={{ background: C.primary, color: C.onPrimary }}
-                      className="flex items-center gap-2 px-6 py-3 font-bold text-xs uppercase tracking-wider transition-all hover:opacity-90 active:scale-[0.98] rounded-[3px] cursor-pointer font-mono">
+                      className="flex items-center gap-2 px-6 py-3 font-bold text-xs uppercase tracking-wider transition-all hover:opacity-90 active:scale-[0.98] rounded-lg cursor-pointer font-mono">
                       Unlock Report — ₹{payPerScanPrice} {hasReferralDiscount && "(₹20 off applied)"}
                       <ArrowRight className="w-4 h-4" />
                     </button>
@@ -2574,10 +2607,10 @@ const ResultsPage = () => {
             <p className="text-[11px]" style={{ color: C.mutedSand }}>© {new Date().getFullYear()} SUNPOWER LINK. Financial intelligence driven by geospatial AI.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate("/map")} style={{ background: C.secondary, color: C.onSecondary }} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-95 transition-opacity cursor-pointer rounded-[3px] font-mono">
+            <button onClick={() => navigate("/map")} style={{ background: C.secondary, color: C.onSecondary }} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-95 transition-opacity cursor-pointer rounded-lg font-mono">
               Analyze Another Rooftop
             </button>
-            <button onClick={() => navigate("/")} style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-[3px] font-mono">
+            <button onClick={() => navigate("/")} style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-lg font-mono">
               Back to Home
             </button>
           </div>
@@ -2610,7 +2643,7 @@ const ResultsPage = () => {
                 ].map(plan => (
                   <button key={plan.key} onClick={() => setPaymentPlan(plan.key as any)}
                     style={{ background: paymentPlan === plan.key ? `${C.primary}05` : "transparent", border: `1px solid ${paymentPlan === plan.key ? C.primary : C.outlineVariant}`, color: C.onSurface }}
-                    className="p-3 text-left flex flex-col justify-between h-20 transition-all font-mono rounded-[3px] cursor-pointer">
+                    className="p-3 text-left flex flex-col justify-between h-20 transition-all font-mono rounded-lg cursor-pointer">
                     <span className="text-[8px] font-bold uppercase tracking-wider" style={{ color: C.mutedSand }}>{plan.label}</span>
                     <span className="font-bold sp-serif text-base">{plan.price}</span>
                     <span className="text-[8px] text-[#2BD4A0]">{plan.sub}</span>
@@ -2621,11 +2654,11 @@ const ResultsPage = () => {
 
             <div className="space-y-3 my-2 text-left">
               <div className="text-[9px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>Payment details</div>
-              <div style={{ background: C.background, border: `1px solid ${C.outlineVariant}` }} className="flex p-0.5 rounded-[3px]">
+              <div style={{ background: C.background, border: `1px solid ${C.outlineVariant}` }} className="flex p-0.5 rounded-lg">
                 {["card","upi"].map(m => (
                   <button key={m} onClick={() => setPaymentMethod(m as any)}
                     style={{ background: paymentMethod===m ? C.primaryContainer : "transparent", color: paymentMethod===m ? C.onPrimary : C.mutedSand }}
-                    className="flex-1 text-[9px] py-1 font-bold uppercase transition-all font-mono rounded-[2px] cursor-pointer border-none outline-none">
+                    className="flex-1 text-[9px] py-1 font-bold uppercase transition-all font-mono rounded-md cursor-pointer border-none outline-none">
                     {m === "card" ? "Card" : "UPI"}
                   </button>
                 ))}
@@ -2636,20 +2669,20 @@ const ResultsPage = () => {
                     <label className="text-[8px] font-bold uppercase font-mono block mb-1" style={{ color: C.mutedSand }}>Card number</label>
                     <input type="text" placeholder="4000 1234 5678 9010" value={cardNumber} onChange={e => setCardNumber(e.target.value)}
                       style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                      className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#E8A020] rounded-[3px] border" />
+                      className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#E8A020] rounded-lg border" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-[8px] font-bold uppercase font-mono block mb-1" style={{ color: C.mutedSand }}>Expiry</label>
                       <input type="text" placeholder="MM/YY" value={cardExpiry} onChange={e => setCardExpiry(e.target.value)}
                         style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                        className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#E8A020] rounded-[3px] border" />
+                        className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#E8A020] rounded-lg border" />
                     </div>
                     <div>
                       <label className="text-[8px] font-bold uppercase font-mono block mb-1" style={{ color: C.mutedSand }}>CVV</label>
                       <input type="password" placeholder="•••" value={cardCvv} onChange={e => setCardCvv(e.target.value)}
                         style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                        className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#E8A020] rounded-[3px] border" />
+                        className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#E8A020] rounded-lg border" />
                     </div>
                   </div>
                 </div>
@@ -2666,13 +2699,13 @@ const ResultsPage = () => {
             <div style={{ borderTop: `1px solid ${C.outlineVariant}` }} className="space-y-2 pt-4 mt-4">
               <button onClick={handleSandboxCheckout} disabled={paymentProcessing || paymentSuccess}
                 style={{ background: C.primary, color: C.onPrimary }}
-                className="w-full text-[10px] font-bold py-2.5 flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity uppercase tracking-wider rounded-[3px] cursor-pointer border-none outline-none font-mono">
+                className="w-full text-[10px] font-bold py-2.5 flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity uppercase tracking-wider rounded-lg cursor-pointer border-none outline-none font-mono">
                 {paymentProcessing ? <><RefreshCw className="w-4 h-4 animate-spin" />Processing...</> : paymentSuccess ? <><CheckCircle2 className="w-4 h-4" />Unlocking...</> : "Simulate Instant Sandbox Unlock"}
               </button>
               <button onClick={() => { setCheckoutOpen(false); initiatePayment({ plan: paymentPlan, scanId: data?.analysisId, onSuccess: refreshUnlock }); }}
                 disabled={paymentProcessing || paymentSuccess || isPaymentGatewayLoading}
                 style={{ background: "transparent", border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                className="w-full text-[10px] font-bold py-2.5 flex items-center justify-center gap-2 hover:bg-[#141416] transition-colors disabled:opacity-50 uppercase tracking-wider rounded-[3px] cursor-pointer font-mono">
+                className="w-full text-[10px] font-bold py-2.5 flex items-center justify-center gap-2 hover:bg-[#141416] transition-colors disabled:opacity-50 uppercase tracking-wider rounded-lg cursor-pointer font-mono">
                 {isPaymentGatewayLoading ? <><RefreshCw className="w-4 h-4 animate-spin" />Connecting...</> : "Launch Razorpay"}
               </button>
             </div>
@@ -2706,7 +2739,7 @@ const ResultsPage = () => {
                     setSharePhoneError("");
                   }}
                   style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                  className="px-3 py-2 text-xs font-mono rounded-[3px] focus:outline-none focus:ring-1 focus:ring-[#E2E8F0]"
+                  className="px-3 py-2 text-xs font-mono rounded-lg focus:outline-none focus:ring-1 focus:ring-[#E2E8F0]"
                 />
                 {sharePhoneError && (
                   <p className="text-[10px] text-red-400 font-mono mt-0.5">{sharePhoneError}</p>
@@ -2719,7 +2752,7 @@ const ResultsPage = () => {
                 onClick={handleWhatsAppShare}
                 disabled={isSharing}
                 style={{ background: C.primary, color: C.onPrimary }}
-                className="w-full text-[10px] font-bold py-2.5 flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity uppercase tracking-wider rounded-[3px] cursor-pointer border-none outline-none font-mono"
+                className="w-full text-[10px] font-bold py-2.5 flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity uppercase tracking-wider rounded-lg cursor-pointer border-none outline-none font-mono"
               >
                 {isSharing ? (
                   <>
@@ -2734,7 +2767,7 @@ const ResultsPage = () => {
                 onClick={() => setShareModalOpen(false)}
                 disabled={isSharing}
                 style={{ background: "transparent", border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                className="w-full text-[10px] font-bold py-2.5 flex items-center justify-center gap-2 hover:bg-[#141416] transition-colors disabled:opacity-50 uppercase tracking-wider rounded-[3px] cursor-pointer font-mono"
+                className="w-full text-[10px] font-bold py-2.5 flex items-center justify-center gap-2 hover:bg-[#141416] transition-colors disabled:opacity-50 uppercase tracking-wider rounded-lg cursor-pointer font-mono"
               >
                 Cancel
               </button>
