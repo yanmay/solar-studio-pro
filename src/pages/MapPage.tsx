@@ -1414,10 +1414,10 @@ const MapPage = () => {
         orientation,
         walkways,
         setbackM,
-        pitchDegrees,
+        pitchDegrees: irradiance.pitchDegrees ?? pitchDegrees,
         exclusionAreaM2: totalExclusionArea,
         shading,
-        computedShadingLoss: useScanStore.getState().computedShadingLoss,
+        computedShadingLoss: irradiance.computedShadingLoss ?? useScanStore.getState().computedShadingLoss,
         ws10m: irradiance.ws10m,
         t2m: irradiance.t2m,
       });

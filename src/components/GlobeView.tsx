@@ -189,7 +189,12 @@ export function GlobeView({
 
           setStats({
             psh: res.peakSunHours,
-            source: res.source === "NASA_POWER" ? "NASA POWER API" : "Regional Fallback",
+            source:
+              res.source === "GOOGLE_SOLAR"
+                ? "Google Solar API"
+                : res.source === "NASA_POWER"
+                  ? "NASA POWER API"
+                  : "Regional Fallback",
             suitability,
             yield: yieldVal,
           });

@@ -17,13 +17,17 @@ export interface NASAPowerResponse {
 
 export interface IrradianceResult {
   peakSunHours: number;
-  source: "NASA_POWER" | "REGIONAL_FALLBACK";
+  source: "NASA_POWER" | "REGIONAL_FALLBACK" | "GOOGLE_SOLAR";
   region?: string;
   monthlyValues?: Record<string, number>;
   ws10m?: number;
   ws50m?: number;
   t2m?: number;
   t2m_monthly?: number[];
+  // Google Solar overrides (present only when source === "GOOGLE_SOLAR")
+  pitchDegrees?: number;
+  azimuthDegrees?: number;
+  computedShadingLoss?: number;
 }
 
 export interface MonthlyGHIResult {
@@ -35,6 +39,13 @@ export interface MonthlyGHIResult {
   ws50m?: number;
   t2m?: number;
   t2m_monthly?: number[];
+  // Google Solar augmentation fields, added by /api/solar-data when the
+  // GOOGLE_SOLAR_API_KEY flag is set and Google returns coverage.
+  source?: "GOOGLE_SOLAR";
+  google_psh?: number;
+  pitch_degrees?: number;
+  azimuth_degrees?: number;
+  shading_loss?: number;
 }
 
 // In-memory cache: key → { data, timestamp }
@@ -104,14 +115,29 @@ export async function fetchSolarIrradiance(lat: number, lng: number): Promise<Ir
         ? validValues.reduce((sum, v) => sum + v, 0) / validValues.length
         : 4.5; // regional fallback
 
+    // When /api/solar-data augmented the payload with Google Solar coverage,
+    // its live PSH / geometry / shading OVERRIDE the NASA-derived estimates.
+    // NASA's monthly profile, wind and temperature are always retained since
+    // Google supplies none of them.
+    const isGoogle = data.source === "GOOGLE_SOLAR" && typeof data.google_psh === "number";
+
     const result: IrradianceResult = {
-      peakSunHours: Math.round(peakSunHours * 100) / 100,
-      source: "NASA_POWER",
+      peakSunHours: isGoogle
+        ? data.google_psh!
+        : Math.round(peakSunHours * 100) / 100,
+      source: isGoogle ? "GOOGLE_SOLAR" : "NASA_POWER",
       monthlyValues,
       ws10m: data.ws10m,
       ws50m: data.ws50m,
       t2m: data.t2m,
       t2m_monthly: data.t2m_monthly,
+      ...(isGoogle
+        ? {
+            pitchDegrees: data.pitch_degrees,
+            azimuthDegrees: data.azimuth_degrees,
+            computedShadingLoss: data.shading_loss,
+          }
+        : {}),
     };
 
     cache.set(key, { data: result, timestamp: Date.now() });

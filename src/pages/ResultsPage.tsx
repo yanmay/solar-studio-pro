@@ -607,9 +607,9 @@ const ResultsPage = () => {
               panelCount: pCountVal,
               panelType: pWatt === 550 ? "premium" : "compact",
               shading: decoded.panelConfig.shading || "auto",
-              pitchDegrees: decoded.scanInput.pitchDegrees,
+              pitchDegrees: irradiance.pitchDegrees ?? decoded.scanInput.pitchDegrees,
               exclusionAreaM2: decoded.scanInput.exclusionAreaM2 || 0,
-              computedShadingLoss: decoded.scanInput.computedShadingLoss,
+              computedShadingLoss: irradiance.computedShadingLoss ?? decoded.scanInput.computedShadingLoss,
               ws10m: irradiance.ws10m,
               t2m: irradiance.t2m,
             });
@@ -2572,7 +2572,7 @@ const ResultsPage = () => {
 
           {/* Footnote */}
           <div className="mt-4 text-center text-[8px] font-mono uppercase tracking-widest" style={{ color: REPORT_TOKENS.muted }}>
-            SUNPOWER LINK Solar Estimation Engine · Grid loss factor: 14% · Climatology: NASA POWER API satellite profile · RCC flatness tilt structural calibration active
+            SUNPOWER LINK Solar Estimation Engine · Grid loss factor: 14% · Climatology: {data.irradianceSource === "GOOGLE_SOLAR" ? "Google Solar API roof profile + NASA POWER" : "NASA POWER API satellite profile"} · RCC flatness tilt structural calibration active
           </div>
         </main>
 

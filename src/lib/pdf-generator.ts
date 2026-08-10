@@ -394,7 +394,13 @@ export async function generatePDFReport(
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
       setText(MUTED);
-      doc.text("Based on NASA POWER satellite data and geospatial modeling", margin, y);
+      doc.text(
+        analysis.irradianceSource === "GOOGLE_SOLAR"
+          ? "Based on Google Solar API roof analysis with NASA POWER climate modeling"
+          : "Based on NASA POWER satellite data and geospatial modeling",
+        margin,
+        y,
+      );
 
       drawFooter(2);
 

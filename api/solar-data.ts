@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/node";
 import { checkRateLimit } from "./_utils/rate-limit.js";
 import { getSupabaseAdmin } from "./_utils/supabase.js";
+import { augmentPayloadWithGoogleSolar } from "../src/lib/google-solar";
 
 export const config = {
   runtime: "nodejs",
@@ -100,8 +101,11 @@ export default async function handler(req: Request): Promise<Response> {
         .maybeSingle();
 
       if (cached && cached.payload && cached.payload.ws10m !== undefined && cached.payload.t2m_monthly !== undefined) {
+        // Google Solar is applied as a fresh override layer on top of the
+        // cached NASA data (flag off → payload returned unchanged).
+        const augmented = await augmentPayloadWithGoogleSolar(cached.payload, lat, lng);
         return new Response(
-          JSON.stringify(cached.payload),
+          JSON.stringify(augmented),
           {
             status: 200,
             headers: {
@@ -259,8 +263,13 @@ export default async function handler(req: Request): Promise<Response> {
       }
     }
 
+    // Cache stores the pure NASA payload above; Google Solar is layered onto
+    // the response only, so coverage is re-checked fresh on every request
+    // rather than frozen into the 30-day NASA cache.
+    const responsePayload = await augmentPayloadWithGoogleSolar(returnedPayload, lat, lng);
+
     return new Response(
-      JSON.stringify(returnedPayload),
+      JSON.stringify(responsePayload),
       {
         status: 200,
         headers: {
