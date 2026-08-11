@@ -59,7 +59,6 @@ const AccountSettingsPage = lazy(() => import("./pages/AccountSettingsPage"));
 const ResultsDashboard = lazy(() => import("./pages/ResultsDashboard"));
 const InstallerSignup = lazy(() => import("./pages/installer/Signup"));
 const InstallerDashboard = lazy(() => import("./pages/installer/Dashboard"));
-const InstallerLeadDetail = lazy(() => import("./pages/installer/LeadDetail"));
 const ApiDocs = lazy(() => import("./pages/ApiDocs"));
 const AdminPage = lazy(() => import("./pages/AdminPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -108,7 +107,6 @@ const App = () => (
 
               <Route path="/installer/signup" element={<InstallerSignup />} />
               <Route path="/installer/dashboard" element={<InstallerDashboard />} />
-              <Route path="/installer/lead/:leadId" element={<InstallerLeadDetail />} />
               <Route path="/api/docs" element={<ApiDocs />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

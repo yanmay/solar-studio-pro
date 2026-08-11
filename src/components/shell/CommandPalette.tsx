@@ -234,9 +234,13 @@ export function CommandPalette() {
 
         <CommandSeparator />
         <CommandGroup heading="Client portfolios">
-          <CommandItem disabled value="crm:coming-soon">
-            <Users className="mr-2 h-4 w-4 opacity-50" />
-            Coming in the CRM phase
+          <CommandItem
+            value="crm:leads-pipeline"
+            onSelect={() => run("/installer/dashboard")}
+          >
+            <Users className="mr-2 h-4 w-4 text-[#FF6600]" />
+            Vendor CRM · Leads pipeline
+            <ArrowRight className="ml-auto h-3.5 w-3.5 opacity-50" />
           </CommandItem>
         </CommandGroup>
       </CommandList>

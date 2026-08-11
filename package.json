@@ -45,6 +45,7 @@
     "@sentry/react": "^10.56.0",
     "@supabase/supabase-js": "^2.110.0",
     "@tanstack/react-query": "^5.83.0",
+    "@tanstack/react-table": "^8.21.3",
     "@turf/area": "^7.3.4",
     "@turf/bbox": "^7.3.4",
     "@turf/boolean-point-in-polygon": "^7.3.4",
