@@ -2,6 +2,11 @@ import * as Sentry from "@sentry/node";
 import { checkRateLimit } from "./_utils/rate-limit.js";
 import { getSupabaseAdmin } from "./_utils/supabase.js";
 import { augmentPayloadWithGoogleSolar } from "../src/lib/google-solar";
+import {
+  fetchNsrdbIodc,
+  isNsrdbEnabled,
+  isWithinIodcCoverage,
+} from "../src/lib/nsrdb-iodc";
 
 export const config = {
   runtime: "nodejs",
@@ -101,8 +106,19 @@ export default async function handler(req: Request): Promise<Response> {
         .maybeSingle();
 
       if (cached && cached.payload && cached.payload.ws10m !== undefined && cached.payload.t2m_monthly !== undefined) {
-        // Google Solar is applied as a fresh override layer on top of the
-        // cached NASA data (flag off → payload returned unchanged).
+        // An NSRDB (India) payload is already a complete live result — return
+        // it as-is rather than pointlessly re-checking Google (which 404s in
+        // India). Otherwise layer a fresh Google override on the NASA payload
+        // (flag off → returned unchanged).
+        if (cached.payload.source === "NSRDB_IODC") {
+          return new Response(JSON.stringify(cached.payload), {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+              "Cache-Control": "public, max-age=86400",
+            },
+          });
+        }
         const augmented = await augmentPayloadWithGoogleSolar(cached.payload, lat, lng);
         return new Response(
           JSON.stringify(augmented),
@@ -117,6 +133,56 @@ export default async function handler(req: Request): Promise<Response> {
       }
     } catch (cacheError) {
       console.warn("NASA POWER cache lookup failed, proceeding to live API:", cacheError);
+    }
+  }
+
+  // PART B — NSRDB IODC (India) primary source, on cache miss.
+  // For coordinates inside the IODC coverage box, NREL NSRDB supplies live 4km
+  // irradiance + temperature + wind and fully REPLACES NASA (Google Solar has
+  // no India coverage). Any failure returns null → we fall through to NASA.
+  if (isNsrdbEnabled() && isWithinIodcCoverage(lat, lng)) {
+    const nsrdb = await fetchNsrdbIodc(lat, lng);
+    if (nsrdb) {
+      const nsrdbPayload = {
+        source: "NSRDB_IODC" as const,
+        monthly_ghi: nsrdb.monthly_ghi,
+        lat,
+        lng,
+        year: Number(nsrdb.nsrdb_year),
+        ws10m: nsrdb.ws10m,
+        ws50m: nsrdb.ws50m,
+        t2m: nsrdb.t2m,
+        t2m_monthly: nsrdb.t2m_monthly,
+        region: nsrdb.region,
+        nsrdb_year: nsrdb.nsrdb_year,
+      };
+
+      if (supabase) {
+        try {
+          const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+          await supabase.from("nasa_power_cache").insert({
+            cache_key: `nsrdb_iodc:${latRounded}:${lngRounded}`,
+            latitude: latRounded,
+            longitude: lngRounded,
+            lat: latRounded,
+            lng: lngRounded,
+            payload: nsrdbPayload,
+            expires_at: expiresAt,
+            monthly_ghi: nsrdb.monthly_ghi,
+            monthly_temperature: nsrdb.t2m_monthly,
+          });
+        } catch (cacheInsertError) {
+          console.warn("NSRDB IODC cache write failed:", cacheInsertError);
+        }
+      }
+
+      return new Response(JSON.stringify(nsrdbPayload), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "public, max-age=86400",
+        },
+      });
     }
   }
 

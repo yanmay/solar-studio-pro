@@ -192,9 +192,11 @@ export function GlobeView({
             source:
               res.source === "GOOGLE_SOLAR"
                 ? "Google Solar API"
-                : res.source === "NASA_POWER"
-                  ? "NASA POWER API"
-                  : "Regional Fallback",
+                : res.source === "NSRDB_IODC"
+                  ? "NREL NSRDB (India)"
+                  : res.source === "NASA_POWER"
+                    ? "NASA POWER API"
+                    : "Regional Fallback",
             suitability,
             yield: yieldVal,
           });

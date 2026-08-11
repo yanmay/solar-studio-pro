@@ -2572,7 +2572,7 @@ const ResultsPage = () => {
 
           {/* Footnote */}
           <div className="mt-4 text-center text-[8px] font-mono uppercase tracking-widest" style={{ color: REPORT_TOKENS.muted }}>
-            SUNPOWER LINK Solar Estimation Engine · Grid loss factor: 14% · Climatology: {data.irradianceSource === "GOOGLE_SOLAR" ? "Google Solar API roof profile + NASA POWER" : "NASA POWER API satellite profile"} · RCC flatness tilt structural calibration active
+            SUNPOWER LINK Solar Estimation Engine · Grid loss factor: 14% · Climatology: {data.irradianceSource === "GOOGLE_SOLAR" ? "Google Solar API roof profile + NASA POWER" : data.irradianceSource === "NSRDB_IODC" ? "NREL NSRDB IODC (India, 4km)" : "NASA POWER API satellite profile"} · RCC flatness tilt structural calibration active
           </div>
         </main>
 

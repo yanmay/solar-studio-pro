@@ -17,7 +17,7 @@ export interface NASAPowerResponse {
 
 export interface IrradianceResult {
   peakSunHours: number;
-  source: "NASA_POWER" | "REGIONAL_FALLBACK" | "GOOGLE_SOLAR";
+  source: "NASA_POWER" | "REGIONAL_FALLBACK" | "GOOGLE_SOLAR" | "NSRDB_IODC";
   region?: string;
   monthlyValues?: Record<string, number>;
   ws10m?: number;
@@ -39,9 +39,10 @@ export interface MonthlyGHIResult {
   ws50m?: number;
   t2m?: number;
   t2m_monthly?: number[];
-  // Google Solar augmentation fields, added by /api/solar-data when the
-  // GOOGLE_SOLAR_API_KEY flag is set and Google returns coverage.
-  source?: "GOOGLE_SOLAR";
+  // Provenance tag set by /api/solar-data. "GOOGLE_SOLAR" when Google coverage
+  // augments the NASA payload; "NSRDB_IODC" when NREL NSRDB (India) fully
+  // supplies the payload. Absent → plain NASA POWER.
+  source?: "GOOGLE_SOLAR" | "NSRDB_IODC";
   google_psh?: number;
   pitch_degrees?: number;
   azimuth_degrees?: number;
@@ -121,11 +122,16 @@ export async function fetchSolarIrradiance(lat: number, lng: number): Promise<Ir
     // Google supplies none of them.
     const isGoogle = data.source === "GOOGLE_SOLAR" && typeof data.google_psh === "number";
 
+    // NSRDB IODC (India) supplies a real 12-month GHI array, so it rides the
+    // standard monthly-average path above — no google_psh-style PSH override.
+    // It only changes the provenance tag so the UI/PDF can label it correctly.
+    const isNsrdb = data.source === "NSRDB_IODC";
+
     const result: IrradianceResult = {
       peakSunHours: isGoogle
         ? data.google_psh!
         : Math.round(peakSunHours * 100) / 100,
-      source: isGoogle ? "GOOGLE_SOLAR" : "NASA_POWER",
+      source: isNsrdb ? "NSRDB_IODC" : isGoogle ? "GOOGLE_SOLAR" : "NASA_POWER",
       monthlyValues,
       ws10m: data.ws10m,
       ws50m: data.ws50m,
