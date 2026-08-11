@@ -3,10 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { useInstallerAuth } from "@/hooks/use-installer-auth";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { AppShell } from "@/components/shell/AppShell";
+import { InstallerUserMenu } from "@/components/shell/InstallerUserMenu";
+import { INSTALLER_NAV } from "@/lib/nav-registry";
 import {
-  Users, Settings as SettingsIcon, LogOut, MapPin,
-  TrendingUp, Info, Building2, CheckCircle2, Zap, Phone,
-  TrendingDown, BarChart2,
+  MapPin, TrendingUp, Info, Building2, CheckCircle2, Zap, Phone, BarChart2,
 } from "lucide-react";
 
 interface Activity {
@@ -84,14 +85,31 @@ const KPI_CARDS = [
   { label: "Pipeline Value", value: "₹41.1 L",     sub: "Active opportunity",  icon: <TrendingUp className="w-4 h-4 text-cyan-400" />,     accent: "text-cyan-400" },
 ];
 
+/** Partner summary rendered in the shell sidebar footer (hidden on the icon rail). */
+function PartnerFooterCard({
+  companyName, city, state,
+}: { companyName?: string; city?: string; state?: string }) {
+  return (
+    <div className="group-data-[collapsible=icon]:hidden space-y-1.5 px-1 py-1.5">
+      <div className="text-[12px] font-semibold text-white truncate">{companyName || "Premier Solar Corp"}</div>
+      <div className="text-[11px] text-white/40 flex items-center gap-1.5">
+        <Building2 className="w-3 h-3 text-[#FF6600] shrink-0" />
+        {city || "Mumbai"}, {state || "MH"}
+      </div>
+      <div className="inline-flex items-center gap-1 text-[9px] text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full font-['JetBrains_Mono',monospace] tracking-wide">
+        <CheckCircle2 className="w-2.5 h-2.5" /> GSTIN Verified
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { profile, signOut } = useInstallerAuth();
+  const { profile } = useInstallerAuth();
   const { toast } = useToast();
 
-  const [leads, setLeads]     = useState<Lead[]>(INITIAL_LEADS);
-  const [modal, setModal]     = useState<Lead | null>(null);
-  const [activeNav, setNav]   = useState<"leads" | "settings">("leads");
+  const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
+  const [modal, setModal] = useState<Lead | null>(null);
 
   const moveLeadStatus = (id: string, status: Lead["status"]) => {
     setLeads(prev => prev.map(l => l.id === id ? { ...l, status } : l));
@@ -99,104 +117,32 @@ export default function Dashboard() {
   };
 
   return (
-    <div
-      className="min-h-screen text-white flex flex-col lg:flex-row font-['Inter',sans-serif] antialiased"
-      style={{ background: "linear-gradient(160deg, #020203 0%, #050506 60%, #0a0a0c 100%)" }}
+    <AppShell
+      nav={INSTALLER_NAV}
+      profile={<InstallerUserMenu />}
+      sidebarFooter={
+        <PartnerFooterCard
+          companyName={profile?.companyName}
+          city={profile?.city}
+          state={profile?.state}
+        />
+      }
     >
-      {/* ── Cinematic Ambient Blobs ─────────────────────────────── */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-        <div className="absolute top-[-20%] left-[-10%] w-[700px] h-[700px] rounded-full opacity-[0.06] blur-[130px]"
-          style={{ background: "#FF6600", animation: "dashBlob1 20s ease-in-out infinite alternate" }} />
-        <div className="absolute bottom-[-15%] right-0 w-[600px] h-[600px] rounded-full opacity-[0.05] blur-[110px]"
-          style={{ background: "#10B981", animation: "dashBlob2 25s ease-in-out infinite alternate" }} />
-      </div>
-      <style>{`
-        @keyframes dashBlob1 { to { transform: translate(60px, 80px) scale(1.12); } }
-        @keyframes dashBlob2 { to { transform: translate(-50px, -40px) scale(1.08); } }
-      `}</style>
-
-      {/* ── Sidebar ─────────────────────────────────────────────── */}
-      <aside
-        className="w-full lg:w-60 shrink-0 border-b lg:border-b-0 lg:border-r border-white/[0.06] relative z-20"
-        style={{ background: "rgba(2,2,3,0.85)", backdropFilter: "blur(24px)" }}
-      >
-        <div className="p-5 flex flex-col h-full lg:min-h-screen justify-between">
-          <div className="space-y-6">
-            {/* Logo */}
-            <button onClick={() => navigate("/")} className="flex items-center gap-2.5 cursor-pointer group" aria-label="Go to Home">
-              <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
-              <div>
-                <span className="text-[14px] font-bold text-white block leading-tight tracking-tight">
-                  SUNPOWER <span className="font-['Calistoga',serif] italic font-normal text-[#FF6600]">LINK</span>
-                </span>
-                <span className="text-[9px] text-[#FF6600]/70 font-['JetBrains_Mono',monospace] uppercase tracking-[0.2em] block">
-                  Partner Portal
-                </span>
-              </div>
-            </button>
-
-            {/* Profile Card */}
-            <div
-              className="p-3.5 rounded-2xl border border-white/[0.08] space-y-1.5"
-              style={{ background: "rgba(255,255,255,0.03)" }}
-            >
-              <div className="text-[12px] font-semibold text-white truncate">{profile?.companyName || "Premier Solar Corp"}</div>
-              <div className="text-[11px] text-white/40 flex items-center gap-1.5">
-                <Building2 className="w-3 h-3 text-[#FF6600]" />
-                {profile?.city || "Mumbai"}, {profile?.state || "MH"}
-              </div>
-              <div className="inline-flex items-center gap-1 text-[9px] text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full font-['JetBrains_Mono',monospace] tracking-wide">
-                <CheckCircle2 className="w-2.5 h-2.5" /> GSTIN Verified
-              </div>
-            </div>
-
-            {/* Nav */}
-            <nav className="space-y-1" role="navigation" aria-label="Dashboard navigation">
-              {[
-                { key: "leads",    label: "Leads Pipeline",  icon: <Users       className="w-4 h-4" /> },
-                { key: "settings", label: "Partner Settings", icon: <SettingsIcon className="w-4 h-4" /> },
-              ].map(item => (
-                <button
-                  key={item.key}
-                  onClick={() => setNav(item.key as any)}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[12px] font-medium transition-all duration-150 cursor-pointer border",
-                    activeNav === item.key
-                      ? "text-[#FF6600] border-[#FF6600]/25 bg-[#FF6600]/10"
-                      : "text-white/40 border-transparent hover:text-white/70 hover:bg-white/[0.04]"
-                  )}
-                  aria-current={activeNav === item.key ? "page" : undefined}
-                >
-                  {item.icon}
-                  <span>{item.label}</span>
-                </button>
-              ))}
-              <button
-                onClick={() => navigate("/map")}
-                className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[12px] font-medium text-white/40 hover:text-white/70 hover:bg-white/[0.04] border border-transparent transition-all duration-150 cursor-pointer"
-              >
-                <Zap className="w-4 h-4 text-[#FF6600]" />
-                <span>Run Rooftop Scan</span>
-              </button>
-            </nav>
-          </div>
-
-          {/* Sign Out */}
-          <button
-            onClick={() => { signOut(); navigate("/"); }}
-            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-[12px] text-red-400/70 hover:text-red-400 hover:bg-red-500/[0.06] border border-transparent transition-all duration-150 cursor-pointer mt-6"
-          >
-            <LogOut className="w-4 h-4" />
-            Sign Out
-          </button>
+      <div className="relative min-h-full text-white font-['Inter',sans-serif] antialiased">
+        {/* ── Cinematic Ambient Blobs ─────────────────────────────── */}
+        <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
+          <div className="absolute top-[-20%] left-[-10%] w-[700px] h-[700px] rounded-full opacity-[0.06] blur-[130px]"
+            style={{ background: "#FF6600", animation: "dashBlob1 20s ease-in-out infinite alternate" }} />
+          <div className="absolute bottom-[-15%] right-0 w-[600px] h-[600px] rounded-full opacity-[0.05] blur-[110px]"
+            style={{ background: "#10B981", animation: "dashBlob2 25s ease-in-out infinite alternate" }} />
         </div>
-      </aside>
+        <style>{`
+          @keyframes dashBlob1 { to { transform: translate(60px, 80px) scale(1.12); } }
+          @keyframes dashBlob2 { to { transform: translate(-50px, -40px) scale(1.08); } }
+        `}</style>
 
-      {/* ── Main ────────────────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-x-hidden relative z-10">
-
-        {/* Header */}
-        <header className="px-6 py-5 border-b border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+        {/* Page Header */}
+        <header className="relative z-10 px-6 py-5 border-b border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-4"
           style={{ background: "rgba(2,2,3,0.5)", backdropFilter: "blur(20px)" }}
         >
           <div>
@@ -222,7 +168,7 @@ export default function Dashboard() {
         </header>
 
         {/* KPI Cards */}
-        <section className="px-6 py-5 border-b border-white/[0.06]">
+        <section className="relative z-10 px-6 py-5 border-b border-white/[0.06]">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {KPI_CARDS.map((k, i) => (
               <div
@@ -242,8 +188,8 @@ export default function Dashboard() {
         </section>
 
         {/* Kanban Board */}
-        <section className="flex-1 p-6 overflow-x-auto">
-          <div className="flex gap-4 min-w-[1100px] h-full pb-4">
+        <section className="relative z-10 p-6 overflow-x-auto">
+          <div className="flex gap-4 min-w-[1100px] pb-4">
             {COLUMNS.map(col => {
               const colLeads = leads.filter(l => l.status === col.key);
               return (
@@ -349,7 +295,7 @@ export default function Dashboard() {
             })}
           </div>
         </section>
-      </main>
+      </div>
 
       {/* ── Lead Detail Modal ─────────────────────────────────────── */}
       {modal && (
@@ -417,6 +363,6 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-    </div>
+    </AppShell>
   );
 }

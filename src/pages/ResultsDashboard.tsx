@@ -13,13 +13,9 @@ import {
   Sparkles,
   ChevronRight,
   ShieldCheck,
-  User,
-  LogOut,
   LayoutDashboard,
   BarChart3,
-  Settings,
-  Menu,
-  X
+  Settings
 } from "lucide-react";
 import {
   AreaChart,
@@ -33,7 +29,6 @@ import {
 import { useScanStore } from "@/hooks/use-scan-store";
 import { useToast } from "@/hooks/use-toast";
 import { generatePDFReport } from "@/lib/pdf-generator";
-import { useAuth } from "@/contexts/AuthContext";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
 import {
@@ -193,11 +188,9 @@ const mockAnalysis = {
 export default function ResultsDashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user, signOut } = useAuth();
   const { fullAnalysis } = useScanStore();
 
   const [activeTab, setActiveTab] = useState("overview");
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isContactOpen, setIsContactOpen] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
 
@@ -299,84 +292,12 @@ export default function ResultsDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white font-sans antialiased pb-16 pt-20 relative selection:bg-[#FF6600]/30 selection:text-white">
+    <div className="text-white font-sans antialiased pb-16 pt-4 relative selection:bg-[#FF6600]/30 selection:text-white">
       {/* Background Ambient Glow */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         <div className="absolute top-[-15%] right-[-5%] w-[600px] h-[600px] rounded-full bg-[#FF6600]/5 blur-[140px]" />
         <div className="absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] rounded-full bg-emerald-500/3 blur-[140px]" />
       </div>
-
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 h-16 backdrop-blur-2xl bg-[#050505]/85 border-b border-white/10">
-        <div className="max-w-[1280px] h-full mx-auto px-4 md:px-8 flex justify-between items-center">
-          <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} className="flex items-center gap-3 group">
-            <img src="/logo.png" alt="SUNPOWER LINK Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
-            <span className="text-[15px] font-bold text-white tracking-tight">
-              SUNPOWER <span className="font-serif italic font-light text-[#FF6600]">LINK</span>
-            </span>
-          </a>
-
-          <div className="hidden md:flex items-center gap-6">
-            <button onClick={() => navigate("/map")} className="text-xs font-mono uppercase tracking-wider text-white/50 hover:text-white transition-colors bg-transparent border-none cursor-pointer">
-              Map Analyzer
-            </button>
-            <button onClick={() => navigate("/market-insights")} className="text-xs font-mono uppercase tracking-wider text-white/50 hover:text-white transition-colors bg-transparent border-none cursor-pointer">
-              Market Insights
-            </button>
-            <button onClick={() => navigate("/policy-tracker")} className="text-xs font-mono uppercase tracking-wider text-white/50 hover:text-white transition-colors bg-transparent border-none cursor-pointer">
-              Policy Tracker
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {user ? (
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-                  <User className="w-4 h-4 text-white/60" />
-                </div>
-                <span className="hidden sm:inline text-xs font-mono text-white/50 truncate max-w-[120px]">
-                  {user.email}
-                </span>
-                <button 
-                  onClick={() => signOut()}
-                  className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-full transition-colors border-none bg-transparent cursor-pointer"
-                  aria-label="Sign Out"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <button 
-                onClick={() => navigate("/auth/signin")}
-                className="bg-white/5 border border-white/10 hover:bg-white/10 text-white text-xs px-4 py-2 rounded-xl font-semibold transition-all active:scale-95 cursor-pointer"
-              >
-                Sign In
-              </button>
-            )}
-
-            <button 
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden p-2 text-white/50 hover:text-white hover:bg-white/5 rounded-xl transition-colors border-none bg-transparent cursor-pointer"
-              aria-label="Toggle Menu"
-            >
-              {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Mobile Menu Panel */}
-      {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-40 bg-[#050505] pt-20 px-6 flex flex-col gap-6">
-          <nav className="flex flex-col gap-4">
-            <span onClick={() => { navigate("/map"); setIsMobileMenuOpen(false); }} className="text-lg text-white/70">Map Analyzer</span>
-            <span onClick={() => { navigate("/market-insights"); setIsMobileMenuOpen(false); }} className="text-lg text-white/70">Market Insights</span>
-            <span onClick={() => { navigate("/policy-tracker"); setIsMobileMenuOpen(false); }} className="text-lg text-white/70">Policy Tracker</span>
-            {user && <span onClick={() => { navigate("/my-scans"); setIsMobileMenuOpen(false); }} className="text-lg text-white/70">My Scans</span>}
-            {user && <span onClick={() => { navigate("/settings"); setIsMobileMenuOpen(false); }} className="text-lg text-white/70">Settings</span>}
-          </nav>
-        </div>
-      )}
 
       {/* Content Container */}
       <main className="max-w-[1280px] mx-auto px-4 md:px-8 mt-4 flex flex-col gap-6 relative z-10">

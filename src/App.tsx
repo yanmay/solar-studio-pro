@@ -11,6 +11,8 @@ import { trackPageView } from "./lib/analytics";
 import { AuthProvider } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { captureReferrerCode } from "./lib/referrals";
+import { CommandPalette } from "./components/shell/CommandPalette";
+import { AppLayout } from "./components/shell/AppLayout";
 
 // Load Plausible script once (guarded by env var)
 const PLAUSIBLE_DOMAIN = import.meta.env.VITE_PLAUSIBLE_DOMAIN;
@@ -93,17 +95,25 @@ const App = () => (
               <Route path="/auth/signup" element={<SignUpPage />} />
               <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
-              <Route path="/my-scans" element={<ProtectedRoute><MyScansPage /></ProtectedRoute>} />
-              <Route path="/settings" element={<ProtectedRoute><AccountSettingsPage /></ProtectedRoute>} />
-              <Route path="/dashboard" element={<ResultsDashboard />} />
+
+              {/* App cluster — one shared shell (sidebar + top bar + palette).
+                  ProtectedRoute stays element-level so logged-out redirects for
+                  /my-scans and /settings fire exactly as before. */}
+              <Route element={<AppLayout />}>
+                <Route path="/dashboard" element={<ResultsDashboard />} />
+                <Route path="/my-scans" element={<ProtectedRoute><MyScansPage /></ProtectedRoute>} />
+                <Route path="/settings" element={<ProtectedRoute><AccountSettingsPage /></ProtectedRoute>} />
+                <Route path="/admin" element={<AdminPage />} />
+              </Route>
+
               <Route path="/installer/signup" element={<InstallerSignup />} />
               <Route path="/installer/dashboard" element={<InstallerDashboard />} />
               <Route path="/installer/lead/:leadId" element={<InstallerLeadDetail />} />
               <Route path="/api/docs" element={<ApiDocs />} />
-              <Route path="/admin" element={<AdminPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
+          <CommandPalette />
           <PwaInstallPrompt />
         </BrowserRouter>
       </TooltipProvider>

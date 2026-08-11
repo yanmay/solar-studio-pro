@@ -190,6 +190,19 @@
     --chart-3: oklch(0.55 0.1 220);
     --chart-4: oklch(0.88 0.15 85);
     --chart-5: oklch(0.8 0.17 65);
+
+    /* Sidebar — dark premium rail (Phase 1 shell). The :root defaults are a
+       near-white light palette; without these the shadcn <Sidebar> would render
+       pale against the #050505 shell. Values track the dark surfaces above:
+       near-black panel, muted-white text, solar-orange active/ring. */
+    --sidebar-background: 240 10% 4.5%;
+    --sidebar-foreground: 240 5% 65%;
+    --sidebar-primary: 24 100% 52%;
+    --sidebar-primary-foreground: 240 10% 3.9%;
+    --sidebar-accent: 240 10% 9%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 240 6% 12%;
+    --sidebar-ring: 24 100% 52%;
   }
 }
 

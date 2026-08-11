@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ArrowLeft,
-  ArrowRight,
   ShieldCheck,
   Search,
   CheckCircle2,
@@ -13,6 +11,7 @@ import {
   ExternalLink,
   Info,
 } from "lucide-react";
+import { SiteNavbar } from "@/components/ui/site-navbar";
 
 interface StatePolicy {
   state: string;
@@ -128,61 +127,8 @@ export default function PolicyTrackerPage() {
         <div className="absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] rounded-full bg-emerald-500/3 blur-[140px]" />
       </div>
 
-      {/* Header */}
-      <header className="sticky top-0 z-50 backdrop-blur-2xl bg-[#050505]/85 border-b border-white/10">
-        <div className="flex justify-between items-center px-4 md:px-12 py-3 mx-auto max-w-[1280px]">
-          <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} className="flex items-center gap-3 group">
-            <img src="/logo.png" alt="SUNPOWER LINK Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
-            <span className="text-[15px] font-bold text-white tracking-tight">
-              SUNPOWER <span className="font-serif italic font-light text-[#FF6600]">LINK</span>
-            </span>
-          </a>
-          <nav className="hidden md:flex gap-6">
-            <button onClick={() => navigate("/")} className="text-xs font-mono uppercase tracking-wider text-white/50 hover:text-white transition-colors bg-transparent border-none cursor-pointer">Home</button>
-            <button onClick={() => navigate("/market-insights")} className="text-xs font-mono uppercase tracking-wider text-white/50 hover:text-white transition-colors bg-transparent border-none cursor-pointer">Market Insights</button>
-            <button onClick={() => navigate("/policy-tracker")} className="text-xs font-mono uppercase tracking-wider text-[#FF6600] font-bold bg-transparent border-none cursor-pointer">Policy Tracker</button>
-          </nav>
-          <div className="flex items-center gap-2 md:gap-3">
-            <button
-              onClick={() => navigate("/")}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white/60 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-all active:scale-95 cursor-pointer"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" /> Back
-            </button>
-            <button
-              onClick={() => navigate("/map")}
-              className="hidden md:flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-black bg-[#FF6600] hover:bg-orange-500 rounded-xl transition-all active:scale-95 cursor-pointer border-none shadow-lg shadow-[#FF6600]/20"
-            >
-              Launch Studio <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile Page Switching Tabs */}
-        <div className="md:hidden flex items-center justify-center py-2.5 px-4 border-t border-white/5 bg-black/10 gap-3 text-[10px] font-bold uppercase tracking-wider font-mono">
-          <a
-            onClick={() => navigate("/")}
-            className="text-neutral-400 hover:text-white cursor-pointer px-2 py-1 transition-colors"
-          >
-            Home
-          </a>
-          <span className="text-white/10 select-none">•</span>
-          <a
-            onClick={() => navigate("/market-insights")}
-            className="text-neutral-400 hover:text-white cursor-pointer px-2 py-1 transition-colors"
-          >
-            Market Insights
-          </a>
-          <span className="text-white/10 select-none">•</span>
-          <a
-            onClick={() => navigate("/policy-tracker")}
-            className="px-2 py-1 transition-colors cursor-pointer"
-            style={{ color: C.primary }}
-          >
-            Policy Tracker
-          </a>
-        </div>
-      </header>
+      {/* Shared dark-glass top navigation */}
+      <SiteNavbar />
 
       {/* Main Layout */}
       <main className="max-w-[1280px] mx-auto px-4 md:px-12 py-10 flex flex-col gap-10 relative z-10">
