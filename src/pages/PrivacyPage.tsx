@@ -1,54 +1,32 @@
 ﻿import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { Zap, ArrowLeft, Shield, Lock, FileText, Eye } from "lucide-react";
+import { Shield, Lock, FileText, Eye } from "lucide-react";
+import { SiteNavbar } from "@/components/ui/site-navbar";
 
 export default function PrivacyPage() {
-  const navigate = useNavigate();
-
   // SEO metadata setup
   useEffect(() => {
-    document.title = "Privacy Policy — SolarScan AI";
+    document.title = "Privacy Policy - SUNPOWER LINK";
     const meta = document.querySelector('meta[name="description"]');
     if (meta) {
       meta.setAttribute(
         "content",
-        "Read the Privacy Policy of SolarScan AI to learn how we securely handle rooftop coordinates, NASA Power GIS inputs, and local solar yield queries."
+      "Read the SUNPOWER LINK Privacy Policy to learn how we securely handle rooftop coordinates, NASA Power GIS inputs, and local solar yield queries."
       );
     }
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white antialiased selection:bg-[#FF6600]/30 selection:text-white overflow-x-hidden relative font-sans">
+    <div className="professional-product-ui min-h-screen bg-[#050505] text-white antialiased selection:bg-[#FF6600]/30 selection:text-white overflow-x-hidden relative font-sans">
       {/* Dynamic Background Gradients */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         <div className="absolute top-[-15%] right-[-5%] w-[600px] h-[600px] rounded-full bg-[#FF6600]/5 blur-[140px]" />
-        <div className="absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] rounded-full bg-emerald-500/3 blur-[140px]" />
+        <div className="absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] rounded-full bg-[#ff8b3d]/5 blur-[140px]" />
       </div>
 
-      {/* Nav */}
-      <nav className="fixed w-full z-50 bg-[#050505]/85 backdrop-blur-2xl py-3 border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex justify-between items-center relative z-50">
-          <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} className="flex items-center gap-3 group">
-            <img src="/logo.png" alt="SolarScan AI Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
-            <span className="text-[15px] font-bold tracking-tight text-white">
-              SUNPOWER <span className="font-serif italic font-light text-[#FF6600]">LINK</span>
-            </span>
-          </a>
-
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={() => navigate("/")}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white/60 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-all cursor-pointer active:scale-95"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              Back to Home
-            </button>
-          </div>
-        </div>
-      </nav>
+      <SiteNavbar cta={null} />
 
       {/* Content Area */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 pt-28 pb-24 relative z-10">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-16 sm:py-20 relative z-10">
         
         {/* Header Block */}
         <div className="mb-12 text-center md:text-left">
@@ -60,7 +38,7 @@ export default function PrivacyPage() {
             Privacy Policy
           </h1>
           <p className="text-white/50 text-sm md:text-base font-light max-w-xl">
-            Last updated: June 8, 2026. This policy describes how SolarScan AI handles spatial query inputs and location data on our platform.
+          Last updated: June 8, 2026. This policy describes how SUNPOWER LINK handles spatial query inputs and location data on our platform.
           </p>
         </div>
 
@@ -97,7 +75,7 @@ export default function PrivacyPage() {
               <span className="text-[#FF6600] font-mono">1.</span> Information We Collect
             </h2>
             <p className="text-white/70 text-sm leading-relaxed font-light">
-              SolarScan AI operates as a client-side utility application. When you analyze a roof, the location text you search is resolved to latitudinal and longitudinal coordinates via geocoding proxies. These spatial variables are sent securely to open API weather databases (like NASA POWER) to calculate historical solar radiance metrics for that region.
+              SUNPOWER LINK operates as a client-side utility application. When you analyze a roof, the location text you search is resolved to latitudinal and longitudinal coordinates via geocoding proxies. These spatial variables are sent securely to open API weather databases (like NASA POWER) to calculate historical solar radiance metrics for that region.
             </p>
           </section>
 
@@ -157,7 +135,7 @@ export default function PrivacyPage() {
 
         {/* Footer info inside content */}
         <div className="mt-12 text-center text-xs font-mono text-white/40">
-          <p>&copy; {new Date().getFullYear()} SolarScan AI. All Rights Reserved.</p>
+          <p>&copy; {new Date().getFullYear()} SUNPOWER LINK. All Rights Reserved.</p>
         </div>
       </main>
     </div>

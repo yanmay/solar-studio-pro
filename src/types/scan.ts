@@ -20,6 +20,16 @@ export interface ScanInput {
   computedShadingLoss?: number | null;
   source?: 'manual' | 'osm' | 'photo' | 'none';
   isExplicitlyFlat?: boolean;
+  rooftopAnalysis?: RooftopAnalysis;
+}
+
+export interface RooftopAnalysis {
+  status: 'complete' | 'unavailable' | 'failed';
+  provider: 'google_solar' | 'segmentation_model' | null;
+  obstructions: import('@/lib/obstruction-geometry').ObstructionDetection[];
+  message: string;
+  imageryUrl?: string;
+  assumptions: string[];
 }
 
 export interface PanelConfig {

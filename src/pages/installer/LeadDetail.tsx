@@ -15,6 +15,7 @@ import {
   Sun,
   Layers,
   CheckCircle,
+  Info,
 } from "lucide-react";
 
 interface Activity {
@@ -46,6 +47,7 @@ export default function LeadDetail() {
   const [lead, setLead] = useState<Lead | null>(null);
 
   useEffect(() => {
+    document.title = "Lead Dossier - SUNPOWER LINK";
     const cached = localStorage.getItem("solarsan-installer-leads");
     if (cached) {
       const list: Lead[] = JSON.parse(cached);
@@ -69,19 +71,19 @@ export default function LeadDetail() {
       roofArea: 120,
       estimatedKw: 12.5,
       roiLakh: 14.5,
-      source: "SolarScan B2C",
+      source: "SUNPOWER LINK",
       status: "new",
       date: "2026-07-17",
       activities: [
-        { date: "2026-07-17", type: "received", description: "Lead record received from SolarScan B2C" }
+        { date: "2026-07-17", type: "received", description: "Lead record received from SUNPOWER LINK" }
       ]
     });
   }, [leadId]);
 
   if (!lead) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <p className="text-xs font-mono text-neutral-500 animate-pulse">Loading lead dossier...</p>
+      <div className="min-h-screen flex items-center justify-center bg-[#050505]">
+        <p className="text-xs font-mono text-white/40 animate-pulse">Loading lead dossier...</p>
       </div>
     );
   }
@@ -133,26 +135,26 @@ export default function LeadDetail() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-50 py-8 px-4 md:px-12">
+    <div className="professional-product-ui installer-lead-page min-h-screen bg-[#050505] py-8 px-4 text-white md:px-12">
       <div className="max-w-5xl mx-auto space-y-6">
         {/* ── Header Dossier Actions ────────────────────────────── */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white border border-neutral-200 rounded-lg p-5 shadow-sm">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#0A0A0A]/90 border border-white/10 rounded-xl p-5 shadow-2xl">
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate("/installer/dashboard")}
-              className="p-2 bg-neutral-100 hover:bg-neutral-200 rounded-full transition-colors cursor-pointer"
+              className="p-2 bg-white/5 hover:bg-white/10 rounded-full transition-colors cursor-pointer"
               aria-label="Back to dashboard"
             >
-              <ArrowLeft className="w-4 h-4 text-[#0F172A]" />
+              <ArrowLeft className="w-4 h-4 text-white/70" />
             </button>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold text-[#1A1A1A]">{lead.name}</h1>
-                <span className="text-[9px] font-bold bg-[#0F172A] text-white px-2 py-0.5 rounded font-mono uppercase">
+                <h1 className="text-xl font-bold text-white">{lead.name}</h1>
+                <span className="text-[9px] font-bold bg-[#FF6600]/10 text-[#FF6600] border border-[#FF6600]/20 px-2 py-0.5 rounded font-mono uppercase">
                   {lead.source}
                 </span>
               </div>
-              <p className="text-xs text-neutral-500 flex items-center gap-1.5 mt-0.5">
+              <p className="text-xs text-white/45 flex items-center gap-1.5 mt-0.5">
                 <MapPin className="w-3 h-3 text-neutral-400 shrink-0" />
                 {lead.address}
               </p>
@@ -405,7 +407,7 @@ export default function LeadDetail() {
               
               <div className="space-y-4 relative before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-neutral-200">
                 {(lead.activities || [
-                  { date: lead.date, type: "received", description: "Lead record received from SolarScan B2C" }
+                  { date: lead.date, type: "received", description: "Lead record received from SUNPOWER LINK" }
                 ]).map((act, idx) => (
                   <div key={idx} className="flex gap-4 relative items-start pl-6">
                     <span className="w-5 h-5 rounded-full bg-[#0F172A] text-white absolute left-0 flex items-center justify-center text-[8px] font-mono border border-white">

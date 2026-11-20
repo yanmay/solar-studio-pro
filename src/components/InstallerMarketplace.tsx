@@ -116,7 +116,7 @@ const InstallerMarketplace = ({ installedKw, city }: InstallerMarketplaceProps) 
       </div>
 
       <div className="text-[10px] font-mono text-white/30 text-center mt-5">
-        Empanelled Partner Network · SolarScan AI direct referral system with zero hidden markups.
+          Empanelled Partner Network · SUNPOWER LINK direct referral system with zero hidden markups.
       </div>
     </div>
   );

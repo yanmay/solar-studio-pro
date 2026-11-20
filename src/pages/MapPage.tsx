@@ -1,7 +1,9 @@
+// TODO: extract to separate components — this file is 3,054 lines and should be split into
+// step sub-components (FindRoof, TraceBoundary, TuneLayout, RunModel) and map utilities.
+// Do NOT refactor in this pass; tracked in Phase 0 report.
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import LanguageSwitcher from "@/components/LanguageSwitcher";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { polygon as turfPolygon } from "@turf/helpers";
@@ -65,7 +67,11 @@ import { useScanStore } from "@/hooks/use-scan-store";
 import { useGeocode } from "@/hooks/use-geocode";
 import { runFullCalculation, type SolarAnalysis, SolarCalcError } from "@/lib/solar-calc";
 import { computePanelLayout, type PanelRect } from "@/lib/panel-layout";
+import { validateRoofPolygon } from "@/lib/obstruction-geometry";
+import type { RooftopAnalysis } from "@/types/scan";
 import { Map, Globe as GlobeIcon } from "lucide-react";
+import { fetchLocationSuggestions, type LocationSuggestion } from "@/lib/location-suggestions";
+import { BASEMAP_OPTIONS, type BasemapId } from "@/lib/map-basemaps";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { encodeScanToUrl } from "@/lib/scan-url";
@@ -79,9 +85,16 @@ import { calcTiltAzimuthFactor, type Azimuth, AZIMUTH_LABELS } from "@/lib/tilt-
 import PhotoRoofEstimator from "@/components/PhotoRoofEstimator";
 import { ProgressiveFluxLoader } from "@/components/ui/progressive-flux-loader";
 import { useVoiceSearch } from "@/hooks/use-voice-search";
-import { isWebGLSupported } from "@/lib/webgl-detector";
-import GlobeView from "@/components/GlobeView";
-import GlobeErrorBoundary from "@/components/GlobeErrorBoundary";
+import { driver, type Driver } from "driver.js";
+import "driver.js/dist/driver.css";
+import Google3DView from "@/components/Google3DView";
+import { GisGuide } from "@/components/ui/gis-guide";
+import {
+  getRooftopTourPhase,
+  getRooftopTourSteps,
+  ROOFTOP_TOUR_DURATION,
+  type RooftopTourPhase,
+} from "@/lib/rooftop-tour";
 import {
   ELECTRICITY_RATE_INR,
   MIN_ELECTRICITY_RATE,
@@ -105,14 +118,7 @@ const POLYGON_COLORS = [
   "#8B5CF6", // Purple
 ];
 
-interface NominatimSuggestion {
-  place_id: number;
-  display_name: string;
-  lat: string;
-  lon: string;
-  type: string;
-  address?: Record<string, string>;
-}
+type NominatimSuggestion = LocationSuggestion;
 
 const vertexIcon = L.divIcon({
   className: "",
@@ -186,72 +192,9 @@ function calcCentroid(latlngs: LatLng[]): LatLng {
   return { lat, lng };
 }
 
-// ── Geocode helpers ────────────────────────────────────────
+// â”€â”€ Geocode helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const NOMINATIM_HEADERS = {
-  "Accept-Language": "en",
-  "User-Agent": "SolarScanAIApp/1.0 (https://solarscan.ai)",
-};
-
-interface NominatimSearchResult {
-  place_id: number;
-  display_name: string;
-  lat: string;
-  lon: string;
-  type?: string;
-  address?: Record<string, string>;
-}
-
-async function fetchNominatimSuggestions(
-  query: string,
-  signal: AbortSignal,
-): Promise<NominatimSuggestion[]> {
-  try {
-    const nomUrl = `/api/geocode?q=${encodeURIComponent(query)}&limit=6`;
-    const nomRes = await fetch(nomUrl, { signal });
-    if (nomRes.ok) {
-      const nomData = (await nomRes.json()) as NominatimSearchResult[];
-      return nomData.map((item) => ({
-        place_id: item.place_id,
-        display_name: item.display_name,
-        lat: item.lat,
-        lon: item.lon,
-        type: item.type || "place",
-        address: item.address,
-      }));
-    }
-  } catch {
-    // Ignore error
-  }
-  return [];
-}
-
-async function fetchSuggestions(
-  query: string,
-  signal: AbortSignal,
-  mapCenter?: { lat: number; lng: number },
-): Promise<NominatimSuggestion[]> {
-  // Try Google Autocomplete first via the server-side proxy (keeps the API key off the client).
-  try {
-    const res = await fetch("/api/places/autocomplete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ input: query, mapCenter }),
-      signal,
-    });
-    if (res.ok) {
-      const suggestions = (await res.json()) as NominatimSuggestion[];
-      if (Array.isArray(suggestions) && suggestions.length > 0) return suggestions;
-    }
-  } catch {
-    // Fallback
-  }
-
-  // Fallback to local Nominatim proxy
-  return fetchNominatimSuggestions(query, signal);
-}
-
-// Fallback forward geocoder — queries Nominatim directly, biased to the
+// Fallback forward geocoder â€” queries Nominatim directly, biased to the
 // current map bounds when available. Used when the primary geocoder fails.
 async function geocodeAddress(
   address: string,
@@ -339,7 +282,7 @@ function formatSuggestion(s: NominatimSuggestion): { main: string; secondary: st
   return { main: s.display_name, secondary: "" };
 }
 
-// ── MapPage Component ───────────────────────────────────────────
+// â”€â”€ MapPage Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const MapPage = () => {
   const navigate = useNavigate();
@@ -349,12 +292,14 @@ const MapPage = () => {
   const { user, signOut } = useAuth();
   
   const mapRef = useRef<L.Map | null>(null);
+  const basemapLayersRef = useRef<Record<BasemapId, L.TileLayer> | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const geocodeMutation = useGeocode();
   const { mutateAsync: geocodeAsync } = geocodeMutation;
   const [mapReady, setMapReady] = useState(false);
+  const [basemap, setBasemap] = useState<BasemapId>("satellite");
 
-  // ── Search state ────────────────────────────────────────
+  // â”€â”€ Search state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
@@ -365,12 +310,13 @@ const MapPage = () => {
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
-  // ── Drawing state ───────────────────────────────────────
+  // â”€â”€ Drawing state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [drawState, setDrawState] = useState<DrawState>("IDLE");
   const [vertexCount, setVertexCount] = useState(0);
   const [area, setArea] = useState<number | null>(null);
   const [areaWarning, setAreaWarning] = useState<string | null>(null);
   const [calculating, setCalculating] = useState(false);
+  const showLegacyCalculationOverlay = false;
   const [calcError, setCalcError] = useState<string | null>(null);
   const [isOfflineFallback, setIsOfflineFallback] = useState(false);
   const [electricityRate, setElectricityRate] = useState(ELECTRICITY_RATE_INR);
@@ -379,18 +325,18 @@ const MapPage = () => {
   const [hasSearched, setHasSearched] = useState(false);
   const [panelCount, setPanelCount] = useState(0);
 
-  // ── Live location state ─────────────────────────────────
+  // â”€â”€ Live location state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState("");
   const [locationDotMarker, setLocationDotMarker] = useState<L.Marker | null>(null);
 
-  // ── Loading Interstitial state ──────────────────────────
+  // â”€â”€ Loading Interstitial state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
   const [loaderProgress, setLoaderProgress] = useState(0);
   const [pendingNavigationUrl, setPendingNavigationUrl] = useState("");
   const calculationDoneRef = useRef(false);
 
-  // ── Loading Interstitial Simulation ──────────────────────
+  // â”€â”€ Loading Interstitial Simulation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!showLoadingOverlay) {
       setLoaderProgress(0);
@@ -435,15 +381,17 @@ const MapPage = () => {
     }
   }, [loaderProgress, pendingNavigationUrl, navigate]);
 
-  // ── SCN-014: Distinct colors for multi-roof polygons ───
+  // â”€â”€ SCN-014: Distinct colors for multi-roof polygons â”€â”€â”€
   const [polygons, setPolygons] = useState<{ id: string; vertices: LatLng[]; area: number; polygonLayer: L.Polygon }[]>([]);
   const [exclusionZones, setExclusionZones] = useState<{ id: string; vertices: LatLng[]; area: number; polygonLayer: L.Polygon }[]>([]);
   const [activeStep, setActiveStep] = useState<number>(1);
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const tourRef = useRef<Driver | null>(null);
+  const touredPhasesRef = useRef<Set<RooftopTourPhase>>(new Set());
   const [detectedState, setDetectedState] = useState<string | null>(null);
   const [discomName, setDiscomName] = useState<string | null>(null);
 
-  // ── Remote yield states & BESS settings ─────────────────
+  // â”€â”€ Remote yield states & BESS settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [tiltDeg, setTiltDeg] = useState(20);             // degrees, 0-45
   const [azimuth, setAzimuth] = useState<Azimuth>("S");
   const [backupMode, setBackupMode] = useState<BackupMode>("none");
@@ -451,7 +399,7 @@ const MapPage = () => {
   const [autoDetecting, setAutoDetecting] = useState(false);
   const [shadingNote, setShadingNote] = useState<string | null>(null);
 
-  // ── Layout settings ─────────────────────────────────────
+  // â”€â”€ Layout settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [orientation, setOrientation] = useState<"portrait" | "landscape" | "auto">("auto");
   const [alignment, setAlignment] = useState<"roof" | "south">("roof");
   const [walkways, setWalkways] = useState(false);
@@ -462,7 +410,7 @@ const MapPage = () => {
   const [pitchDegrees, setPitchDegrees] = useState<number>(0);
   const [isExplicitlyFlat, setIsExplicitlyFlat] = useState<boolean>(false);
 
-  // ── Voice search ────────────────────────────────────────
+  // â”€â”€ Voice search â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const voice = useVoiceSearch();
   useEffect(() => {
     if (voice.transcript) {
@@ -470,7 +418,7 @@ const MapPage = () => {
     }
   }, [voice.transcript]);
 
-  // ── Globe state ─────────────────────────────────────────
+  // â”€â”€ Globe state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const { viewMode, setViewMode } = useScanStore();
   const scanInput = useScanStore((s) => s.scanInput);
   const [selectedCoords, setSelectedCoords] = useState<{ lat: number; lng: number } | null>(
@@ -479,42 +427,13 @@ const MapPage = () => {
 
   const [zoom, setZoom] = useState(() => {
     if (scanInput) return 19;
-    if (!isWebGLSupported()) return 19;
-    return 2.5;
+    return 19;
   });
 
-  const [dimensions, setDimensions] = useState({
-    width: typeof window !== "undefined" ? window.innerWidth : 1000,
-    height: typeof window !== "undefined" ? window.innerHeight : 800,
-  });
-
+  // Ensure rooftop editor starts in 2D satellite mode so user can trace their roof
   useEffect(() => {
-    const handleResize = () => {
-      setDimensions({
-        width: window.innerWidth,
-        height: window.innerHeight,
-      });
-    };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  const handleWebGLFailed = useCallback(() => {
-    setZoom(19);
-  }, []);
-
-  const handleGlobeError = useCallback(() => {
-    setZoom(19);
-  }, []);
-
-  // Sync scan store viewMode with our zoom state
-  useEffect(() => {
-    if (zoom <= 3) {
-      setViewMode("3d");
-    } else {
-      setViewMode("2d");
-    }
-  }, [zoom, setViewMode]);
+    setViewMode("2d");
+  }, [setViewMode]);
 
   useEffect(() => {
     if (!mapRef.current || !selectedCoords) return;
@@ -531,30 +450,20 @@ const MapPage = () => {
     }
   }, [selectedCoords]);
 
-  // Synchronize Leaflet zoom and interaction handlers based on Globe zoom
+  // Keep Leaflet interaction available for roof drawing beneath the 3D surface.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-
-    if (zoom <= 3) {
-      if (map.getZoom() !== Math.round(zoom)) {
-        map.setZoom(Math.round(zoom));
-      }
-      map.dragging.disable();
-      map.scrollWheelZoom.disable();
-      map.doubleClickZoom.disable();
-    } else {
-      map.dragging.enable();
-      map.scrollWheelZoom.enable();
-      map.doubleClickZoom.enable();
-    }
-  }, [zoom]);
+    map.dragging.enable();
+    map.scrollWheelZoom.enable();
+    map.doubleClickZoom.enable();
+  }, [mapReady]);
 
   const isMobile = useIsMobile();
   const [mobileWarningDismissed, setMobileWarningDismissed] = useState(false);
   const dismissMobileWarning = () => setMobileWarningDismissed(true);
 
-  // ── Drawing refs ────────────────────────────────────────
+  // â”€â”€ Drawing refs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const verticesRef = useRef<LatLng[]>([]);
   const markersRef = useRef<L.Marker[]>([]);
   const polylineRef = useRef<L.Polyline | null>(null);
@@ -572,7 +481,64 @@ const MapPage = () => {
     drawState === "DRAWING" ? 3 :
     hasSearched ? 2 : 1;
 
-  // ── Close suggestions on outside click ──────────────────
+  const startTour = useCallback((phase: RooftopTourPhase, force = false) => {
+    if (!force && touredPhasesRef.current.has(phase)) return;
+    tourRef.current?.destroy();
+    if (phase !== "intro") setSidebarExpanded(true);
+    if (phase === "configuration") setActiveStep(1);
+    const steps = getRooftopTourSteps(phase).map((step, index) => phase === "configuration" && index < 2 ? {
+      ...step,
+      onNextClick: (_element: Element | undefined, _step: typeof step, opts: { driver: Driver }) => {
+        setActiveStep(index + 2);
+        window.setTimeout(() => opts.driver.moveNext(), 300);
+      },
+    } : step);
+
+    const tour = driver({
+      animate: true,
+      duration: ROOFTOP_TOUR_DURATION,
+      showProgress: true,
+      smoothScroll: true,
+      allowClose: true,
+      allowKeyboardControl: true,
+      overlayOpacity: 0.68,
+      stagePadding: 10,
+      stageRadius: 14,
+      popoverClass: "solar-tour-popover",
+      nextBtnText: "Next",
+      prevBtnText: "Back",
+      doneBtnText: "Finish",
+      steps,
+      onHighlighted: (_element, step, opts) => {
+        const index = opts.index ?? 0;
+        if (phase === "configuration") setActiveStep(index + 1);
+      },
+      onDestroyed: () => {
+        if (tourRef.current === tour) tourRef.current = null;
+      },
+    });
+    tourRef.current = tour;
+    touredPhasesRef.current.add(phase);
+    requestAnimationFrame(() => tour.drive());
+  }, []);
+
+  useEffect(() => {
+    const phase = getRooftopTourPhase({ hasSearched, drawState });
+    if (phase === "intro") {
+      const tourSeen = window.sessionStorage.getItem("solar-rooftop-tour-seen") === "1";
+      if (!tourSeen) {
+        window.sessionStorage.setItem("solar-rooftop-tour-seen", "1");
+        startTour("intro");
+      }
+      return;
+    }
+    const timer = window.setTimeout(() => startTour(phase), 450);
+    return () => window.clearTimeout(timer);
+  }, [drawState, hasSearched, startTour]);
+
+  useEffect(() => () => tourRef.current?.destroy(), []);
+
+  // â”€â”€ Close suggestions on outside click â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
@@ -583,7 +549,7 @@ const MapPage = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // ── Autocomplete: debounced fetch on query change ───────
+  // â”€â”€ Autocomplete: debounced fetch on query change â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     if (suggestionsAbortRef.current) suggestionsAbortRef.current.abort();
@@ -601,14 +567,14 @@ const MapPage = () => {
       try {
         const center = mapRef.current?.getCenter();
         const mapCenter = center ? { lat: center.lat, lng: center.lng } : undefined;
-        const results = await fetchSuggestions(query, controller.signal, mapCenter);
+        const results = await fetchLocationSuggestions(query, controller.signal, mapCenter);
         if (!controller.signal.aborted) {
           setSuggestions(results);
           setShowSuggestions(results.length > 0);
           setActiveSuggestion(-1);
         }
       } catch {
-        // Aborted or network error — ignore
+        // Aborted or network error â€” ignore
       }
     }, 300);
 
@@ -617,13 +583,14 @@ const MapPage = () => {
     };
   }, [query]);
 
-  // ── Init map ───────────────────────────────────────────
+  // â”€â”€ Init map â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
       center: [20.5937, 78.9629],
       zoom: 5,
+      maxZoom: 21,
       zoomControl: false,
       attributionControl: true,
       scrollWheelZoom: true,
@@ -631,33 +598,23 @@ const MapPage = () => {
       doubleClickZoom: false,
     });
 
-    const googleSat = L.tileLayer(
-      "https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
-      {
-        attribution: "© Google Maps",
-        maxZoom: 21,
-        subdomains: ["mt0", "mt1", "mt2", "mt3"],
-      }
-    );
     const esriSat = L.tileLayer(
-      "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      { attribution: "Tiles &copy; Esri", maxZoom: 21 }
+      "/api/map-tile?layer=satellite&z={z}&x={x}&y={y}",
+      { attribution: "Tiles &copy; Esri", maxNativeZoom: 19, maxZoom: 21, updateWhenZooming: false }
     );
     const esriLabels = L.tileLayer(
-      "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
-      { maxZoom: 21, opacity: 0.85, pane: "overlayPane" }
+      "/api/map-tile?layer=labels&z={z}&x={x}&y={y}",
+      { maxNativeZoom: 19, maxZoom: 21, opacity: 0.85, pane: "overlayPane", updateWhenZooming: false }
     );
+    const street = L.tileLayer(
+      "/api/map-tile?layer=street&z={z}&x={x}&y={y}",
+      { attribution: "Â© OpenStreetMap contributors", maxZoom: 20 },
+    );
+    const hybrid = L.layerGroup([esriSat, esriLabels]) as unknown as L.TileLayer;
+    basemapLayersRef.current = { satellite: esriSat, hybrid, street };
+    esriSat.addTo(map);
 
-    googleSat.on("tileerror", () => {
-      if (!map.hasLayer(esriSat)) {
-        googleSat.remove();
-        esriSat.addTo(map);
-        esriLabels.addTo(map);
-      }
-    });
-    googleSat.addTo(map);
-
-    // ── Click handler ──────────────────────────────────────
+    // â”€â”€ Click handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const handleMapClick = (e: L.LeafletMouseEvent) => {
       const state = drawStateRef.current;
       if (state === "COMPLETE" || state === "EXCLUSION_IDLE") return;
@@ -704,7 +661,7 @@ const MapPage = () => {
 
     map.on("click", handleMapClick);
 
-    // ── Mousemove: rubber-band + closing preview ───────────
+    // â”€â”€ Mousemove: rubber-band + closing preview â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     map.on("mousemove", (e: L.LeafletMouseEvent) => {
       const state = drawStateRef.current;
       if ((state !== "DRAWING" && state !== "EXCLUSION_DRAWING") || verticesRef.current.length === 0) {
@@ -765,7 +722,17 @@ const MapPage = () => {
     setMapReady(true);
   }, []);
 
-  // ── Search & Pan ─────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    const layers = basemapLayersRef.current;
+    if (!map || !layers) return;
+    Object.values(layers).forEach((layer) => {
+      if (map.hasLayer(layer)) map.removeLayer(layer);
+    });
+    layers[basemap].addTo(map);
+  }, [basemap, mapReady]);
+
+  // â”€â”€ Search & Pan â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const flyToLocation = useCallback((lat: number, lng: number, label: string) => {
     setHasSearched(true);
     setSidebarExpanded(true);
@@ -773,6 +740,18 @@ const MapPage = () => {
     setSelectedCoords({ lat, lng });
     setZoom(19);
     setViewMode("2d");
+
+    // Clear any pending in-progress drawing points when navigating to a new place
+    if (verticesRef.current.length > 0 && drawStateRef.current === "DRAWING") {
+      markersRef.current.forEach((m) => m.remove());
+      markersRef.current = [];
+      verticesRef.current = [];
+      setVertexCount(0);
+      polylineRef.current?.remove(); polylineRef.current = null;
+      previewLineRef.current?.remove(); previewLineRef.current = null;
+      closingLineRef.current?.remove(); closingLineRef.current = null;
+      setDrawState("IDLE");
+    }
 
     const map = mapRef.current;
     if (map) {
@@ -791,7 +770,7 @@ const MapPage = () => {
     }
   }, [activeStep, detectedState]);
 
-  // ── Geocoder lookup on query submit ──────────────────────
+  // â”€â”€ Geocoder lookup on query submit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleSearch = async () => {
     if (!query.trim()) return;
     setSearching(true);
@@ -864,7 +843,7 @@ const MapPage = () => {
     }
   };
 
-  // ── Navigation Wizard steps handler ──────────────────────
+  // â”€â”€ Navigation Wizard steps handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const changeStep = (targetStep: number) => {
     if (targetStep > activeStep) {
       if (activeStep === 1) {
@@ -882,7 +861,7 @@ const MapPage = () => {
     setActiveStep(targetStep);
   };
 
-  // ── Layout rendering logic (Cell grid & busbars) ──────────
+  // â”€â”€ Layout rendering logic (Cell grid & busbars) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const redrawAllPanels = useCallback(() => {
     const map = mapRef.current;
     if (!map || polygons.length === 0) {
@@ -923,51 +902,53 @@ const MapPage = () => {
         });
         panelGroup.addLayer(panelPoly);
 
-        // Internal cell grid lines
-        const [tl, tr, br, bl] = panel.corners;
-        const COLS = panel.isLandscape ? 10 : 3;
-        const ROWS = panel.isLandscape ? 3 : 10;
+        // Internal cell grid lines (throttled on very large arrays to keep map buttery smooth)
+        if (layout.panels.length <= 250) {
+          const [tl, tr, br, bl] = panel.corners;
+          const COLS = panel.isLandscape ? 10 : 3;
+          const ROWS = panel.isLandscape ? 3 : 10;
 
-        const lerp = (
-          a: [number, number], b: [number, number], t: number,
-        ): [number, number] => [
-          a[0] + (b[0] - a[0]) * t,
-          a[1] + (b[1] - a[1]) * t,
-        ];
+          const lerp = (
+            a: [number, number], b: [number, number], t: number,
+          ): [number, number] => [
+            a[0] + (b[0] - a[0]) * t,
+            a[1] + (b[1] - a[1]) * t,
+          ];
 
-        // Vertical lines
-        for (let c = 1; c < COLS; c++) {
-          const t = c / COLS;
-          const top = lerp(tl, tr, t);
-          const bot = lerp(bl, br, t);
-          panelGroup.addLayer(L.polyline([top, bot], {
-            color: "#5b8fc9", weight: 0.5, opacity: 0.6,
-          }));
-        }
+          // Vertical lines
+          for (let c = 1; c < COLS; c++) {
+            const t = c / COLS;
+            const top = lerp(tl, tr, t);
+            const bot = lerp(bl, br, t);
+            panelGroup.addLayer(L.polyline([top, bot], {
+              color: "#5b8fc9", weight: 0.5, opacity: 0.6,
+            }));
+          }
 
-        // Horizontal lines
-        for (let r = 1; r < ROWS; r++) {
-          const t = r / ROWS;
-          const left  = lerp(tl, bl, t);
-          const right = lerp(tr, br, t);
-          panelGroup.addLayer(L.polyline([left, right], {
-            color: "#5b8fc9", weight: 0.5, opacity: 0.6,
-          }));
-        }
+          // Horizontal lines
+          for (let r = 1; r < ROWS; r++) {
+            const t = r / ROWS;
+            const left  = lerp(tl, bl, t);
+            const right = lerp(tr, br, t);
+            panelGroup.addLayer(L.polyline([left, right], {
+              color: "#5b8fc9", weight: 0.5, opacity: 0.6,
+            }));
+          }
 
-        // Mid line busbar
-        if (panel.isLandscape) {
-          const midTop = lerp(tl, tr, 0.5);
-          const midBot = lerp(bl, br, 0.5);
-          panelGroup.addLayer(L.polyline([midTop, midBot], {
-            color: "#a8c8f0", weight: 1, opacity: 0.8,
-          }));
-        } else {
-          const midLeft  = lerp(tl, bl, 0.5);
-          const midRight = lerp(tr, br, 0.5);
-          panelGroup.addLayer(L.polyline([midLeft, midRight], {
-            color: "#a8c8f0", weight: 1, opacity: 0.8,
-          }));
+          // Mid line busbar
+          if (panel.isLandscape) {
+            const midTop = lerp(tl, tr, 0.5);
+            const midBot = lerp(bl, br, 0.5);
+            panelGroup.addLayer(L.polyline([midTop, midBot], {
+              color: "#a8c8f0", weight: 1, opacity: 0.8,
+            }));
+          } else {
+            const midLeft  = lerp(tl, bl, 0.5);
+            const midRight = lerp(tr, br, 0.5);
+            panelGroup.addLayer(L.polyline([midLeft, midRight], {
+              color: "#a8c8f0", weight: 1, opacity: 0.8,
+            }));
+          }
         }
       });
     });
@@ -979,12 +960,10 @@ const MapPage = () => {
 
   // Redraw panels reactive to settings and polygons
   useEffect(() => {
-    if (drawState === "COMPLETE" || polygons.length > 0) {
-      redrawAllPanels();
-    }
-  }, [drawState, polygons, redrawAllPanels]);
+    redrawAllPanels();
+  }, [redrawAllPanels]);
 
-  // ── Drawing controllers ──────────────────────────────────
+  // â”€â”€ Drawing controllers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleDeleteLast = useCallback(() => {
     if (verticesRef.current.length === 0) return;
     verticesRef.current = verticesRef.current.slice(0, -1);
@@ -1045,6 +1024,12 @@ const MapPage = () => {
       } else {
         setAreaWarning(null);
       }
+      if (next.length === 0) {
+        panelLayerRef.current?.remove();
+        panelLayerRef.current = null;
+        setPanelCount(0);
+        setDrawState("IDLE");
+      }
       return next;
     });
   };
@@ -1080,7 +1065,7 @@ const MapPage = () => {
       setArea(totalArea);
       setFootprintSource((src) => (src === "none" ? "manual" : src));
       if (totalArea < MIN_AREA_M2) {
-        setAreaWarning(`Total area is only ${totalArea} m². Minimum is ${MIN_AREA_M2} m² for accurate analysis.`);
+        setAreaWarning(`Total area is only ${totalArea} mÂ². Minimum is ${MIN_AREA_M2} mÂ² for accurate analysis.`);
       } else {
         setAreaWarning(null);
       }
@@ -1093,6 +1078,24 @@ const MapPage = () => {
     setVertexCount(0);
     setDrawState("IDLE");
   }, []);
+
+  const handleSwitchTo3D = useCallback(() => {
+    if (drawStateRef.current === "DRAWING") {
+      if (verticesRef.current.length >= 3) {
+        finishPolygon();
+      } else {
+        markersRef.current.forEach((m) => m.remove());
+        markersRef.current = [];
+        verticesRef.current = [];
+        setVertexCount(0);
+        polylineRef.current?.remove(); polylineRef.current = null;
+        previewLineRef.current?.remove(); previewLineRef.current = null;
+        closingLineRef.current?.remove(); closingLineRef.current = null;
+        setDrawState("IDLE");
+      }
+    }
+    setViewMode("3d");
+  }, [finishPolygon, setViewMode]);
 
   const finishExclusionPolygon = useCallback((map?: L.Map) => {
     const m = map || mapRef.current;
@@ -1117,7 +1120,7 @@ const MapPage = () => {
           .setLatLng(e.latlng)
           .setContent(() => {
             const btn = document.createElement("button");
-            btn.innerHTML = "❌ Remove Obstacle";
+            btn.innerHTML = "âŒ Remove Obstacle";
             btn.style.cssText = "padding: 6px 12px; background: #ef4444; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 11px;";
             btn.onclick = () => {
               polygonLayer.remove();
@@ -1147,18 +1150,12 @@ const MapPage = () => {
 
   const handleDoneDrawing = () => {
     if (polygons.length === 0) return;
-    setDrawState("EXCLUSION_IDLE");
-  };
-
-  const handleDoneExclusion = () => {
     const totalArea = polygons.reduce((sum, p) => sum + p.area, 0);
     const totalExclusionArea = exclusionZones.reduce((sum, p) => sum + p.area, 0);
     const centroid = calcCentroid(polygons.flatMap((p) => p.vertices));
 
     reverseGeocode(centroid.lat, centroid.lng).then((label) => {
       setLocationLabel(label);
-      
-      // Auto-detect shading from nearby buildings when confirming manual/other drawings
       nearbyOsmBuildings(centroid.lat, centroid.lng, 50)
         .then((others) => {
           const AZIMUTH_DEGREES: Record<Azimuth, number> = {
@@ -1223,7 +1220,80 @@ const MapPage = () => {
     setActiveStep(1);
   };
 
-  // ── Trigger URL Search on Mount ──────────────────────────
+  const handleDoneExclusion = () => {
+    const totalArea = polygons.reduce((sum, p) => sum + p.area, 0);
+    const totalExclusionArea = exclusionZones.reduce((sum, p) => sum + p.area, 0);
+    const centroid = calcCentroid(polygons.flatMap((p) => p.vertices));
+
+    reverseGeocode(centroid.lat, centroid.lng).then((label) => {
+      setLocationLabel(label);
+      
+      // Auto-detect shading from nearby buildings when confirming manual/other drawings
+      nearbyOsmBuildings(centroid.lat, centroid.lng, 50)
+        .then((others) => {
+          const AZIMUTH_DEGREES: Record<Azimuth, number> = {
+            N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315
+          };
+          const roofAzimuthDeg = AZIMUTH_DEGREES[azimuth] ?? 180;
+          const loss = calcHorizonShadingLoss(centroid.lat, centroid.lng, others, roofAzimuthDeg);
+          
+          useScanStore.getState().setComputedShadingLoss(loss);
+          useScanStore.getState().setNearbyStructuresCount(others.length);
+          
+          const pct = (loss * 100).toFixed(1);
+          if (others.length === 0) {
+            setShadingNote("Open exposure â€” no nearby buildings detected.");
+          } else if (loss > 0) {
+            setShadingNote(`Computed Shading Loss: ${pct}% based on ${others.length} nearby structures.`);
+          } else {
+            setShadingNote(`Minimal shading expected (0.0% calculated) from ${others.length} nearby structures.`);
+          }
+
+          useScanStore.getState().setScanInput({
+            address: label,
+            lat: centroid.lat,
+            lng: centroid.lng,
+            roofPolygon: polygons.map((p) => ({
+              type: "Polygon" as const,
+              coordinates: [p.vertices.map((v) => [v.lng, v.lat] as [number, number])],
+            })),
+            roofAreaM2: totalArea,
+            exclusionAreaM2: totalExclusionArea,
+            exclusionZones: exclusionZones.map((ez) => ez.vertices),
+            computedShadingLoss: loss,
+            nearbyStructuresCount: others.length,
+            source: footprintSource,
+            isExplicitlyFlat,
+          });
+        })
+        .catch(() => {
+          useScanStore.getState().setScanInput({
+            address: label,
+            lat: centroid.lat,
+            lng: centroid.lng,
+            roofPolygon: polygons.map((p) => ({
+              type: "Polygon" as const,
+              coordinates: [p.vertices.map((v) => [v.lng, v.lat] as [number, number])],
+            })),
+            roofAreaM2: totalArea,
+            exclusionAreaM2: totalExclusionArea,
+            exclusionZones: exclusionZones.map((ez) => ez.vertices),
+            computedShadingLoss: useScanStore.getState().computedShadingLoss,
+            nearbyStructuresCount: useScanStore.getState().nearbyStructuresCount,
+            source: footprintSource,
+            isExplicitlyFlat,
+          });
+        });
+
+      useScanStore.getState().setExclusionZones(exclusionZones.map((ez) => ez.vertices));
+      useScanStore.getState().setExclusionAreaM2(totalExclusionArea);
+    });
+
+    setDrawState("COMPLETE");
+    setActiveStep(1);
+  };
+
+  // â”€â”€ Trigger URL Search on Mount â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     const qParam = searchParams.get("q");
     if (qParam && mapRef.current) {
@@ -1255,7 +1325,7 @@ const MapPage = () => {
     }
   }, [searchParams, flyToLocation, geocodeAsync, mapReady]);
 
-  // ── Photo Estimator import area ─────────────────────────
+  // â”€â”€ Photo Estimator import area â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handlePhotoAreaAccept = useCallback((areaM2: number) => {
     const map = mapRef.current;
     if (!map) return;
@@ -1279,10 +1349,10 @@ const MapPage = () => {
     });
     finishPolygon(map);
     trackPolygonCompleted(areaM2);
-    toast({ title: "Area imported", description: `${areaM2} m² from your photo.` });
+    toast({ title: "Area imported", description: `${areaM2} mÂ² from your photo.` });
   }, [clearDrawing, finishPolygon, toast]);
 
-  // ── OSM building boundary detector ───────────────────────
+  // â”€â”€ OSM building boundary detector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleAutoDetect = useCallback(async () => {
     const map = mapRef.current;
     if (!map) return;
@@ -1293,7 +1363,7 @@ const MapPage = () => {
       if (!result || result.polygon.length < 3) {
         toast({
           title: "No building found",
-          description: "Zoom in closer to a roof, then try again — or trace it manually.",
+          description: "Zoom in closer to a roof, then try again â€” or trace it manually.",
           variant: "destructive",
         });
         return;
@@ -1330,7 +1400,7 @@ const MapPage = () => {
           useScanStore.getState().setNearbyStructuresCount(others.length);
 
           if (others.length === 0) {
-            setShadingNote("Open exposure — no nearby buildings detected.");
+            setShadingNote("Open exposure â€” no nearby buildings detected.");
             return;
           }
           
@@ -1358,7 +1428,7 @@ const MapPage = () => {
     }
   }, [clearDrawing, finishPolygon, toast]);
 
-  // ── GPS Geolocation finder ────────────────────────────────
+  // â”€â”€ GPS Geolocation finder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleLocateMe = useCallback(() => {
     if (!("geolocation" in navigator)) {
       toast({ title: "Location not supported", description: "Your browser doesn't support geolocation.", variant: "destructive" });
@@ -1403,11 +1473,11 @@ const MapPage = () => {
     );
   }, [flyToLocation, locationDotMarker, toast]);
 
-  // ── Calculation execution ────────────────────────────────
+  // â”€â”€ Calculation execution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleCalculate = async () => {
     const totalArea = polygons.reduce((sum, p) => sum + p.area, 0);
     if (polygons.length === 0 || totalArea < MIN_AREA_M2) {
-      setCalcError(`Area is too small (${totalArea} m²). Please draw a larger rooftop (minimum ${MIN_AREA_M2} m²).`);
+      setCalcError(`Area is too small (${totalArea} mÂ²). Please draw a larger rooftop (minimum ${MIN_AREA_M2} mÂ²).`);
       return;
     }
     setShowLoadingOverlay(true);
@@ -1421,6 +1491,24 @@ const MapPage = () => {
       const centroid = calcCentroid(polygons.flatMap((p) => p.vertices));
       trackPolygonCompleted(totalArea);
       trackConfigStepCompleted(3);
+      const primaryPolygon = polygons[0].vertices;
+      const polygonValidation = validateRoofPolygon(primaryPolygon);
+      if (!polygonValidation.valid) throw new Error(polygonValidation.reason);
+      let rooftopAnalysis: RooftopAnalysis;
+      try {
+        const response = await fetch("/api/rooftop-analysis", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ polygon: primaryPolygon }),
+        });
+        const payload = await response.json();
+        if (!response.ok && response.status !== 503) throw new Error(payload.error || "Rooftop obstruction analysis failed");
+        rooftopAnalysis = payload;
+      } catch (error) {
+        rooftopAnalysis = {
+          status: "failed", provider: null, obstructions: [], assumptions: [],
+          message: error instanceof Error ? error.message : "Rooftop obstruction analysis failed",
+        };
+      }
 
       const irradiance = await fetchSolarIrradiance(centroid.lat, centroid.lng);
       setIsOfflineFallback(irradiance.source === "REGIONAL_FALLBACK");
@@ -1481,6 +1569,7 @@ const MapPage = () => {
         battery,
         source: footprintSource,
         isExplicitlyFlat,
+        rooftopAnalysis,
       };
 
       const panelWattageValue = (panelType === "premium" ? 550 : 450) as 450 | 550;
@@ -1561,9 +1650,16 @@ const MapPage = () => {
   const handleZoomIn = () => mapRef.current?.zoomIn();
   const handleZoomOut = () => mapRef.current?.zoomOut();
 
+  const handleHeadingChange = useCallback((headingDeg: number, isAuto?: boolean) => {
+    // True 3D camera (Map3DElement) renders genuine 3D perspective, tilt, and heading natively.
+    if (mapContainerRef.current) {
+      mapContainerRef.current.style.transform = "";
+    }
+  }, []);
+
   return (
     <TooltipProvider>
-      <div className="relative w-full h-screen flex flex-col overflow-hidden" role="main" aria-label="Rooftop Solar Map">
+      <div className="professional-product-ui relative w-full h-screen flex flex-col overflow-hidden" role="main" aria-label="Rooftop Solar Map">
         {/* SCN-009: Mobile Interstitial warning banner */}
         {isMobile && !mobileWarningDismissed && (
           <Alert className="rounded-none border-b border-border bg-amber-500/10 dark:bg-amber-500/5 text-foreground px-4 py-3 shrink-0 flex items-start justify-between gap-3 animate-in slide-in-from-top-full duration-300 z-[3000]">
@@ -1594,24 +1690,21 @@ const MapPage = () => {
 
 
           
-          {/* ── Floating Controls Bar (Home & Logo Branding) ─────────────────── */}
+          {/* â”€â”€ Floating Controls Bar (Home & Logo Branding) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <div className="absolute top-6 left-4 z-[1000] flex items-center gap-2">
             <button
               onClick={() => navigate("/")}
               className="flex items-center justify-center w-10 h-10 rounded-xl bg-black/80 backdrop-blur-2xl border border-white/10 shadow-lg hover:border-[#FF6600]/80 hover:scale-105 active:scale-95 transition-all cursor-pointer text-white"
               aria-label="Back to Home"
             >
-              <img src="/logo.png" alt="SolarScan AI Logo" className="w-6 h-6 object-contain" />
+              <img src="/logo.png" alt="SUNPOWER LINK logo" className="w-6 h-6 object-contain" />
             </button>
             <div className="hidden sm:flex items-center h-10 px-3.5 rounded-xl bg-black/80 backdrop-blur-2xl border border-white/10 shadow-lg text-sm font-bold text-white">
               SUNPOWER <span className="font-serif italic font-light text-[#FF6600] ml-1">LINK</span>
             </div>
-            <div className="flex flex-col gap-2 scale-90 sm:scale-100">
-              <LanguageSwitcher align="left" />
-            </div>
           </div>
 
-          {/* ── Floating Auth Controls ─────────────────── */}
+          {/* â”€â”€ Floating Auth Controls â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <div className="absolute top-6 right-4 z-[1000] flex items-center gap-2">
             {user ? (
               <div className="flex items-center gap-2 bg-card/65 backdrop-blur-2xl border border-border/80 p-1.5 rounded-2xl shadow-[0_4px_30px_rgba(0,0,0,0.2)]">
@@ -1644,8 +1737,8 @@ const MapPage = () => {
             )}
           </div>
 
-          {/* ── Breadcrumbs ────────────────────────────────────────── */}
-          <div className="absolute top-6 left-16 z-[1000] hidden lg:block bg-card/65 backdrop-blur-2xl border border-border/80 px-4 py-2.5 rounded-2xl shadow-[0_4px_30px_rgba(0,0,0,0.2)] hover:border-primary/40 hover:shadow-[0_0_15px_rgba(255,107,0,0.15)] transition-all duration-300">
+          {/* â”€â”€ Breadcrumbs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          <div className="absolute top-6 left-[248px] z-[1000] hidden lg:block bg-card/65 backdrop-blur-2xl border border-border/80 px-4 py-2.5 rounded-2xl shadow-[0_4px_30px_rgba(0,0,0,0.2)] hover:border-primary/40 hover:shadow-[0_0_15px_rgba(255,107,0,0.15)] transition-all duration-300">
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem>
@@ -1659,38 +1752,57 @@ const MapPage = () => {
             </Breadcrumb>
           </div>
 
-          {/* ── Leaflet map satellite layer ── */}
+          {/* â”€â”€ Leaflet map satellite layer â”€â”€ */}
           <div
             ref={mapContainerRef}
             className="absolute inset-0 z-[2]"
+            data-tour="map-canvas"
             role="application"
             aria-label="Interactive satellite map"
           />
 
-          {/* ── 3D Globe View Overlay ── */}
-          <GlobeErrorBoundary
-            fallback={null}
-            onError={handleGlobeError}
-          >
-            <GlobeView
-              selectedCoords={selectedCoords}
-              onSelectCoords={setSelectedCoords}
-              locationLabel={locationLabel}
-              width={dimensions.width}
-              height={dimensions.height}
-              zoom={zoom}
-              setZoom={setZoom}
-              onWebGLFailed={handleWebGLFailed}
-            />
-          </GlobeErrorBoundary>
+          <Google3DView
+            center={
+              selectedCoords ||
+              (polygons.length > 0
+                ? calcCentroid(polygons.flatMap((p) => p.vertices))
+                : verticesRef.current.length > 0
+                ? calcCentroid(verticesRef.current)
+                : mapRef.current
+                ? { lat: mapRef.current.getCenter().lat, lng: mapRef.current.getCenter().lng }
+                : null)
+            }
+            zoom={zoom > 3 ? zoom : 19}
+            roofVertices={
+              polygons.reduce((total, polygon) => total + polygon.vertices.length, 0) ||
+              verticesRef.current.length
+            }
+            roofPolygons={
+              polygons.length > 0
+                ? polygons.map((p) => p.vertices)
+                : verticesRef.current.length >= 3
+                ? [verticesRef.current]
+                : []
+            }
+            exclusionZones={exclusionZones.map((ez) => ez.vertices)}
+            className={viewMode === "3d" ? "absolute inset-0 z-[3]" : "hidden"}
+            autoRotate={false}
+            onHeadingChange={handleHeadingChange}
+            onSwitchTo2D={() => setViewMode("2d")}
+          />
 
+          {/* ── 3D Globe View Overlay ── */}
           {/* ── Search Bar with Autocomplete suggestions ── */}
           <div
             ref={searchContainerRef}
+            data-tour="location-search"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
             className="absolute top-[max(1rem,env(safe-area-inset-top))] sm:top-6 left-14 sm:left-1/2 right-3 sm:right-auto sm:-translate-x-1/2 sm:w-[560px] z-[1000]"
           >
             <div
-              className={`flex items-center overflow-hidden transition-all duration-300 rounded-2xl border border-white/20 bg-black/50 backdrop-blur shadow-[0_8px_32px_rgba(0,0,0,0.15)] ${
+              className={`flex items-center transition-all duration-200 ease-out rounded-2xl border border-white/20 bg-neutral-950/85 backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] focus-within:border-[#FF6600]/80 focus-within:ring-2 focus-within:ring-[#FF6600]/25 overflow-hidden ${
                 searchError ? "ring-2 ring-destructive" : ""
               } ${showSuggestions && suggestions.length > 0 ? "rounded-b-none" : ""}`}
               role="search"
@@ -1706,8 +1818,8 @@ const MapPage = () => {
                 onChange={(e) => { setQuery(e.target.value); setSearchError(""); }}
                 onKeyDown={handleSearchKeyDown}
                 onFocus={() => { if (suggestions.length > 0 && query.length >= 2) setShowSuggestions(true); }}
-                placeholder={t("map.searchPlaceholder", "Search your rooftop address...")}
-                className="flex-1 bg-transparent border-none outline-none px-3 py-3 text-[14px] font-medium text-white placeholder:text-white/50"
+                placeholder={t("map.searchPlaceholder", "Search address, landmark or city...")}
+                className="flex-1 bg-transparent border-0 outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 px-3 py-3 text-[14px] font-medium text-white placeholder:text-white/45"
                 aria-label="Search for a location"
                 autoComplete="off"
                 role="combobox"
@@ -1717,6 +1829,7 @@ const MapPage = () => {
               />
               {voice.supported && (
                 <button
+                  type="button"
                   onClick={() => {
                     if (voice.listening) voice.stop();
                     else {
@@ -1728,28 +1841,29 @@ const MapPage = () => {
                       voice.start(lang);
                     }
                   }}
-                  className={`px-2.5 py-3 text-sm shrink-0 transition-colors ${
+                  className={`w-9 h-9 rounded-xl mr-1 flex items-center justify-center shrink-0 transition-colors ${
                     voice.listening
                       ? "text-red-500 bg-red-500/10 animate-pulse"
-                      : "text-white/50 hover:text-white"
+                      : "text-white/50 hover:text-white hover:bg-white/10"
                   }`}
                   aria-label={voice.listening ? "Stop voice input" : "Start voice input"}
                   title={voice.listening ? "Listening… tap to stop" : "Voice search"}
                 >
-                  {voice.listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                  {voice.listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4 text-white/70" />}
                 </button>
               )}
               <button
+                type="button"
                 onClick={handleSearch}
                 disabled={searching}
-                className="px-4 sm:px-6 py-3 text-[13px] font-bold transition-all disabled:opacity-70 flex items-center gap-2 shrink-0 border-none outline-none cursor-pointer bg-[#FF6600] text-black hover:bg-orange-500 shadow-lg shadow-[#FF6600]/20 active:scale-95"
+                className="m-1.5 px-4 sm:px-5 h-9 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-150 ease-out disabled:opacity-70 flex items-center gap-1.5 shrink-0 border-none outline-none cursor-pointer bg-[#FF6600] text-black hover:bg-orange-500 shadow-md active:scale-[0.97]"
                 aria-label="Search"
               >
                 {searching ? (
                   <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
                 ) : (
                   <>
-                    <Search className="w-4 h-4 sm:hidden" aria-hidden="true" />
+                    <Search className="w-3.5 h-3.5 sm:hidden" aria-hidden="true" />
                     <span className="hidden sm:inline">{t("map.search", "Search")}</span>
                   </>
                 )}
@@ -1797,7 +1911,7 @@ const MapPage = () => {
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
                 </span>
                 <span className="truncate">
-                  Listening{voice.interim ? ` · ${voice.interim}` : "…"}
+                  Listening{voice.interim ? ` Â· ${voice.interim}` : "â€¦"}
                 </span>
               </div>
             )}
@@ -1808,7 +1922,7 @@ const MapPage = () => {
             )}
           </div>
 
-          {/* ── GPS locator floating button ── */}
+          {/* â”€â”€ GPS locator floating button â”€â”€ */}
           <div className="absolute bottom-6 right-4 z-[1000] flex flex-col gap-2">
             <button
               onClick={handleLocateMe}
@@ -1825,11 +1939,46 @@ const MapPage = () => {
             </button>
           </div>
 
-          {/* ── Right workspace sidebar config panel ── */}
+          {/* â”€â”€ Right workspace sidebar config panel â”€â”€ */}
+          {!sidebarExpanded && (
+            <div className="absolute bottom-20 right-4 z-[1000] hidden sm:block">
+              <GisGuide
+                currentStep={guideStep as 1 | 2 | 3 | 4}
+                compact
+                onOpenWorkspace={() => setSidebarExpanded(true)}
+              />
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setSidebarExpanded((open) => !open)}
+            data-tour="workspace-toggle"
+            className="absolute bottom-6 right-16 z-[1000] flex h-10 items-center gap-2 rounded-xl border border-white/15 bg-black/70 px-3 text-xs font-semibold text-white/75 shadow-lg backdrop-blur-xl transition-[background-color,color,transform] duration-200 ease-out hover:bg-black/85 hover:text-white active:scale-[0.97]"
+            aria-label={sidebarExpanded ? "Close mapping controls" : "Open mapping controls"}
+          >
+            <Sliders className="h-4 w-4 text-[#ff8b3d]" />
+            <span className="hidden md:inline">{sidebarExpanded ? "Hide controls" : "Map controls"}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => startTour(getRooftopTourPhase({ hasSearched, drawState }), true)}
+            className="absolute bottom-6 right-[9.5rem] z-[1000] grid h-10 w-10 place-items-center rounded-xl border border-white/15 bg-black/70 text-white/75 shadow-lg backdrop-blur-xl transition-[background-color,color,transform] duration-200 ease-out hover:bg-black/85 hover:text-white active:scale-[0.97]"
+            aria-label="Open guided tour"
+            title="Open guided tour"
+          >
+            <HelpCircle className="h-4 w-4 text-[#ff8b3d]" />
+          </button>
+
           <Card
-            className={`absolute top-[100px] bottom-6 right-4 w-[360px] z-[1000] border border-white/10 shadow-2xl flex flex-col overflow-hidden rounded-3xl transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] bg-[#0A0A0A]/90 backdrop-blur-2xl ${
+            data-tour="drawing-workspace"
+            className={`absolute top-[100px] bottom-6 right-4 w-[360px] z-[1000] border border-white/10 shadow-2xl flex flex-col overflow-hidden rounded-3xl transition-[opacity,transform] duration-240 ease-out bg-[#0A0A0A]/90 backdrop-blur-2xl ${
               sidebarExpanded ? "opacity-100 translate-x-0" : "opacity-0 translate-x-[40px] pointer-events-none"
             }`}
+            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             {/* Sidebar header */}
             <CardHeader className="p-5 border-b border-white/10 bg-black/40 shrink-0">
@@ -1865,32 +2014,28 @@ const MapPage = () => {
             <CardContent className="p-5 flex-1 overflow-y-auto space-y-4 scrollbar-thin">
               {(drawState === "IDLE" || drawState === "DRAWING") && (
                 <div className="space-y-4">
-                  {/* Auto-detect & Photo Area Estimation row */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
+                  {/* Auto-detect & Photo Area — redesigned (#7) */}
+                  <div className="flex flex-col gap-2">
+                    <button
                       type="button"
-                      variant="outline"
-                      size="sm"
-                      className="text-[10px] h-8 rounded-xl flex items-center justify-center gap-1.5 font-bold hover:scale-[1.02] active:scale-[0.98] transition-all border-border"
                       onClick={handleAutoDetect}
                       disabled={autoDetecting}
+                      className="w-full h-9 flex items-center justify-center gap-2 text-[11px] font-semibold rounded-xl border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 cursor-pointer"
                     >
                       {autoDetecting ? (
-                        <><Loader2 className="w-3 h-3 animate-spin" /> {t("map.detecting", "Detecting...")}</>
+                        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Detecting your roof...</>
                       ) : (
-                        <><Sparkles className="w-3 h-3 text-amber-500" /> {t("map.autoDetect", "OSM Detect")}</>
+                        <><Sparkles className="w-3.5 h-3.5" /> Auto-detect roof outline</>
                       )}
-                    </Button>
-                    <Button
+                    </button>
+                    <button
                       type="button"
-                      variant="outline"
-                      size="sm"
-                      className="text-[10px] h-8 rounded-xl flex items-center justify-center gap-1.5 font-bold hover:scale-[1.02] active:scale-[0.98] transition-all border-border"
                       onClick={() => setPhotoEstOpen(true)}
+                      className="w-full h-9 flex items-center justify-center gap-2 text-[11px] font-semibold rounded-xl border border-border/50 bg-muted/30 text-muted-foreground hover:text-foreground hover:border-border active:scale-[0.98] transition-all duration-150 cursor-pointer"
                     >
-                      <Sun className="w-3 h-3 text-primary" />
-                      <span>Photo Area</span>
-                    </Button>
+                      <Sun className="w-3.5 h-3.5" />
+                      Estimate from photo
+                    </button>
                   </div>
 
                   {shadingNote && (
@@ -2037,11 +2182,11 @@ const MapPage = () => {
                 </div>
               )}
 
-              {/* Stepper Header — only after drawing is complete */}
+              {/* Stepper Header — unlocked when rooftop is mapped */}
               <div className={`border-t border-border mt-3 pt-4 pb-2 transition-all duration-300 ${
-                drawState !== "COMPLETE" ? "opacity-40 pointer-events-none" : ""
+                polygons.length === 0 ? "opacity-40 pointer-events-none" : ""
               }`}>
-                {drawState !== "COMPLETE" && (
+                {polygons.length === 0 && (
                   <p className="text-[9px] text-muted-foreground text-center mb-3 font-medium">
                     🔒 Map your rooftop to unlock configuration
                   </p>
@@ -2057,10 +2202,10 @@ const MapPage = () => {
                     return (
                       <button
                         key={step.num}
-                        onClick={() => drawState === "COMPLETE" && changeStep(step.num)}
+                        onClick={() => polygons.length > 0 && changeStep(step.num)}
                         className="flex flex-col items-center gap-1 group focus:outline-none flex-1 relative"
                         type="button"
-                        disabled={drawState !== "COMPLETE"}
+                        disabled={polygons.length === 0}
                       >
                         <div className="flex items-center w-full justify-center relative">
                           <div className="h-[2px] absolute left-0 right-0 top-1/2 -translate-y-1/2 z-0" style={{
@@ -2070,7 +2215,7 @@ const MapPage = () => {
                           }} />
                           <div
                             className={`w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold transition-all duration-300 relative z-10 ${
-                              isActive && drawState === "COMPLETE"
+                              isActive && polygons.length > 0
                                 ? "bg-gradient-to-br from-primary to-amber-500 text-black shadow-[0_0_12px_rgba(255,107,0,0.4)] ring-4 ring-primary/25 scale-110"
                                 : isCompleted
                                 ? "bg-emerald-500 text-white shadow-[0_0_10px_rgba(34,197,94,0.3)]"
@@ -2082,7 +2227,7 @@ const MapPage = () => {
                         </div>
                         <span
                           className={`text-[9px] font-extrabold uppercase tracking-wider transition-colors duration-300 mt-1.5 ${
-                            isActive && drawState === "COMPLETE" ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+                            isActive && polygons.length > 0 ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
                           }`}
                         >
                           {step.label}
@@ -2096,8 +2241,8 @@ const MapPage = () => {
               {/* Stepper Active Content */}
               <div className="mt-3">
                 {/* Step 1: Surface Geometry */}
-                {activeStep === 1 && drawState === "COMPLETE" && (
-                  <div className="space-y-4 pt-1 pb-2 animate-in fade-in duration-300">
+                {activeStep === 1 && (drawState === "COMPLETE" || polygons.length > 0) && (
+                  <div data-tour="surface-config" className="space-y-4 pt-1 pb-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                     {/* Tilt Slider */}
                     <div className="space-y-1.5">
                       <div className="flex justify-between text-[11px]">
@@ -2108,10 +2253,10 @@ const MapPage = () => {
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="left" className="max-w-[200px] text-[10px]">
-                            Mounting tilt relative to horizontal surface. Higher tilt angles require greater shading spacing between panel rows.
+                            The angle your panels sit at. Flat roofs use 10-20 degrees. Steeper = more sun capture but needs more row spacing.
                           </TooltipContent>
                         </Tooltip>
-                        <span className="font-mono font-bold text-primary">{tiltDeg}°</span>
+                        <span className="font-mono font-bold text-primary">{tiltDeg}Â°</span>
                       </div>
                       <Slider
                         value={[tiltDeg]}
@@ -2133,7 +2278,7 @@ const MapPage = () => {
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="left" className="max-w-[200px] text-[10px]">
-                            Clearance safety distance left along the outer edges of the roof perimeter (setback factor).
+                            Safety gap left empty around the roof edges. Required by installation codes. Typically 0.5m from each edge.
                           </TooltipContent>
                         </Tooltip>
                         <span className="font-mono font-bold text-primary">{setbackM} m</span>
@@ -2199,7 +2344,7 @@ const MapPage = () => {
                           </span>
                         </TooltipTrigger>
                         <TooltipContent side="left" className="max-w-[200px] text-[10px]">
-                          Select roof pitch angle to correct for satellite plan-area underestimation.
+                          Is your roof flat or sloped? A sloped roof has more actual surface area than satellites measure from above.
                         </TooltipContent>
                       </Tooltip>
                       <select
@@ -2220,8 +2365,8 @@ const MapPage = () => {
                 )}
 
                 {/* Step 2: Panel Specs */}
-                {activeStep === 2 && drawState === "COMPLETE" && (
-                  <div className="space-y-4 pt-1 pb-2 animate-in fade-in duration-300">
+                {activeStep === 2 && (drawState === "COMPLETE" || polygons.length > 0) && (
+                  <div data-tour="panel-config" className="space-y-4 pt-1 pb-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                     {/* Panel Wattage Selector */}
                     <div className="flex justify-between items-center gap-2">
                       <Tooltip>
@@ -2396,8 +2541,8 @@ const MapPage = () => {
                 )}
 
                 {/* Step 3: Electricity Pricing */}
-                {activeStep === 3 && drawState === "COMPLETE" && (
-                  <div className="space-y-4 pt-1 pb-2 animate-in fade-in duration-300">
+                {activeStep === 3 && (drawState === "COMPLETE" || polygons.length > 0) && (
+                  <div data-tour="tariff-config" className="space-y-4 pt-1 pb-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <div className="flex justify-between items-center text-[10px] font-bold text-foreground uppercase tracking-wider">
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -2473,16 +2618,19 @@ const MapPage = () => {
             </CardContent>
 
             {/* Pinned Card Footer actions */}
-            {(drawState === "DRAWING" || drawState === "EXCLUSION_DRAWING" || drawState === "EXCLUSION_IDLE" || (drawState === "COMPLETE" && area !== null)) && (
+            {(drawState === "DRAWING" || drawState === "EXCLUSION_DRAWING" || drawState === "EXCLUSION_IDLE" || ((drawState === "COMPLETE" || polygons.length > 0) && area !== null)) && (
               <CardFooter className="p-5 border-t border-border bg-card/95 shrink-0 flex flex-col gap-2">
                 {drawState === "DRAWING" && (
                   <div className="flex flex-col gap-2 w-full">
                     <div className="grid grid-cols-2 gap-2">
                       <Button
+                        type="button"
                         variant="outline"
                         size="sm"
                         className="text-xs h-9 rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all border-border"
-                        onClick={handleDeleteLast}
+                        onClick={(e) => { e.stopPropagation(); handleDeleteLast(); }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
                       >
                         Undo Last
                       </Button>
@@ -2511,9 +2659,12 @@ const MapPage = () => {
                       </AlertDialog>
                     </div>
                     <Button
+                      type="button"
                       variant="default"
                       className="w-full text-xs h-10 rounded-xl bg-foreground text-background hover:bg-foreground/90 font-bold shadow-sm hover:scale-[1.01] active:scale-[0.99] transition-all"
-                      onClick={() => finishPolygon()}
+                      onClick={(e) => { e.stopPropagation(); finishPolygon(); }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
                       disabled={vertexCount < 3}
                     >
                       {vertexCount >= 3 ? "Complete Outline" : `Need ${3 - vertexCount} more point${3 - vertexCount > 1 ? "s" : ""}`}
@@ -2582,7 +2733,7 @@ const MapPage = () => {
                     </Button>
                   </div>
                 )}
-                {drawState === "COMPLETE" && area !== null && (
+                {(drawState === "COMPLETE" || polygons.length > 0) && area !== null && (
                   <div className="flex gap-2 w-full">
                     <Button
                       variant="outline"
@@ -2635,19 +2786,98 @@ const MapPage = () => {
             )}
           </Card>
 
-          {/* ── Left Zoom Controls ── */}
-          <div className="absolute bottom-6 left-4 z-[1000] flex flex-col gap-2" role="group" aria-label="Map zoom controls">
+          {/* ── Left Zoom & Mode Controls ── */}
+          <div
+            className="absolute bottom-6 left-16 z-[1000] flex h-10 items-center rounded-xl border border-white/15 bg-black/70 p-1 shadow-lg backdrop-blur-xl"
+            role="group"
+            aria-label="Map style"
+            data-testid="basemap-selector"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            {BASEMAP_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setBasemap(option.id);
+                }}
+                className={`h-8 px-2.5 text-[11px] font-semibold transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.97] sm:px-3 ${
+                  basemap === option.id
+                    ? "rounded-lg bg-[#FF6600] text-black"
+                    : "text-white/65 hover:text-white"
+                }`}
+                aria-pressed={basemap === option.id}
+              >
+                {option.label}
+              </button>
+            ))}
+            <div className="mx-1 h-4 w-px bg-white/20" />
             <button
-              onClick={handleZoomIn}
-              className="w-10 h-10 bg-card/65 backdrop-blur-2xl border border-border shadow-md rounded-xl flex items-center justify-center hover:border-primary/80 hover:text-primary active:scale-95 transition-all text-muted-foreground cursor-pointer"
+              type="button"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                setViewMode("2d");
+              }}
+              className={`h-8 px-2.5 text-[11px] font-semibold transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.97] sm:px-3 ${
+                viewMode === "2d"
+                  ? "rounded-lg bg-white/25 text-white font-bold"
+                  : "text-white/65 hover:text-white"
+              }`}
+              title="Switch to 2D Drawing Canvas"
+            >
+              2D Map
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleSwitchTo3D();
+              }}
+              className={`h-8 px-2.5 text-[11px] font-semibold transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.97] sm:px-3 ${
+                viewMode === "3d"
+                  ? "rounded-lg bg-[#38bdf8] text-black font-bold shadow-sm"
+                  : "text-white/65 hover:text-white"
+              }`}
+              title="Switch to Interactive 3D Model"
+            >
+              3D View
+            </button>
+          </div>
+
+          <div
+            data-tour="zoom-controls"
+            className="absolute bottom-6 left-4 z-[1000] flex flex-col gap-2"
+            role="group"
+            aria-label="Map zoom controls"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); handleZoomIn(); }}
+              className="w-10 h-10 bg-card/65 backdrop-blur-2xl border border-border shadow-md rounded-xl flex items-center justify-center hover:border-primary/80 hover:text-primary active:scale-[0.97] transition-[color,border-color,transform] duration-150 ease-out text-muted-foreground cursor-pointer"
               aria-label="Zoom in"
               title="Zoom in"
             >
               <Plus className="w-4 h-4" />
             </button>
             <button
-              onClick={handleZoomOut}
-              className="w-10 h-10 bg-card/65 backdrop-blur-2xl border border-border shadow-md rounded-xl flex items-center justify-center hover:border-primary/80 hover:text-primary active:scale-95 transition-all text-muted-foreground cursor-pointer"
+              type="button"
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); handleZoomOut(); }}
+              className="w-10 h-10 bg-card/65 backdrop-blur-2xl border border-border shadow-md rounded-xl flex items-center justify-center hover:border-primary/80 hover:text-primary active:scale-[0.97] transition-[color,border-color,transform] duration-150 ease-out text-muted-foreground cursor-pointer"
               aria-label="Zoom out"
               title="Zoom out"
             >
@@ -2655,8 +2885,8 @@ const MapPage = () => {
             </button>
           </div>
 
-          {/* ── GIS loading scanner overlay ── */}
-          {calculating && (() => {
+          {/* â”€â”€ GIS loading scanner overlay â”€â”€ */}
+          {showLegacyCalculationOverlay && calculating && (() => {
             const centroid = polygons.length > 0 
               ? calcCentroid(polygons.flatMap((p) => p.vertices))
               : { lat: 0, lng: 0 };
@@ -2673,19 +2903,19 @@ const MapPage = () => {
 
                 {/* Left Telemetry HUD */}
                 <div className="absolute top-8 left-8 hidden md:flex flex-col gap-1.5 font-mono text-[10px] text-neutral-400 bg-black/50 border border-white/5 p-4 rounded-xl backdrop-blur-md pointer-events-none text-left">
-                  <div className="text-primary font-bold border-b border-white/10 pb-1 mb-1 tracking-wider">▲ SYSTEM TELEMETRY</div>
+                  <div className="text-primary font-bold border-b border-white/10 pb-1 mb-1 tracking-wider">â–² SYSTEM TELEMETRY</div>
                   <div>LOC.LAT: <span className="text-white">{centroid.lat.toFixed(6)}</span></div>
                   <div>LOC.LNG: <span className="text-white">{centroid.lng.toFixed(6)}</span></div>
-                  <div>ROOF.AREA: <span className="text-white">{area ?? 0} m²</span></div>
+                  <div>ROOF.AREA: <span className="text-white">{area ?? 0} mÂ²</span></div>
                   <div>EST.KWp: <span className="text-white">{capacityKw.toFixed(2)} kWp</span></div>
                 </div>
 
                 {/* Right Telemetry HUD */}
                 <div className="absolute top-8 right-8 hidden md:flex flex-col gap-1.5 font-mono text-[10px] text-neutral-400 bg-black/50 border border-white/5 p-4 rounded-xl backdrop-blur-md pointer-events-none text-left">
-                  <div className="text-primary font-bold border-b border-white/10 pb-1 mb-1 tracking-wider">▲ SOL.SIM.STATUS</div>
+                  <div className="text-primary font-bold border-b border-white/10 pb-1 mb-1 tracking-wider">â–² SOL.SIM.STATUS</div>
                   <div>DATABASE: <span className="text-white">NASA POWER API</span></div>
                   <div>NET.METERING: <span className="text-green-400 font-bold">ACTIVE</span></div>
-                  <div>TARIFF: <span className="text-white">₹{electricityRate}/kWh</span></div>
+                  <div>TARIFF: <span className="text-white">â‚¹{electricityRate}/kWh</span></div>
                   <div>STATE: <span className="text-primary animate-pulse font-bold">CALCULATING...</span></div>
                 </div>
 
@@ -2718,16 +2948,16 @@ const MapPage = () => {
                   {/* Processes checklist */}
                   <div className="space-y-2 border-y border-white/5 py-4 font-mono text-[10px] text-left max-w-[280px] mx-auto text-neutral-400">
                     <div className="animate-[fadeIn_0.4s_ease_both] flex items-center gap-2">
-                      <span className="text-green-500 font-bold">✓</span> Ingesting NASA solar irradiance...
+                      <span className="text-green-500 font-bold">âœ“</span> Ingesting NASA solar irradiance...
                     </div>
                     <div className="animate-[fadeIn_0.4s_ease_both] flex items-center gap-2 [animation-delay:500ms]">
-                      <span className="text-green-500 font-bold">✓</span> Analyzing layout panel geometry...
+                      <span className="text-green-500 font-bold">âœ“</span> Analyzing layout panel geometry...
                     </div>
                     <div className="animate-[fadeIn_0.4s_ease_both] flex items-center gap-2 [animation-delay:1000ms]">
-                      <span className="text-green-500 font-bold">✓</span> Calculating PM Surya Ghar subsidies...
+                      <span className="text-green-500 font-bold">âœ“</span> Calculating PM Surya Ghar subsidies...
                     </div>
                     <div className="animate-[fadeIn_0.4s_ease_both] flex items-center gap-2 [animation-delay:1500ms]">
-                      <span className="text-primary">●</span> Compiling 25-yr ROI balance sheet...
+                      <span className="text-primary">â—</span> Compiling 25-yr ROI balance sheet...
                     </div>
                   </div>
 
@@ -2757,19 +2987,18 @@ const MapPage = () => {
               }}
             >
               <div className="w-full max-w-md space-y-8 text-center flex flex-col items-center">
-                {/* Pulsing branding icon */}
+                {/* Stable branding mark */}
                 <div className="relative w-16 h-16 mb-4 flex items-center justify-center">
-                  <div className="absolute w-20 h-20 bg-primary/10 rounded-full blur-xl animate-pulse" />
+                  <div className="absolute w-20 h-20 bg-primary/10 rounded-full blur-xl" />
                   <img 
                     src="/logo.png" 
-                    alt="SolarScan AI Logo" 
-                    className="w-16 h-16 object-contain relative z-10 animate-bounce"
-                    style={{ animationDuration: "3s" }} 
+                    alt="SUNPOWER LINK logo"
+                    className="w-16 h-16 object-contain relative z-10"
                   />
                 </div>
 
                 <h2 className="text-xl font-extrabold tracking-tight uppercase text-muted-foreground/80 font-mono text-xs">
-                  SolarScan AI AI
+                  SUNPOWER LINK
                 </h2>
 
                 <ProgressiveFluxLoader 
@@ -2789,8 +3018,8 @@ const MapPage = () => {
                   textClassName="text-[#FFAA00] font-sans font-bold text-center block"
                 />
                 
-                <p className="text-xs text-muted-foreground font-light max-w-xs mt-2 leading-relaxed animate-pulse">
-                  Running geocoding algorithms & grid calculation matrices...
+                <p className="text-xs text-muted-foreground font-light max-w-xs mt-2 leading-relaxed">
+                  Building the rooftop layout and financial model from your selected geometry.
                 </p>
               </div>
             </div>
@@ -2823,3 +3052,6 @@ const MapPage = () => {
 };
 
 export default MapPage;
+
+
+

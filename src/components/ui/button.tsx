@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap text-[15px] font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap text-[15px] font-medium ring-offset-background transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 ease-emil focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 active:scale-[0.97]",
   {
     variants: {
       variant: {
@@ -17,7 +17,7 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
         cta: "bg-sunpower-accent text-sunpower-accent-text hover:bg-sunpower-accent-hover hover:scale-[1.02] active:scale-[0.98] rounded-pill px-7 py-3",
         hero: "bg-sunpower-accent text-sunpower-accent-text hover:bg-sunpower-accent-hover hover:scale-[1.02] active:scale-[0.98] rounded-pill px-8 py-3.5 text-base font-medium shadow-float",
-        glow: "bg-primary text-primary-foreground shadow-[0_0_20px_rgba(255,102,0,0.4)] hover:bg-primary/90 hover:shadow-[0_0_25px_rgba(255,102,0,0.6)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 border-none",
+        glow: "bg-primary text-primary-foreground shadow-[0_0_20px_rgba(255,102,0,0.35)] hover:bg-primary/90 hover:shadow-[0_0_24px_rgba(255,102,0,0.5)] border-none",
       },
       size: {
         default: "h-10 px-4 py-2",

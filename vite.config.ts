@@ -35,8 +35,8 @@ export default defineConfig(({ mode }) => {
           "galaxystarfield.png",
         ],
         manifest: {
-          name: "SUNPOWER LINK — Rooftop Solar Analyser",
-          short_name: "SUNPOWER LINK",
+          name: "SolarScan AI � Rooftop Solar Analyser",
+          short_name: "SolarScan AI",
           description: "AI-powered rooftop solar analysis for India. Estimate kWh, savings, PM Surya Ghar subsidy & CO₂ from a satellite view.",
           theme_color: "#F59E0B",
           background_color: "#0a0a0a",
@@ -61,6 +61,15 @@ export default defineConfig(({ mode }) => {
           clientsClaim: true,
           cleanupOutdatedCaches: true,
           runtimeCaching: [
+            {
+              urlPattern: /\/api\/map-tile\?/,
+              handler: "CacheFirst",
+              options: {
+                cacheName: "map-tiles",
+                expiration: { maxEntries: 800, maxAgeSeconds: 60 * 60 * 24 * 30 },
+                cacheableResponse: { statuses: [200] },
+              },
+            },
             {
               urlPattern: /^https:\/\/(mt[0-3]|services)\.(google|arcgisonline)\.com\//,
               handler: "CacheFirst",

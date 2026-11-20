@@ -34,10 +34,10 @@ export default function ResetPasswordPage() {
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center px-4 py-16 font-['Inter',sans-serif] antialiased text-white"
-      style={{ background: "linear-gradient(160deg, #020203 0%, #050506 60%, #0a0a0c 100%)" }}
+      className="professional-product-ui min-h-screen flex flex-col items-center justify-center px-4 py-16 antialiased text-white"
+      style={{ background: "#050505" }}
     >
-      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+      <div className="hidden" aria-hidden="true">
         <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] rounded-full opacity-[0.06] blur-[130px]"
           style={{ background: "#FF6600", animation: "rpBlob 20s ease-in-out infinite alternate" }} />
       </div>
@@ -48,7 +48,7 @@ export default function ResetPasswordPage() {
           <div className="w-16 h-16 rounded-2xl bg-[#FF6600]/10 border border-[#FF6600]/20 flex items-center justify-center mx-auto mb-4">
             <KeyRound className="w-7 h-7 text-[#FF6600]" />
           </div>
-          <h1 className="font-['Calistoga',serif] text-3xl text-white tracking-tight">New Password</h1>
+          <h1 className="text-3xl font-semibold text-white">New Password</h1>
           <p className="text-[13px] text-white/40">Set your new credentials below</p>
         </div>
 

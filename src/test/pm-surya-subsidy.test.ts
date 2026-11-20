@@ -13,11 +13,13 @@ describe("PM-Surya Ghar Subsidy Calculation", () => {
     expect(calcPMSuryaSubsidy(3)).toBe(78000);
   });
 
-  it("should cap subsidy at ₹78,000 for systems above 3 kWp", () => {
+  it("should cap subsidy at ₹78,000 for systems 3 kWp–10 kWp (Q3: 10 kWp system-size cap applies above 10)", () => {
     expect(calcPMSuryaSubsidy(3.5)).toBe(78000);
     expect(calcPMSuryaSubsidy(5)).toBe(78000);
     expect(calcPMSuryaSubsidy(10)).toBe(78000);
-    expect(calcPMSuryaSubsidy(12)).toBe(78000);
+    // Q3 fix: systems > 10 kWp are NOT eligible (was ₹78,000 before fix)
+    expect(calcPMSuryaSubsidy(10.01)).toBe(0);
+    expect(calcPMSuryaSubsidy(12)).toBe(0);
   });
 
   it("should return 0 for non-positive system sizes", () => {

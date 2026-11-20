@@ -152,7 +152,7 @@ export async function generatePDFReport(
         doc.setTextColor(240, 238, 233); // #F0EEE9
         doc.setFont("helvetica", "bold");
         doc.setFontSize(9);
-        doc.text(`${opts.brandConfig?.companyName || "SolarScan AI"}  |  ${pageTitle}`, margin, 10);
+  doc.text(`${opts.brandConfig?.companyName || "SUNPOWER LINK"}  |  ${pageTitle}`, margin, 10);
         
         doc.setFont("courier", "bold");
         doc.setFontSize(8.5);
@@ -195,13 +195,13 @@ export async function generatePDFReport(
           doc.setTextColor(primaryRgb.r, primaryRgb.g, primaryRgb.b);
           doc.setFont("helvetica", "bold");
           doc.setFontSize(14);
-          doc.text(opts.brandConfig.companyName || "SolarScan AI", margin, 24);
+    doc.text(opts.brandConfig.companyName || "SUNPOWER LINK", margin, 24);
         }
       } else {
         doc.setTextColor(primaryRgb.r, primaryRgb.g, primaryRgb.b);
         doc.setFont("helvetica", "bold");
         doc.setFontSize(14);
-        doc.text("SolarScan AI", margin, 24);
+    doc.text("SUNPOWER LINK", margin, 24);
       }
 
       y = 65;

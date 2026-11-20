@@ -1,4 +1,8 @@
 import { useNavigate, useSearchParams } from "react-router-dom";
+// BUG-004 fix: replaced hand-rolled formatter (had Lakh division bug — was dividing
+// by 1_00_00_000 instead of 1_00_000). Now delegates to src/lib/format-currency.ts.
+// NOTE: free teaser shows "up to ₹78,000" (marketing copy) — intentional, documented.
+import { formatINR as formatLakhsCr } from "../lib/format-currency";
 import {
   ArrowLeft,
   Download,
@@ -28,10 +32,14 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { SnappySlider } from "@/components/ui/snappy-slider";
 import { useEffect, useState, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { useToast } from "@/hooks/use-toast";
 import type { SolarAnalysis } from "@/lib/solar-calc";
 import { calcConfidenceScore } from "@/lib/confidence-score";
-import { generatePDFReport } from "@/lib/pdf-generator";
+import { pdf } from "@react-pdf/renderer";
+import { PDFReport } from "@/components/report/PDFReport";
+import { buildReportData } from "@/components/report/types";
+import { HTMLPrintView } from "@/components/report/HTMLPrintView";
 import { useAuth } from "@/contexts/AuthContext";
 import { saveScanToDb } from "@/lib/supabase";
 import {
@@ -50,7 +58,7 @@ import { ComposedBar as Bar } from "@/components/charts/ComposedChart";
 import { useScanStore } from "@/hooks/use-scan-store";
 import { usePayment } from "@/hooks/use-payment";
 import { useUnlockStatus } from "@/hooks/use-unlock-status";
-import { runFullCalculation, calcInvestmentGrade } from "@/lib/solar-calc";
+import { runFullCalculation, calcInvestmentGrade, calcSystemCost } from "@/lib/solar-calc";
 import { decodeScanFromUrl, encodeScanToUrl } from "@/lib/scan-url";
 import { generateWhatsAppMessage, generateWhatsAppUrl, shortenUrl } from "@/lib/whatsapp-share";
 import { computePanelLayout } from "@/lib/panel-layout";
@@ -90,25 +98,25 @@ import { recommendBattery, type BackupMode } from "@/lib/battery-calc";
 // ─── Institutional Design Tokens ─────────────────────────────
 const C = {
   // Surfaces
-  background:          "#050505",
-  charcoal:            "#0A0A0A",
-  surfaceVariant:      "#121215",
-  surfaceContainerHigh:"#1A1A1E",
+  background: "#050505",
+  charcoal: "#0A0A0A",
+  surfaceVariant: "#121215",
+  surfaceContainerHigh: "#1A1A1E",
   // Borders
-  outlineVariant:      "rgba(255, 255, 255, 0.1)",
-  outline:             "rgba(255, 255, 255, 0.15)",
+  outlineVariant: "rgba(255, 255, 255, 0.1)",
+  outline: "rgba(255, 255, 255, 0.15)",
   // Text
-  onSurface:           "#F0EEE9",
-  onSurfaceVariant:    "#C8C4BC",
-  mutedSand:           "#8A8A99",
+  onSurface: "#F0EEE9",
+  onSurfaceVariant: "#C8C4BC",
+  mutedSand: "#8A8A99",
   // Accents
-  primary:             "#FF6600",   // Solar Orange
-  primaryContainer:    "#E05800",
-  secondary:           "#2BD4A0",   // teal — positive values
-  error:               "#FF6B6B",   // red — negative / warning
+  primary: "#FF6600",   // Solar Orange
+  primaryContainer: "#E05800",
+  secondary: "#2BD4A0",   // teal — positive values
+  error: "#FF6B6B",   // red — negative / warning
   // Text on accent surfaces
-  onPrimary:           "#000000",
-  onSecondary:         "#001A12",
+  onPrimary: "#000000",
+  onSecondary: "#001A12",
 };
 
 interface FullResult extends SolarAnalysis {
@@ -143,18 +151,18 @@ function calcCentroid(points: { lat: number; lng: number }[]): { lat: number; ln
   return { lat: sum.lat / points.length, lng: sum.lng / points.length };
 }
 
-const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-const MONTH_KEYS   = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_KEYS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
 const leadFormSchema = z.object({
-  name:  z.string().min(1, "Name is required"),
+  name: z.string().min(1, "Name is required"),
   phone: z.string().regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit Indian mobile number"),
-  city:  z.string().min(1, "City is required"),
+  city: z.string().min(1, "City is required"),
 });
 
 // ─── Financial solver ────────────────────────────────────────
 function computeModel({ peakSunHours, pCount, pType, tariff, escalation, discountRate, omCost, batteryStorage, overrideAnnualKwh, shading = "auto", computedShadingLoss = null, windZone, tempDerate }: {
-  peakSunHours: number; pCount: number; pType: "compact"|"premium";
+  peakSunHours: number; pCount: number; pType: "compact" | "premium";
   tariff: number; escalation: number; discountRate: number; omCost: number; batteryStorage: boolean;
   overrideAnnualKwh?: number;
   shading?: "none" | "partial" | "heavy" | "auto";
@@ -164,8 +172,11 @@ function computeModel({ peakSunHours, pCount, pType, tariff, escalation, discoun
 }) {
   const panelW = pType === "premium" ? 550 : 450;
   const installedKw = (pCount * panelW) / 1000;
+  // BUG-005 fix: replaced flat per-panel pricing (pCount * ₹18k/22k + ₹35k fixed)
+  // with tiered ₹/kW pricing via calcSystemCost (the correct model, user-approved Q2).
+  // Tiered rates: ≤3 kW → ₹65k/kW, 3–10 kW → ₹58k/kW, >10 kW → ₹50k/kW.
   const windCostAdder = windZone ? calcWindCostAdder(windZone) : 0;
-  const grossCost = pCount * (pType === "premium" ? 22000 : 18000) + 35000 + (windCostAdder * installedKw);
+  const grossCost = calcSystemCost(installedKw) + Math.round(windCostAdder * installedKw);
   const batteryCost = batteryStorage ? 85000 : 0;
   const totalGrossCapEx = grossCost + batteryCost;
   const subsidyInr = calcPMSuryaSubsidy(installedKw);
@@ -211,6 +222,10 @@ function computeModel({ peakSunHours, pCount, pType, tariff, escalation, discoun
       irr = mid;
     }
   }
+  // NOTE: Full-model payback CAN be shorter than simple payback when tariff escalation
+  // (default 4.5%/yr) outpaces O&M cost growth (default 1%/yr) — especially for large
+  // systems where high tariff savings overwhelm modest O&M. This is not a bug.
+  // See financial-model-crosscheck.test.ts for the documented case (10.35 kW, 4.5% esc).
   let paybackPeriod = 25, breakEvenYr = 25, breakEvenFound = false;
   for (let y = 1; y <= 25; y++) {
     if (cumulativeCashFlow[y] >= 0) {
@@ -222,12 +237,14 @@ function computeModel({ peakSunHours, pCount, pType, tariff, escalation, discoun
   let dlc = netCostInr, dep = 0;
   for (let y = 1; y <= 25; y++) {
     const prod = baseAnnualKwh * Math.pow(0.995, y - 1);
-    dlc += (yearlyOm[y-1] + (y===10?35000:0)) / Math.pow(1+discountRate/100,y);
-    dep += prod / Math.pow(1+discountRate/100,y);
+    dlc += (yearlyOm[y - 1] + (y === 10 ? 35000 : 0)) / Math.pow(1 + discountRate / 100, y);
+    dep += prod / Math.pow(1 + discountRate / 100, y);
   }
   const lcoe = dep > 0 ? dlc / dep : 0;
-  return { installedKw, baseAnnualKwh, grossCost, totalGrossCapEx, subsidyInr, netCostInr,
-    cashFlows, cumulativeCashFlow, yearlySavings, yearlyOm, irr: irr * 100, npv, paybackPeriod, breakEvenYr, lcoe, breakEvenFound, shadingLoss };
+  return {
+    installedKw, baseAnnualKwh, grossCost, totalGrossCapEx, subsidyInr, netCostInr,
+    cashFlows, cumulativeCashFlow, yearlySavings, yearlyOm, irr: irr * 100, npv, paybackPeriod, breakEvenYr, lcoe, breakEvenFound, shadingLoss
+  };
 }
 
 // ─── Lead form ───────────────────────────────────────────────
@@ -242,8 +259,10 @@ function InstallerLeadForm({ data }: { data: FullResult }) {
   const onSubmit = async (values: any) => {
     setSubmitting(true);
     try {
-      const res = await fetch("/api/leads", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: values.name, phone: values.phone, city: values.city, systemKwp: data.energy.installedCapacityKw }) });
+      const res = await fetch("/api/leads", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: values.name, phone: values.phone, city: values.city, systemKwp: data.energy.installedCapacityKw })
+      });
       if (res.ok) { setSuccess(true); toast({ title: "Request Submitted", description: "A certified solar partner will contact you shortly." }); }
       else { const e = await res.json(); throw new Error(e.error || "Failed"); }
     } catch (err: any) {
@@ -265,7 +284,7 @@ function InstallerLeadForm({ data }: { data: FullResult }) {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
         {[
           { field: "phone", label: "Mobile Number", placeholder: "e.g. 9876543210" },
-          { field: "city",  label: "City",          placeholder: "e.g. Mumbai"     },
+          { field: "city", label: "City", placeholder: "e.g. Mumbai" },
         ].map(({ field, label, placeholder }) => (
           <div key={field}>
             <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: C.mutedSand }}>{label}</label>
@@ -415,23 +434,11 @@ function RoofLayoutDiagram({
   );
 }
 
-const formatLakhsCr = (val: number) => {
-  const abs = Math.abs(val);
-  const sign = val < 0 ? "-" : "";
-  if (abs >= 1_00_00_000) {
-    return `${sign}₹${(abs / 1_00_00_000).toFixed(2)} Cr`;
-  }
-  if (abs >= 1_00_000) {
-    return `${sign}₹${(abs / 1_00_00_000).toFixed(2)} L`;
-  }
-  return `${sign}₹${Math.round(abs).toLocaleString("en-IN")}`;
-};
-
 const INDIAN_STATES = [
-  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
-  "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", 
-  "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", 
-  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", 
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat",
+  "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh",
+  "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab",
+  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand",
   "West Bengal", "Delhi"
 ];
 
@@ -444,72 +451,73 @@ function generatePMSuryaApplicationPDF(details: {
   state: string;
 }) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  
+
   // Header / Title
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
   doc.text("PM-SURYA GHAR MUFT BIJLI YOJANA", 105, 20, { align: "center" });
   doc.setFontSize(12);
   doc.text("National Portal for Rooftop Solar — Pre-Filled Application Form", 105, 27, { align: "center" });
-  
+
   // Decorative separator
   doc.setLineWidth(0.5);
   doc.line(15, 32, 195, 32);
-  
+
   // Section: Applicant Details
   doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
   doc.text("1. APPLICANT INFORMATION", 15, 42);
-  
+
   doc.setFont("helvetica", "normal");
   doc.text(`Full Name: ${details.name || "N/A"}`, 15, 50);
   doc.text(`WhatsApp Number: +91 ${details.phone || "N/A"}`, 15, 57);
   doc.text(`State / Region: ${details.state || "N/A"}`, 15, 64);
   doc.text("Connection Type: Domestic (Residential)", 15, 71);
-  
+
   // Section: System Specifications
   doc.setFont("helvetica", "bold");
   doc.text("2. PROPOSED SOLAR SYSTEM SPECIFICATIONS", 15, 85);
-  
+
   doc.setFont("helvetica", "normal");
   doc.text(`Proposed System Capacity: ${details.systemSizeKw.toFixed(2)} kWp`, 15, 93);
   doc.text(`Estimated System Cost: INR ${Math.round(details.estimatedCost).toLocaleString()}`, 15, 100);
   doc.text(`Eligible Subsidy: INR ${Math.round(details.subsidyAmount).toLocaleString()}`, 15, 107);
   doc.text(`Net Cost to Homeowner: INR ${Math.round(details.estimatedCost - details.subsidyAmount).toLocaleString()}`, 15, 114);
-  
+
   // Section: Bank Account Details
   doc.setFont("helvetica", "bold");
   doc.text("3. BANK ACCOUNT FOR SUBSIDY DISBURSEMENT (PLACEHOLDER)", 15, 128);
-  
+
   doc.setFont("helvetica", "normal");
   doc.text("Account Holder Name: ___________________________________", 15, 136);
   doc.text("Bank Name: ___________________________________________", 15, 143);
   doc.text("Account Number: _______________________________________", 15, 150);
   doc.text("IFSC Code: ____________________________________________", 15, 157);
-  
+
   // Section: Checklist & Declaration
   doc.setFont("helvetica", "bold");
   doc.text("4. DECLARATION", 15, 172);
-  
+
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   const declarationText = "I hereby declare that all the information provided above is correct. I own the property and declare that a dual-source bidirectional net meter will be installed according to DISCOM guidelines. The subsidy will be claimed only after successful installation and inspection by DISCOM officials.";
   doc.text(declarationText, 15, 180, { maxWidth: 180 });
-  
+
   // Signatures
   doc.setFontSize(10);
   doc.text("Signature of Applicant: _____________________", 15, 220);
   doc.text("Date: _____________________", 140, 220);
-  
+
   // Footer
   doc.setFontSize(8);
   doc.text("This is an automatically generated pre-filled application form from SolarStudio Pro.", 105, 280, { align: "center" });
-  
+
   doc.save("pm-surya-ghar-prefilled-application.pdf");
 }
 
 // ─── Main Page ───────────────────────────────────────────────
 const ResultsPage = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { toast } = useToast();
   const store = useScanStore();
@@ -526,20 +534,20 @@ const ResultsPage = () => {
   const [pvlibData, setPvlibData] = useState<any>(null);
   const [isPvlibLoading, setIsPvlibLoading] = useState(false);
 
-  const hasTrackedViewed  = useRef(false);
+  const hasTrackedViewed = useRef(false);
   const hasTrackedPaywall = useRef(false);
   const maxPanelsRef = useRef<number>(1);
 
-  const [tariff,         setTariff]         = useState(7.5);
-  const [pType,          setPType]          = useState<"compact"|"premium">("compact");
-  const [pCount,         setPCount]         = useState(15);
-  const [escalation,     setEscalation]     = useState(4.5);
-  const [discountRate,   setDiscountRate]   = useState(8.5);
-  const [omCost,         setOmCost]         = useState(1.0);
+  const [tariff, setTariff] = useState(7.5);
+  const [pType, setPType] = useState<"compact" | "premium">("compact");
+  const [pCount, setPCount] = useState(15);
+  const [escalation, setEscalation] = useState(4.5);
+  const [discountRate, setDiscountRate] = useState(8.5);
+  const [omCost, setOmCost] = useState(1.0);
   const [batteryStorage, setBatteryStorage] = useState(false);
-  const [shading,        setShading]        = useState<"none" | "partial" | "heavy" | "auto">("auto");
-  const [activeTab,      setActiveTab]      = useState<"roi"|"yield"|"monthly">("roi");
-  const [showAllYears,   setShowAllYears]   = useState(false);
+  const [shading, setShading] = useState<"none" | "partial" | "heavy" | "auto">("auto");
+  const [activeTab, setActiveTab] = useState<"roi" | "yield" | "monthly">("roi");
+  const [showAllYears, setShowAllYears] = useState(false);
 
   // PM-Surya Ghar Subsidy Eligibility Checklist states
   const [checklistResidential, setChecklistResidential] = useState(true);
@@ -556,10 +564,10 @@ const ResultsPage = () => {
     if (data?.location?.label) {
       const label = data.location.label.toLowerCase();
       const allStates = [
-        "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
-        "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", 
-        "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", 
-        "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", 
+        "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat",
+        "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh",
+        "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab",
+        "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand",
         "West Bengal", "Delhi"
       ];
       const matched = allStates.find(s => label.includes(s.toLowerCase()));
@@ -590,13 +598,13 @@ const ResultsPage = () => {
   const { unlocked: serverUnlocked, refresh: refreshUnlock } = useUnlockStatus(data?.analysisId);
   const unlocked = serverUnlocked || store.isPaid;
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [paymentPlan,    setPaymentPlan]    = useState<"pay_per_scan"|"pro_monthly">("pay_per_scan");
-  const [paymentMethod,  setPaymentMethod]  = useState<"card"|"upi">("card");
-  const [cardNumber,     setCardNumber]     = useState("");
-  const [cardExpiry,     setCardExpiry]     = useState("");
-  const [cardCvv,        setCardCvv]        = useState("");
+  const [paymentPlan, setPaymentPlan] = useState<"pay_per_scan" | "pro_monthly">("pay_per_scan");
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "upi">("card");
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardExpiry, setCardExpiry] = useState("");
+  const [cardCvv, setCardCvv] = useState("");
   const [paymentProcessing, setPaymentProcessing] = useState(false);
-  const [paymentSuccess,    setPaymentSuccess]    = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
 
   useEffect(() => { document.body.style.overflow = "unset"; document.body.style.pointerEvents = "unset"; }, []);
   useEffect(() => { if (!checkoutOpen || unlocked) { document.body.style.overflow = "unset"; document.body.style.pointerEvents = "unset"; } }, [checkoutOpen, unlocked]);
@@ -613,7 +621,7 @@ const ResultsPage = () => {
           const pWatt = decoded.panelConfig.panelWattage ?? 450;
           const pCountVal = decoded.panelConfig.panelCount ?? 15;
           const customCapacityKw = Math.round((pCountVal * pWatt / 1000) * 100) / 100;
-          
+
           setTariff(decoded.tariff.tariffPerKwh);
           setPType(pWatt === 550 ? "premium" : "compact");
           setPCount(pCountVal);
@@ -721,7 +729,7 @@ const ResultsPage = () => {
           setPCount(p.panelCount ?? 15);
           setShading(p.shading || "auto");
           maxPanelsRef.current = p.panelCount ?? 15;
-          
+
           s.setScanInput({
             address: p.location?.label || "Mumbai",
             lat: p.location?.lat || 19.076,
@@ -743,7 +751,7 @@ const ResultsPage = () => {
             systemKwp: p.energy.installedCapacityKw || 6.5
           });
           s.setTariff({ tariffPerKwh: p.financials.electricityRateInr });
-          
+
           let shadingLossVal = 0;
           let shadingSourceVal: 'auto' | 'manual' = 'auto';
           const shadingConfig = p.shading || "auto";
@@ -779,7 +787,7 @@ const ResultsPage = () => {
   useEffect(() => {
     if (unlocked && data && !pvlibData && !isPvlibLoading) {
       setIsPvlibLoading(true);
-      
+
       const enc = searchParams.get("scan");
       let decodedPolygon = null;
       let urlPitchDegrees = 0;
@@ -794,15 +802,15 @@ const ResultsPage = () => {
       }
 
       const centroid = calcCentroid(
-        decodedPolygon?.[0]?.coordinates?.[0]?.map((c: any) => ({ lat: c[1], lng: c[0] })) ?? 
-        store.scanInput?.roofPolygon?.[0]?.coordinates?.[0]?.map((c: any) => ({ lat: c[1], lng: c[0] })) ?? 
+        decodedPolygon?.[0]?.coordinates?.[0]?.map((c: any) => ({ lat: c[1], lng: c[0] })) ??
+        store.scanInput?.roofPolygon?.[0]?.coordinates?.[0]?.map((c: any) => ({ lat: c[1], lng: c[0] })) ??
         []
       );
-      
+
       const lat = data.location?.lat ?? centroid.lat;
       const lng = data.location?.lng ?? centroid.lng;
       const tilt = data.roof?.tilt ?? 15.0;
-      
+
       const getAzimuthDeg = (az: string | number): number => {
         if (typeof az === "number") return az;
         const norm = String(az).toUpperCase().trim();
@@ -816,12 +824,12 @@ const ResultsPage = () => {
         if (norm === "NW") return 315;
         return 180;
       };
-      
+
       const azimuthDeg = getAzimuthDeg(data.roof?.azimuth || "S");
       const shadingStr = data.shading || store.panelConfig?.shading || "none";
       const pitchDeg = data.pitchDegrees ?? urlPitchDegrees ?? store.scanInput?.pitchDegrees ?? 0;
       const areaVal = data.rooftop?.drawnAreaM2 ?? store.scanInput?.roofAreaM2 ?? 10.0;
-      
+
       const panelW = (pType === "premium" ? 550 : 450);
       const kw = (pCount * panelW) / 1000;
 
@@ -864,7 +872,7 @@ const ResultsPage = () => {
     }
   }, [data, unlocked]);
 
-  const psh   = data?.energy.peakSunHoursDaily ?? 5.0;
+  const psh = data?.energy.peakSunHoursDaily ?? 5.0;
   const model = computeModel({
     peakSunHours: psh,
     pCount,
@@ -882,24 +890,21 @@ const ResultsPage = () => {
   });
 
   const handleDownload = async () => {
-    if (!data) return; setDownloading(true); setDownloadError(null);
+    if (!data) return;
+    setDownloading(true);
+    setDownloadError(null);
     try {
-      const cachedBrand = localStorage.getItem("solarsan-installer-brand-config");
-      let activeBrandConfig = undefined;
-      if (cachedBrand) {
-        try {
-          activeBrandConfig = JSON.parse(cachedBrand);
-        } catch {
-          // ignore parse errors
-        }
-      }
-
-      await generatePDFReport(
-        { ...data, energy: { ...data.energy, installedCapacityKw: model.installedKw, annualKwh: model.baseAnnualKwh }, financials: { electricityRateInr: tariff, monthlySavingsInr: Math.round(model.yearlySavings[0]/12), annualSavingsInr: Math.round(model.yearlySavings[0]), savings25yrInr: Math.round(model.cumulativeCashFlow[25]+model.netCostInr) }, panelCount: pCount, panelType: pType } as any,
-        { locationLabel: data.location?.label || "India", brandConfig: activeBrandConfig },
-        model
-      );
-      toast({ title: "Report Downloaded" });
+      const reportData = buildReportData(data, model, pCount, pType, tariff, escalation, discountRate);
+      const blob = await pdf(<PDFReport report={reportData} />).toBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `SolarScan-Report-${reportData.reportId || "solar"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "Report Downloaded", description: "Executive feasibility report saved as PDF." });
     } catch (err) {
       console.error("PDF generation failed:", err);
       const msg = "Failed to generate report.";
@@ -938,10 +943,10 @@ const ResultsPage = () => {
       const enc = searchParams.get("scan");
       const shareUrl = `${window.location.origin}/results?scan=${enc || ""}`;
       const shortUrl = await shortenUrl(shareUrl);
-      
+
       const savings25yr = model ? (model.cumulativeCashFlow[25] + model.netCostInr) : data.financials.savings25yrInr;
       const savingsLakh = parseFloat((savings25yr / 100000).toFixed(1));
-      
+
       const rawConfidence = calcConfidenceScore({
         source: data.source ?? "none",
         pitchDegrees: data.pitchDegrees ?? 0,
@@ -975,7 +980,13 @@ const ResultsPage = () => {
     }
   };
 
+  // BUG-006 FIX: Sandbox checkout is DEV-only. In production, all unlocks
+  // must go through real Razorpay payment verification (handleRazorpayCheckout).
   const handleSandboxCheckout = () => {
+    if (!import.meta.env.DEV) {
+      toast({ title: "Debug Only", description: "Sandbox checkout is unavailable in production.", variant: "destructive" });
+      return;
+    }
     setPaymentProcessing(true); trackPaymentInitiated(paymentPlan);
     setTimeout(() => {
       setPaymentProcessing(false); setPaymentSuccess(true);
@@ -1053,14 +1064,14 @@ const ResultsPage = () => {
 
   const yieldText = pvlibAvail ? "pvlib high-precision" : "Standard model";
 
-  const roiData     = model.cumulativeCashFlow.map((cf, y) => ({ year: y, cumulative: Math.round(cf) }));
-  const yieldData   = Array.from({ length: 25 }, (_, i) => ({ year: `Yr ${i+1}`, production: Math.round(model.baseAnnualKwh * Math.pow(0.995, i)), efficiency: parseFloat((100 - i*0.5).toFixed(1)) }));
+  const roiData = model.cumulativeCashFlow.map((cf, y) => ({ year: y, cumulative: Math.round(cf) }));
+  const yieldData = Array.from({ length: 25 }, (_, i) => ({ year: `Yr ${i + 1}`, production: Math.round(model.baseAnnualKwh * Math.pow(0.995, i)), efficiency: parseFloat((100 - i * 0.5).toFixed(1)) }));
   const monthlyData = MONTH_KEYS.map((k, i) => {
     const mPsh = data.monthlyIrradiance?.[k] ?? psh;
-    const days = i===1?28:[3,5,8,10].includes(i)?30:31;
+    const days = i === 1 ? 28 : [3, 5, 8, 10].includes(i) ? 30 : 31;
     return { label: MONTH_LABELS[i], psh: parseFloat(mPsh.toFixed(2)), generation: Math.round(model.installedKw * mPsh * days * 0.86) };
   });
-  const savings25L  = Math.round((model.cumulativeCashFlow[25] + model.netCostInr) / 100000);
+  const savings25L = Math.round((model.cumulativeCashFlow[25] + model.netCostInr) / 100000);
 
   // Dynamic Suitability Score Calculations
   const lat = data.location?.lat ?? 19.0;
@@ -1094,8 +1105,8 @@ const ResultsPage = () => {
   let shadingScore = 96;
   const activeShading = shading === "auto"
     ? (data?.computedShadingLoss !== undefined && data.computedShadingLoss !== null
-        ? (data.computedShadingLoss > 0.15 ? "heavy" : data.computedShadingLoss > 0 ? "partial" : "none")
-        : "none")
+      ? (data.computedShadingLoss > 0.15 ? "heavy" : data.computedShadingLoss > 0 ? "partial" : "none")
+      : "none")
     : shading;
 
   if (activeShading === "none") {
@@ -1124,23 +1135,29 @@ const ResultsPage = () => {
   structuralScore = Math.round(Math.max(60, Math.min(99, structuralScore + structSeed)));
 
   // Weighted suitability score
-  const suitability = data.suitabilityScore !== undefined 
-    ? data.suitabilityScore 
+  const suitability = data.suitabilityScore !== undefined
+    ? data.suitabilityScore
     : Math.round(
-        orientationScore * 0.30 +
-        areaScore * 0.20 +
-        shadingScore * 0.35 +
-        structuralScore * 0.15
-      );
+      orientationScore * 0.30 +
+      areaScore * 0.20 +
+      shadingScore * 0.35 +
+      structuralScore * 0.15
+    );
 
   const circumference = 2 * Math.PI * 45;
-  const dashOffset  = circumference * (1 - suitability / 100);
-  const roofUsable  = Math.round(Math.min(75, 50 + data.energy.peakSunHoursDaily * 4));
-  const roofObst    = Math.min(30, 100 - roofUsable - 10);
-  const roofAccess  = 100 - roofUsable - roofObst;
+  const dashOffset = circumference * (1 - suitability / 100);
+  const roofUsable = Math.round(Math.min(75, 50 + data.energy.peakSunHoursDaily * 4));
+  const roofObst = Math.min(30, 100 - roofUsable - 10);
+  const roofAccess = 100 - roofUsable - roofObst;
 
   // Hydrate BESS dynamic recommendations based on reactive slider models
   const activeBattery = data.battery || (batteryStorage ? recommendBattery(model.baseAnnualKwh / 365, "evening") : null);
+
+  // HTML QA / Print Surface (?print=1)
+  if (searchParams.get("print") === "1") {
+    const reportData = buildReportData(data, model, pCount, pType, tariff, escalation, discountRate);
+    return <HTMLPrintView report={reportData} />;
+  }
 
   return (
     <>
@@ -1162,13 +1179,13 @@ const ResultsPage = () => {
           to   { stroke-dashoffset: ${dashOffset}; }
         }
 
-        .sp-fade-up   { animation: sp-fade-up .5s cubic-bezier(.2,.8,.4,1) both; }
-        .sp-fade-up-1 { animation: sp-fade-up .5s cubic-bezier(.2,.8,.4,1) .06s both; }
-        .sp-fade-up-2 { animation: sp-fade-up .5s cubic-bezier(.2,.8,.4,1) .12s both; }
-        .sp-fade-up-3 { animation: sp-fade-up .5s cubic-bezier(.2,.8,.4,1) .18s both; }
-        .sp-fade-up-4 { animation: sp-fade-up .5s cubic-bezier(.2,.8,.4,1) .24s both; }
-        .sp-fade-up-5 { animation: sp-fade-up .5s cubic-bezier(.2,.8,.4,1) .30s both; }
-        .sp-fade-in   { animation: sp-fade-in .4s ease both; }
+        .sp-fade-up   { animation: sp-fade-up .22s cubic-bezier(.23,1,.32,1) both; }
+        .sp-fade-up-1 { animation: sp-fade-up .22s cubic-bezier(.23,1,.32,1) .03s both; }
+        .sp-fade-up-2 { animation: sp-fade-up .22s cubic-bezier(.23,1,.32,1) .06s both; }
+        .sp-fade-up-3 { animation: sp-fade-up .22s cubic-bezier(.23,1,.32,1) .09s both; }
+        .sp-fade-up-4 { animation: sp-fade-up .22s cubic-bezier(.23,1,.32,1) .12s both; }
+        .sp-fade-up-5 { animation: sp-fade-up .22s cubic-bezier(.23,1,.32,1) .15s both; }
+        .sp-fade-in   { animation: sp-fade-in .18s ease both; }
         .sp-spin      { animation: sp-spin .9s linear infinite; }
         .sp-count-in  { animation: sp-count-in .4s cubic-bezier(.2,.8,.4,1) .2s both; }
         .sp-gauge-ring { animation: sp-gauge-draw 1.2s cubic-bezier(.2,.8,.4,1) .4s both; }
@@ -1187,8 +1204,10 @@ const ResultsPage = () => {
         }
 
         /* ── Cards ── */
-        .sp-card { transition: border-color .18s; }
-        .sp-card:hover { border-color: ${C.outline} !important; }
+        .sp-card { transition: border-color .18s ease, transform .16s cubic-bezier(.23,1,.32,1); }
+        @media (hover: hover) and (pointer: fine) {
+          .sp-card:hover { border-color: ${C.outline} !important; }
+        }
         .sp-row:hover td { background: ${C.surfaceVariant} !important; }
 
         /* ── Module toggle buttons ── */
@@ -1202,7 +1221,7 @@ const ResultsPage = () => {
           letter-spacing: .06em;
           padding: 6px 14px;
           cursor: pointer;
-          transition: all .15s;
+          transition: color .15s ease, background-color .15s ease, border-color .15s ease, transform .15s cubic-bezier(.23,1,.32,1);
           font-family: 'JetBrains Mono', monospace;
           border-radius: 4px;
         }
@@ -1211,6 +1230,7 @@ const ResultsPage = () => {
           border-color: ${C.primary}60;
           color: ${C.primary};
         }
+        .sp-toggle:active { transform: scale(.97); }
         .sp-toggle:hover:not(.on) {
           background: ${C.surfaceVariant};
           border-color: ${C.outline};
@@ -1228,11 +1248,12 @@ const ResultsPage = () => {
           letter-spacing: .06em;
           padding: 5px 14px;
           cursor: pointer;
-          transition: all .15s;
+          transition: color .15s ease, background-color .15s ease, transform .15s cubic-bezier(.23,1,.32,1);
           font-family: 'JetBrains Mono', monospace;
         }
         .sp-tab.on { background: ${C.primary}; color: ${C.onPrimary}; }
         .sp-tab:hover:not(.on) { color: ${C.onSurface}; }
+        .sp-tab:active { transform: scale(.97); }
 
         /* ── Tooltip ── */
         .sp-tip {
@@ -1262,7 +1283,7 @@ const ResultsPage = () => {
         /* ── Section header label ── */
         .sp-section-label {
           font-family: 'JetBrains Mono', monospace;
-          font-size: 9px;
+          font-size: 11px;
           font-weight: 600;
           letter-spacing: .1em;
           text-transform: uppercase;
@@ -1272,7 +1293,7 @@ const ResultsPage = () => {
         /* ── Metric value (large number) ── */
         .sp-metric-value {
           font-family: 'DM Serif Display', Georgia, serif;
-          font-size: 26px;
+          font-size: clamp(28px, 3vw, 36px);
           line-height: 1.1;
           font-variant-numeric: tabular-nums;
           color: ${C.onSurface};
@@ -1303,6 +1324,13 @@ const ResultsPage = () => {
         .sp-table-body tr:nth-child(even) td { background: ${C.surfaceVariant}30; }
         .sp-table-body tr:hover td { background: ${C.surfaceVariant} !important; }
 
+        @media (prefers-reduced-motion: reduce) {
+          .sp-fade-up, .sp-fade-up-1, .sp-fade-up-2, .sp-fade-up-3, .sp-fade-up-4, .sp-fade-up-5,
+          .sp-fade-in, .sp-count-in, .sp-gauge-ring, .sp-lbar-1, .sp-lbar-2, .sp-lbar-3, .sp-lbar-4, .sp-lbar-5 {
+            animation: none !important;
+          }
+        }
+
         /* ── Print / PDF optimisation ── */
         @media print {
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -1313,18 +1341,18 @@ const ResultsPage = () => {
         }
       `}</style>
 
-      <div className="sp-page min-h-screen" style={{ background: C.background, color: C.onSurface }}>
+      <div className="professional-product-ui sp-page min-h-screen" style={{ background: C.background, color: C.onSurface }}>
 
         {/* ── Header ──────────────────────────────────────────── */}
         <header className="sp-nav sticky top-0 z-50" style={{ borderBottom: `1px solid ${C.outlineVariant}` }}>
-          <div className="flex justify-between items-center px-4 md:px-16 py-3 mx-auto max-w-[1280px]">
+          <div className="flex justify-between items-center px-4 md:px-8 py-2.5 mx-auto max-w-[1180px]">
             <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} className="flex items-center gap-2 group cursor-pointer">
-              <img src="/logo.png" alt="SolarScan AI Logo" className="w-10 h-10 object-contain transition-all duration-300 group-hover:scale-105" />
-              <div style={{ fontFamily: "Sora, sans-serif", color: C.mutedSand, fontSize: "20px", fontWeight: 500, letterSpacing: "-0.01em" }}>
+              <img src="/logo.png" alt="SUNPOWER LINK logo" className="w-8 h-8 object-contain transition-transform duration-150 ease-out group-active:scale-[0.97]" />
+              <div className="hidden sm:block" style={{ fontFamily: "Sora, sans-serif", color: C.onSurface, fontSize: "15px", fontWeight: 600 }}>
                 SUNPOWER <span style={{ fontStyle: "italic", fontWeight: 300 }}>LINK</span>
               </div>
             </a>
-            <nav className="hidden md:flex gap-6 items-center">
+            <nav className="hidden">
               <a style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/")}>Home</a>
               <a style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/market-insights")}>Market Insights</a>
               <a style={{ color: C.mutedSand }} className="text-[10px] font-bold uppercase tracking-wider font-mono hover:text-white transition-colors cursor-pointer" onClick={() => navigate("/policy-tracker")}>Policy Tracker</a>
@@ -1342,20 +1370,20 @@ const ResultsPage = () => {
               <button onClick={() => navigate("/map")}
                 aria-label="Go back to map"
                 style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-lg">
-                <ArrowLeft className="w-3 h-3" /> Back
+                className="flex h-9 items-center gap-1.5 px-3 text-xs font-semibold transition-[color,border-color,transform] duration-150 ease-out active:scale-[0.97] cursor-pointer rounded-lg">
+                <ArrowLeft className="w-3.5 h-3.5" /> {t("nav.back")}
               </button>
               {unlocked && (
                 <>
                   <button onClick={handleDownload} disabled={downloading}
                     style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                    className="hidden md:flex items-center gap-1.5 px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity disabled:opacity-40 cursor-pointer rounded-lg">
+                    className="hidden md:flex h-9 items-center gap-1.5 px-3 text-xs font-semibold transition-[color,border-color,transform] duration-150 ease-out active:scale-[0.97] disabled:opacity-40 cursor-pointer rounded-lg">
                     {downloading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
                     {downloading ? "Generating..." : "Download PDF"}
                   </button>
                   <button onClick={() => setShareModalOpen(true)}
                     style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                    className="hidden md:flex items-center gap-1.5 px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-lg">
+                    className="hidden md:flex h-9 items-center gap-1.5 px-3 text-xs font-semibold transition-[color,border-color,transform] duration-150 ease-out active:scale-[0.97] cursor-pointer rounded-lg">
                     <span>📱</span> Share on WhatsApp
                   </button>
                 </>
@@ -1364,7 +1392,7 @@ const ResultsPage = () => {
           </div>
         </header>
 
-        <main className="max-w-[1280px] mx-auto px-4 md:px-16 py-4 flex flex-col gap-8">
+        <main className="max-w-[1180px] mx-auto px-4 md:px-8 py-7 md:py-10 flex flex-col gap-7">
 
           {downloadError && (
             <div style={{ background: `${C.error}10`, border: `1px solid ${C.error}30`, color: C.error }} className="p-3 text-xs flex items-center gap-2 sp-fade-up">
@@ -1374,42 +1402,46 @@ const ResultsPage = () => {
             </div>
           )}
 
-          {/* ── Section A: Document Header (Report Identity) ──────────────── */}
-          <section className="pb-4 sp-fade-up border-b" style={{ borderColor: C.outlineVariant }}>
-            <div className="flex flex-col md:flex-row justify-between items-baseline gap-2 mb-3">
-              <div className="text-lg font-semibold tracking-wider sp-mono text-[#F0EEE9]">
-                SolarScan AI
-              </div>
-              <div className="text-[10px] font-semibold tracking-widest sp-mono text-neutral-500 uppercase flex gap-4">
-                <span>TECHNICAL PROSPECTUS</span>
-                <span>Q3 2026</span>
-              </div>
+          {/* ── Section A: Report Hero — clear for non-technical homeowners ── */}
+          <section className="sp-fade-up" style={{ borderBottom: `1px solid ${C.outlineVariant}`, paddingBottom: "2rem", marginBottom: "0.5rem" }}>
+            {/* Location + confidence */}
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              <MapPin className="w-3.5 h-3.5 shrink-0" style={{ color: C.primary }} />
+              <span className="text-xs font-mono truncate max-w-sm" style={{ color: C.mutedSand }}>
+                {data.location?.label || "Your rooftop"}
+              </span>
+              <span className="ml-auto text-[10px] font-mono px-2 py-0.5 rounded" style={{ background: badgeBg, color: badgeColor, border: `1px solid ${badgeColor}40` }}>
+                {confidenceScore}% confidence
+              </span>
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t" style={{ borderColor: C.outlineVariant }}>
-              <div className="space-y-1">
-                <div className="text-[11px] sp-mono text-[#8A8A99]">
-                  Site ID: <span className="text-[#F0EEE9] font-medium">{data.analysisId?.slice(-6).toUpperCase() ?? "DV3ZEF"}</span>
-                </div>
-                <div className="text-[11px] text-neutral-400">
-                  Location: <span className="sp-mono text-[#F0EEE9]">{data.location?.label ? data.location.label.split(",").slice(0,2).join(",") : "20.8251, 77.3409"}</span>
-                </div>
-              </div>
-              
-              <div className="flex flex-col md:items-end justify-between gap-1">
-                <div className="text-[11px] text-neutral-400">
-                  Generated: <span className="sp-mono text-[#F0EEE9]">17 July 2026</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-neutral-400">Confidence:</span>
-                  <div
-                    style={{ background: badgeBg, border: `1px solid ${badgeColor}`, color: badgeColor }}
-                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider font-mono"
-                  >
-                    {confidenceScore}%
+
+            {/* Human-readable headline */}
+            <h1 className="text-2xl md:text-4xl font-bold leading-tight mb-2" style={{ color: C.onSurface }}>
+              Your roof can save you{" "}
+              <span style={{ color: C.secondary }}>
+                ₹{Math.round((model.yearlySavings?.[0] ?? 0) / 1000)}K every year
+              </span>
+            </h1>
+            <p className="text-sm mb-5" style={{ color: C.onSurfaceVariant }}>
+              {(model.installedKw ?? 0).toFixed(1)} kWp system · {Math.round(model.baseAnnualKwh ?? 0).toLocaleString()} units generated/year · break-even in ~{(model.paybackPeriod ?? 0).toFixed(1)} yrs
+            </p>
+
+            {/* 3 plain-language key facts */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {([
+                { icon: "💰", label: "You save per year", value: `₹${Math.round(model.yearlySavings?.[0] ?? 0).toLocaleString("en-IN")}`, sub: "on your electricity bill" },
+                { icon: "☀️", label: "Clean energy generated", value: `${Math.round(model.baseAnnualKwh ?? 0).toLocaleString()} kWh`, sub: "units produced annually" },
+                { icon: "🏛️", label: "Govt subsidy for you", value: `₹${((model.subsidyInr ?? 0) / 1000).toFixed(0)}K`, sub: "PM Surya Ghar scheme" },
+              ] as { icon: string; label: string; value: string; sub: string }[]).map((fact) => (
+                <div key={fact.label} className="flex items-start gap-3 p-3 rounded-xl" style={{ background: C.surfaceVariant, border: `1px solid ${C.outlineVariant}` }}>
+                  <span className="text-xl leading-none mt-0.5">{fact.icon}</span>
+                  <div>
+                    <div className="text-[10px] font-mono uppercase tracking-wider mb-0.5" style={{ color: C.mutedSand }}>{fact.label}</div>
+                    <div className="text-lg font-bold" style={{ color: C.onSurface }}>{fact.value}</div>
+                    <div className="text-[10px]" style={{ color: C.mutedSand }}>{fact.sub}</div>
                   </div>
                 </div>
-              </div>
+              ))}
             </div>
           </section>
 
@@ -1495,9 +1527,9 @@ const ResultsPage = () => {
               {/* Auxiliary Financial Highlight strip */}
               <section className="py-3 px-5 sp-fade-up-1 grid grid-cols-3 gap-4 border-l border-r border-b" style={{ background: `${C.surfaceVariant}22`, borderColor: C.outlineVariant }}>
                 {[
-                  { label: "Net Capital Outlay", value: `₹${Math.round(model.netCostInr).toLocaleString()}`, color: C.onSurface },
-                  { label: "Net Present Value (NPV)", value: `${model.npv >= 0 ? "+" : ""}₹${Math.round(model.npv).toLocaleString()}`, color: model.npv >= 0 ? C.secondary : C.error },
-                  { label: "PM Surya Ghar Subsidy", value: `₹${model.subsidyInr.toLocaleString()}`, color: C.primary },
+                  { label: "Net Capital Outlay", value: `₹${Math.round(model.netCostInr ?? 0).toLocaleString()}`, color: C.onSurface },
+                  { label: "Net Present Value (NPV)", value: `${(model.npv ?? 0) >= 0 ? "+" : ""}₹${Math.round(model.npv ?? 0).toLocaleString()}`, color: (model.npv ?? 0) >= 0 ? C.secondary : C.error },
+                  { label: "PM Surya Ghar Subsidy", value: `₹${(model.subsidyInr ?? 0).toLocaleString()}`, color: C.primary },
                 ].map((item, i) => (
                   <div key={i} className="flex flex-col justify-center">
                     <div className="text-[9px] font-bold uppercase tracking-wider mb-0.5 font-mono text-neutral-500">{item.label}</div>
@@ -1578,16 +1610,16 @@ const ResultsPage = () => {
 
                 const hasNeStateIneligibility = !isEligible(eligibilityState, eligibilityConnectionType);
                 const isSystemSizeTooLarge = model.installedKw > 10;
-                
+
                 // Eligibility conditions
-                const isEligibleForSubsidy = 
-                  checklistResidential && 
-                  checklistGridConnected && 
-                  !hasNeStateIneligibility && 
+                const isEligibleForSubsidy =
+                  checklistResidential &&
+                  checklistGridConnected &&
+                  !hasNeStateIneligibility &&
                   !isSystemSizeTooLarge;
 
                 const subsidyAmt = isEligibleForSubsidy ? calcPMSuryaSubsidy(model.installedKw) : 0;
-                
+
                 const reasons: string[] = [];
                 if (!checklistResidential) reasons.push("Property must be residential (domestic connection)");
                 if (!checklistGridConnected) reasons.push("Must be a grid-connected system");
@@ -1679,7 +1711,7 @@ const ResultsPage = () => {
                           <div className="text-[10px] font-bold uppercase tracking-wider font-mono text-neutral-400">
                             Calculation Output
                           </div>
-                          
+
                           {isEligibleForSubsidy ? (
                             <div className="mt-3">
                               <div className="text-2xl font-bold font-mono text-emerald-400" style={{ color: C.secondary }}>
@@ -1733,11 +1765,11 @@ const ResultsPage = () => {
               {/* Referral & Viral Sharing Section */}
               {(() => {
                 const shareDetails = getReferralShareContent(referralState.referralCode, data?.location?.label || "my roof");
-                
+
                 return (
                   <section style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 mt-4 sp-card rounded-[4px] sp-fade-up-1">
                     <div className="flex flex-col md:flex-row justify-between items-start gap-6">
-                      
+
                       {/* Left: Share Details & Actions */}
                       <div className="flex-1 space-y-4 w-full">
                         <div>
@@ -1798,10 +1830,10 @@ const ResultsPage = () => {
                             style={{ background: "#25D366", color: "#075E54" }}
                             className="flex-1 min-w-[120px] py-2 text-[10px] font-bold uppercase tracking-wider rounded-[3px] text-center hover:opacity-90 transition-opacity font-mono flex items-center justify-center gap-1.5 cursor-pointer decoration-none"
                           >
-                            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.625 1.451 5.403.002 9.792-4.382 9.795-9.79.001-2.621-1.013-5.086-2.856-6.93C16.328 2.05 13.87 1.037 11.26 1.036c-5.4.001-9.791 4.384-9.793 9.793-.001 1.543.41 3.05 1.194 4.376l-1.018 3.722 3.834-.997c1.3.7 2.6 1.07 4.17 1.026z"/></svg>
+                            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.625 1.451 5.403.002 9.792-4.382 9.795-9.79.001-2.621-1.013-5.086-2.856-6.93C16.328 2.05 13.87 1.037 11.26 1.036c-5.4.001-9.791 4.384-9.793 9.793-.001 1.543.41 3.05 1.194 4.376l-1.018 3.722 3.834-.997c1.3.7 2.6 1.07 4.17 1.026z" /></svg>
                             Share on WhatsApp
                           </a>
-                          
+
                           <a
                             href={shareDetails.twitterUrl}
                             target="_blank"
@@ -1811,7 +1843,7 @@ const ResultsPage = () => {
                           >
                             Share on X
                           </a>
-                          
+
                           <a
                             href={shareDetails.facebookUrl}
                             target="_blank"
@@ -1874,8 +1906,8 @@ const ResultsPage = () => {
                     {suitability >= 90
                       ? "Excellent solar potential based on roof orientation and shading analysis."
                       : suitability >= 75
-                      ? "Good solar potential with minor optimization recommended for shading/orientation."
-                      : "Moderate solar potential. Shading or roof structural constraints may limit overall efficiency."}
+                        ? "Good solar potential with minor optimization recommended for shading/orientation."
+                        : "Moderate solar potential. Shading or roof structural constraints may limit overall efficiency."}
                   </p>
                 </section>
 
@@ -1885,9 +1917,9 @@ const ResultsPage = () => {
                   <div className="flex flex-col gap-3.5 my-auto">
                     {[
                       { label: "Solar Orientation", pct: orientationScore },
-                      { label: "Roof Area",          pct: areaScore },
-                      { label: "Shading Loss",       pct: shadingScore },
-                      { label: "Structural",         pct: structuralScore },
+                      { label: "Roof Area", pct: areaScore },
+                      { label: "Shading Loss", pct: shadingScore },
+                      { label: "Structural", pct: structuralScore },
                     ].map((f) => (
                       <div key={f.label} className="flex items-center gap-3">
                         <span className="text-[11px] font-mono shrink-0 text-left" style={{ color: C.mutedSand, width: 115 }}>{f.label}</span>
@@ -1905,14 +1937,14 @@ const ResultsPage = () => {
                   <div className="text-[9px] font-bold uppercase tracking-wider font-mono mb-4" style={{ color: C.mutedSand }}>Roof Utilization</div>
                   <div className="flex flex-col gap-4 mt-auto">
                     <div className="w-full h-6 flex overflow-hidden rounded-none">
-                      <div style={{ background: C.secondary,       width: `${roofUsable}%`,  transition: "width 1.2s ease" }} />
-                      <div style={{ background: C.outline,         width: `${roofObst}%`,    transition: "width 1.2s ease .1s" }} />
-                      <div style={{ background: C.primary,         width: `${roofAccess}%`,  transition: "width 1.2s ease .2s" }} />
+                      <div style={{ background: C.secondary, width: `${roofUsable}%`, transition: "width 1.2s ease" }} />
+                      <div style={{ background: C.outline, width: `${roofObst}%`, transition: "width 1.2s ease .1s" }} />
+                      <div style={{ background: C.primary, width: `${roofAccess}%`, transition: "width 1.2s ease .2s" }} />
                     </div>
                     <div className="grid grid-cols-3 gap-1 text-[10px] font-mono" style={{ color: C.mutedSand }}>
-                      <div className="flex items-center gap-1"><div style={{ background: C.secondary,       width: 6, height: 6 }} className="rounded-none" /> {roofUsable}% Use</div>
-                      <div className="flex items-center gap-1"><div style={{ background: C.outline,         width: 6, height: 6 }} className="rounded-none" /> {roofObst}% Obs</div>
-                      <div className="flex items-center gap-1"><div style={{ background: C.primary,         width: 6, height: 6 }} className="rounded-none" /> {roofAccess}% Acc</div>
+                      <div className="flex items-center gap-1"><div style={{ background: C.secondary, width: 6, height: 6 }} className="rounded-none" /> {roofUsable}% Use</div>
+                      <div className="flex items-center gap-1"><div style={{ background: C.outline, width: 6, height: 6 }} className="rounded-none" /> {roofObst}% Obs</div>
+                      <div className="flex items-center gap-1"><div style={{ background: C.primary, width: 6, height: 6 }} className="rounded-none" /> {roofAccess}% Acc</div>
                     </div>
                   </div>
                 </section>
@@ -1925,6 +1957,31 @@ const ResultsPage = () => {
                     installedKw={model.installedKw}
                     panelCount={pCount}
                     areaM2={data.rooftop.drawnAreaM2}
+                    tiltDeg={data.roof?.tilt ?? store.panelConfig?.tiltAngle ?? 15}
+                    azimuthDeg={typeof data.roof?.azimuth === "number" ? data.roof.azimuth : ({ N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315 } as Record<string, number>)[String(data.roof?.azimuth || "S").toUpperCase()] ?? 180}
+                    orientation={store.panelConfig?.orientation ?? "portrait"}
+                    roofPolygons={(store.scanInput?.roofPolygon ?? []).map((polygon) =>
+                      (polygon.coordinates[0] ?? []).map(([lng, lat]) => ({ lat, lng })),
+                    )}
+                    panelFootprints={(() => {
+                      const polygons = store.scanInput?.roofPolygon ?? [];
+                      const options = {
+                        panelType: pType === "premium" ? "premium" : "compact" as "premium" | "compact",
+                        alignment: store.panelConfig?.rowAlignment === "geographical_south" ? "south" : "roof" as "south" | "roof",
+                        tiltDeg: data.roof?.tilt ?? store.panelConfig?.tiltAngle ?? 15,
+                        orientation: store.panelConfig?.orientation ?? "portrait" as "portrait" | "landscape" | "auto",
+                        walkways: (store.panelConfig?.walkwayM ?? 0) > 0,
+                        setbackM: store.panelConfig?.setbackM ?? 0.5,
+                      };
+                      return polygons
+                        .flatMap((polygon) => {
+                          const vertices = polygon.coordinates?.[0]?.map(([lng, lat]) => ({ lat, lng })) ?? [];
+                          if (vertices.length < 3) return [];
+                          return computePanelLayout(vertices, options).panels;
+                        })
+                        .slice(0, pCount)
+                        .map((panel) => panel.corners.map(([lat, lng]) => ({ lat, lng })));
+                    })()}
                   />
                 </div>
               )}
@@ -1987,11 +2044,11 @@ const ResultsPage = () => {
                     </div>
                     <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="p-6 rounded-[4px]">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-2">
-                        <SnappySlider values={[3,5,7.5,10,12,15]} defaultValue={7.5} value={tariff} min={3} max={15} step={0.5} onChange={setTariff} label="Electricity Tariff" prefix="₹" suffix=" / kWh" />
-                        <SnappySlider values={[1,5,10,15,maxPanelsRef.current]} defaultValue={15} value={pCount} min={1} max={maxPanelsRef.current} step={1} onChange={setPCount} label="Active Panels" suffix={` / ${maxPanelsRef.current}`} />
-                        <SnappySlider values={[0,2.5,4.5,7,10]} defaultValue={4.5} value={escalation} min={0} max={10} step={0.5} onChange={setEscalation} label="Annual Grid Escalation" suffix="%" />
-                        <SnappySlider values={[0,3,5,8.5,12,15]} defaultValue={8.5} value={discountRate} min={0} max={15} step={0.5} onChange={setDiscountRate} label="NPV Discount Rate" suffix="%" />
-                        <SnappySlider values={[0,1,2.5,5]} defaultValue={1} value={omCost} min={0} max={5} step={0.5} onChange={setOmCost} label="Annual O&M Inflation" suffix="%" />
+                        <SnappySlider values={[3, 5, 7.5, 10, 12, 15]} defaultValue={7.5} value={tariff} min={3} max={15} step={0.5} onChange={setTariff} label="Electricity Tariff" prefix="₹" suffix=" / kWh" />
+                        <SnappySlider values={[1, 5, 10, 15, maxPanelsRef.current]} defaultValue={15} value={pCount} min={1} max={maxPanelsRef.current} step={1} onChange={setPCount} label="Active Panels" suffix={` / ${maxPanelsRef.current}`} />
+                        <SnappySlider values={[0, 2.5, 4.5, 7, 10]} defaultValue={4.5} value={escalation} min={0} max={10} step={0.5} onChange={setEscalation} label="Annual Grid Escalation" suffix="%" />
+                        <SnappySlider values={[0, 3, 5, 8.5, 12, 15]} defaultValue={8.5} value={discountRate} min={0} max={15} step={0.5} onChange={setDiscountRate} label="NPV Discount Rate" suffix="%" />
+                        <SnappySlider values={[0, 1, 2.5, 5]} defaultValue={1} value={omCost} min={0} max={5} step={0.5} onChange={setOmCost} label="Annual O&M Inflation" suffix="%" />
                         <div className="flex flex-col gap-3 pb-4">
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-wider mb-1.5 font-mono text-[#8A8A99]">Module Grade</div>
@@ -2058,8 +2115,8 @@ const ResultsPage = () => {
                         {activeTab === "roi" ? (
                           <AreaChart data={roiData} xDataKey="year" margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                             <CartesianGrid />
-                            <XAxis tickFormatter={v => Number(v)===0?"Yr 0":Number(v)%5===0?`Yr ${v}`:""} />
-                            <YAxis tickFormatter={v => v>=100000?`₹${(v/100000).toFixed(0)}L`:v<=-100000?`-₹${(Math.abs(v)/100000).toFixed(0)}L`:`₹${(v/1000).toFixed(0)}k`} />
+                            <XAxis tickFormatter={v => Number(v) === 0 ? "Yr 0" : Number(v) % 5 === 0 ? `Yr ${v}` : ""} />
+                            <YAxis tickFormatter={v => v >= 100000 ? `₹${(v / 100000).toFixed(0)}L` : v <= -100000 ? `-₹${(Math.abs(v) / 100000).toFixed(0)}L` : `₹${(v / 1000).toFixed(0)}k`} />
                             <ReferenceLine y={0} stroke={C.outlineVariant} />
                             {model.breakEvenFound && <ReferenceLine x={model.breakEvenYr} stroke={C.primary} />}
                             <Area dataKey="cumulative" stroke={C.secondary} fill={C.secondary} fillOpacity={0.12} strokeWidth={2} />
@@ -2068,8 +2125,8 @@ const ResultsPage = () => {
                         ) : activeTab === "yield" ? (
                           <ComposedChart data={yieldData} xDataKey="year" margin={{ top: 10, right: -10, left: -20, bottom: 0 }}>
                             <CartesianGrid />
-                            <XAxis tickFormatter={(v, _i) => Number(v)%5===0?v:""} />
-                            <YAxis tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
+                            <XAxis tickFormatter={(v, _i) => Number(v) % 5 === 0 ? v : ""} />
+                            <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
                             <Bar dataKey="production" fill={C.secondary} opacity={0.35} radius={[2, 2, 0, 0]} />
                             <Line dataKey="efficiency" stroke={C.primary} strokeWidth={2} dot={false} />
                           </ComposedChart>
@@ -2087,20 +2144,20 @@ const ResultsPage = () => {
                       {(() => {
                         const YEARS = 13;
                         const bars = model.cashFlows.slice(0, YEARS);
-                        const cum  = model.cumulativeCashFlow.slice(0, YEARS);
+                        const cum = model.cumulativeCashFlow.slice(0, YEARS);
                         const maxAbs = Math.max(...bars.map(Math.abs), ...cum.map(Math.abs)) || 1;
 
                         const W = 780, H = 320;
                         const PAD_L = 72, PAD_R = 24, PAD_T = 50, PAD_B = 52;
                         const chartW = W - PAD_L - PAD_R;
                         const chartH = H - PAD_T - PAD_B;
-                        const barW   = chartW / YEARS;
+                        const barW = chartW / YEARS;
                         const BAR_PAD = barW * 0.22;
-                        const bw     = barW - BAR_PAD;
-                        const zeroY  = PAD_T + chartH / 2;
+                        const bw = barW - BAR_PAD;
+                        const zeroY = PAD_T + chartH / 2;
 
                         const valToY = (v: number) => zeroY - (v / maxAbs) * (chartH / 2);
-                        const barX   = (i: number) => PAD_L + i * barW + BAR_PAD / 2;
+                        const barX = (i: number) => PAD_L + i * barW + BAR_PAD / 2;
 
                         const cumPts = cum.map((v, i) => `${barX(i) + bw / 2},${valToY(v)}`).join(" L ");
                         const cumPath = `M ${cumPts}`;
@@ -2108,7 +2165,7 @@ const ResultsPage = () => {
                         const fmt = (v: number) => {
                           const abs = Math.abs(v);
                           if (abs >= 1_00_000) return `₹${(abs / 1_00_000).toFixed(1)}L`;
-                          if (abs >= 1_000)   return `₹${(abs / 1_000).toFixed(0)}K`;
+                          if (abs >= 1_000) return `₹${(abs / 1_000).toFixed(0)}K`;
                           return `₹${Math.round(abs)}`;
                         };
 
@@ -2386,29 +2443,41 @@ const ResultsPage = () => {
                     <DataList rows={[
                       { label: "Panel Degradation", value: "0.55% / yr" },
                       { label: "Inverter Efficiency", value: "97.5%" },
-                      { label: "System Losses",       value: "14.0%" },
-                      { label: "Tariff Escalation",   value: `${escalation}% p.a.` },
-                      { label: "Discount Rate",        value: `${discountRate}%` },
-                      { label: "O&M Escalation",       value: `${omCost}% p.a.` },
+                      { label: "System Losses", value: "14.0%" },
+                      { label: "Tariff Escalation", value: `${escalation}% p.a.` },
+                      { label: "Discount Rate", value: `${discountRate}%` },
+                      { label: "O&M Escalation", value: `${omCost}% p.a.` },
                     ]} />
                   </SideCard>
 
                   <SideCard title="Hardware Configuration">
-                    <DataList rows={[
-                      { label: "Modules",    value: `${pCount}x ${pType === "premium" ? "550W" : "450W"} Mono PERC` },
-                      { label: "Inverter",   value: `1x ${Math.round(model.installedKw)}kW String` },
-                      { label: "Monitoring", value: "Smart Meter Pro" },
-                    ]} />
+                    {(() => {
+                      const panelModel = pType === "premium"
+                        ? "Longi Hi-MO 6 LR5-72HTH-550M"
+                        : "Waaree WS-450 HalfCell";
+                      const inverterModel = model.installedKw <= 5
+                        ? `Solis S6-GR1P(${Math.round(model.installedKw)}-6)K (Single Phase)`
+                        : `Solis S6-GR3P(${Math.round(model.installedKw)}-20)K (Three Phase)`;
+                      const warrantyStr = `${pType === "premium" ? "30" : "25"}-yr product, 25-yr performance`;
+                      return (
+                        <DataList rows={[
+                          { label: "Modules", value: `${pCount}x ${pType === "premium" ? "550W" : "450W"} ${panelModel}` },
+                          { label: "Inverter", value: inverterModel },
+                          { label: "Warranty", value: warrantyStr },
+                          { label: "Monitoring", value: "Smart Meter Pro" },
+                        ]} />
+                      );
+                    })()}
                   </SideCard>
 
                   <SideCard title="Geospatial Parameters">
                     <DataList rows={[
                       { label: "Horizon Shading", value: `${Math.round(model.shadingLoss * 100)}% Loss` },
-                      { label: "Albedo",           value: "0.20" },
-                      { label: "Sky View Factor",  value: data.skyViewFactor !== undefined ? data.skyViewFactor.toFixed(2) : "0.95" },
-                      { label: "Azimuth",          value: data.roof?.azimuth ? `${data.roof.azimuth} (Facing)` : "180° (South)" },
-                      { label: "Tilt",             value: `${data.roof?.tilt ?? 20}°` },
-                      { label: "Wind Zone",        value: `${typeof data.windZone === "object" ? (data.windZone?.label ?? "Zone 1") : (data.windZone ?? "Zone 1")} (${typeof data.windZone === "object" ? (data.windZone?.category ?? "Low") : (data.windZoneLabel ?? "Low")})` },
+                      { label: "Albedo", value: "0.20" },
+                      { label: "Sky View Factor", value: data.skyViewFactor !== undefined ? data.skyViewFactor.toFixed(2) : "0.95" },
+                      { label: "Azimuth", value: data.roof?.azimuth ? `${data.roof.azimuth} (Facing)` : "180° (South)" },
+                      { label: "Tilt", value: `${data.roof?.tilt ?? 20}°` },
+                      { label: "Wind Zone", value: `${typeof data.windZone === "object" ? (data.windZone?.label ?? "Zone 1") : (data.windZone ?? "Zone 1")} (${typeof data.windZone === "object" ? (data.windZone?.category ?? "Low") : (data.windZoneLabel ?? "Low")})` },
                     ]} />
                   </SideCard>
 
@@ -2456,11 +2525,11 @@ const ResultsPage = () => {
                     <div className="grid grid-cols-2 gap-2 text-[10px] text-center font-mono">
                       <div style={{ background: `${C.secondary}08`, border: `1px solid ${C.secondary}20` }} className="p-2.5 rounded-[3px]">
                         <div style={{ color: C.mutedSand }} className="mb-1 text-[8px] uppercase tracking-wider font-bold">Cash</div>
-                        <div style={{ color: C.onSurface }} className="font-bold sp-serif text-sm">₹{Math.round(Math.abs(model.npv)/100000).toFixed(1)}L NPV</div>
+                        <div style={{ color: C.onSurface }} className="font-bold sp-serif text-sm">₹{Math.round(Math.abs(model.npv) / 100000).toFixed(1)}L NPV</div>
                       </div>
                       <div style={{ background: `${C.primary}08`, border: `1px solid ${C.primary}20` }} className="p-2.5 rounded-[3px]">
                         <div style={{ color: C.mutedSand }} className="mb-1 text-[8px] uppercase tracking-wider font-bold">Loan (7yr)</div>
-                        <div style={{ color: C.onSurface }} className="font-bold sp-serif text-sm">₹{Math.round(Math.abs(model.npv)*0.78/100000).toFixed(1)}L NPV</div>
+                        <div style={{ color: C.onSurface }} className="font-bold sp-serif text-sm">₹{Math.round(Math.abs(model.npv) * 0.78 / 100000).toFixed(1)}L NPV</div>
                       </div>
                     </div>
                   </SideCard>
@@ -2473,37 +2542,41 @@ const ResultsPage = () => {
             /* ================================================================
                LOCKED STATE — teaser upgrade layout
             ================================================================ */
-            <div className="space-y-8 sp-fade-up-1">
+            <div className="space-y-5 sp-fade-up-1">
               {/* AI Summary + metrics strip */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
                 <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }}
-                  className="lg:col-span-1 p-6 flex flex-col gap-4 sp-card animate-slide-up rounded-[4px]">
+                  className="lg:col-span-2 p-6 flex flex-col gap-4 sp-card rounded-lg">
                   <div className="flex items-center gap-2 text-[#2BD4A0]">
                     <Satellite className="w-5 h-5" />
-                    <h2 className="sp-serif text-base font-bold">AI Summary</h2>
+                    <h2 className="text-base font-semibold">Solar assessment</h2>
                   </div>
                   <div style={{ background: `${C.secondary}10`, border: `1px solid ${C.secondary}25` }} className="flex items-center gap-1.5 px-3 py-1 w-fit rounded-[3px]">
                     <div style={{ background: C.secondary, width: 5, height: 5, borderRadius: "50%" }} />
-                    <span style={{ color: C.secondary }} className="text-[9px] font-bold uppercase tracking-widest font-mono">Geospatial Active</span>
+                    <span style={{ color: C.secondary }} className="text-[11px] font-semibold">Geospatial analysis complete</span>
                   </div>
-                  <p style={{ color: C.onSurfaceVariant }} className="text-xs leading-relaxed">
+                  <p style={{ color: C.onSurfaceVariant }} className="text-sm leading-relaxed">
                     Based on geospatial analysis, this property exhibits excellent solar irradiance. The unshaded roof area supports a system capable of offsetting approximately{" "}
                     <span style={{ color: C.onSurface, fontWeight: 600 }}>92%</span> of historical energy consumption.
                   </p>
                 </div>
 
-                <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="lg:col-span-2 grid grid-cols-2 gap-3">
                   {[
-                    { label: "Est. System Size",  value: data.energy.installedCapacityKw.toFixed(1), unit: "kWp", highlight: false },
-                    { label: "Annual Production", value: data.energy.annualKwh.toLocaleString(),       unit: "kWh", highlight: false },
-                    { label: "25-Yr Savings",     value: `₹${Math.round(data.financials.savings25yrInr/100000).toLocaleString()}L+`, unit: undefined, highlight: true },
+                    { label: "Est. System Size", value: (data.energy?.installedCapacityKw ?? model.installedKw ?? 0).toFixed(1), unit: "kWp", highlight: false },
+                    { label: "Annual Prod", value: (data.energy?.annualKwh ?? Math.round(model.baseAnnualKwh ?? 0)).toLocaleString(), unit: "kWh", highlight: false },
+                    { label: "Annual Saving", value: `₹${Math.round(model.yearlySavings?.[0] ?? 0).toLocaleString("en-IN")}`, unit: "/yr", highlight: false },
+                    { label: "Clean Energy", value: `${Math.round(model.baseAnnualKwh ?? 0).toLocaleString("en-IN")} kWh`, unit: "/yr", highlight: false },
+                    { label: "Break-even", value: `~${(model.paybackPeriod ?? 0).toFixed(1)}`, unit: "yrs", highlight: false },
+                    { label: "Govt Subsidy", value: (model.subsidyInr ?? 0) > 0 ? `₹${((model.subsidyInr ?? 0) / 1000).toFixed(0)}K` : "Not eligible", unit: undefined, highlight: false },
+                    { label: "25-Yr Savings", value: `₹${Math.round(((data.financials?.savings25yrInr ?? (model.yearlySavings?.[0] ? model.yearlySavings[0] * 25 : 0))) / 100000).toLocaleString()}L+`, unit: undefined, highlight: true },
                   ].map(({ label, value, unit, highlight }) => (
                     <div key={label}
-                      style={{ background: C.charcoal, border: `1px solid ${highlight ? C.secondary+"35" : C.outlineVariant}` }}
-                      className="sp-card p-6 flex flex-col justify-between relative overflow-hidden rounded-[4px]">
-                      <span className="text-[9px] font-bold uppercase tracking-widest font-mono" style={{ color: highlight ? C.secondary : C.mutedSand }}>{label}</span>
+                      style={{ background: C.charcoal, border: `1px solid ${highlight ? C.secondary + "35" : C.outlineVariant}` }}
+                      className={`sp-card p-5 flex min-h-32 flex-col justify-between relative overflow-hidden rounded-lg ${highlight ? "col-span-2" : ""}`}>
+                      <span className="text-xs font-medium" style={{ color: highlight ? C.secondary : C.mutedSand }}>{label}</span>
                       <div className="mt-4 flex items-baseline gap-1.5">
-                        <span style={{ color: highlight ? C.secondary : C.onSurface }} className="sp-serif text-3xl font-bold leading-none tabular-nums">
+                        <span style={{ color: highlight ? C.secondary : C.onSurface }} className="text-3xl font-semibold leading-none tabular-nums md:text-4xl">
                           {value}
                         </span>
                         {unit && <span className="text-xs font-mono" style={{ color: C.mutedSand }}>{unit}</span>}
@@ -2513,69 +2586,78 @@ const ResultsPage = () => {
                 </div>
               </div>
 
-              {/* Locked paywall teaser container */}
-              <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, minHeight: "500px" }} className="relative w-full overflow-hidden sp-fade-up-2 rounded-[4px]">
-                {/* Faux content (blurred behind) */}
-                <div className="absolute inset-0 p-8 opacity-10 pointer-events-none select-none flex flex-col gap-6">
-                  <div style={{ borderBottom: `1px solid ${C.outlineVariant}` }} className="flex justify-between items-end pb-3">
-                    <h3 className="sp-serif text-lg text-[#F0EEE9]">Cashflow & ROI Projection</h3>
-                    <div className="flex gap-2">
-                      <div style={{ background: C.surfaceVariant, height: 20, width: 80 }} />
-                      <div style={{ background: C.surfaceVariant, height: 20, width: 80 }} />
-                    </div>
+
+              {/* Locked paywall — premium redesign (#12) */}
+              <div style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}` }} className="w-full overflow-hidden sp-fade-up-2 rounded-2xl">
+
+                {/* Blurred preview strip */}
+                <div className="relative overflow-hidden" style={{ height: 120, background: C.surfaceVariant }}>
+                  <div className="absolute inset-0 flex items-end gap-2 px-6 pb-0 opacity-30 pointer-events-none">
+                    {[55, 70, 45, 80, 60, 90, 72, 50, 65, 85].map((h, i) => (
+                      <div key={i} style={{ height: `${h}%`, flex: 1, background: i > 4 ? C.secondary : C.outlineVariant, borderRadius: "4px 4px 0 0" }} />
+                    ))}
                   </div>
-                  <div style={{ borderLeft: `1px solid ${C.outlineVariant}`, borderBottom: `1px solid ${C.outlineVariant}` }} className="flex-grow w-full relative flex items-end gap-3 px-4 pb-0">
-                    <div style={{ background: `${C.surfaceVariant}80`, width: "11%" }} className="sp-lbar-1" />
-                    <div style={{ background: `${C.surfaceVariant}80`, width: "11%" }} className="sp-lbar-2" />
-                    <div style={{ background: `${C.secondary}30`,      width: "11%" }} className="sp-lbar-3" />
-                    <div style={{ background: `${C.secondary}30`,      width: "11%" }} className="sp-lbar-4" />
-                    <div style={{ background: `${C.secondary}30`,      width: "11%" }} className="sp-lbar-5" />
+                  <div className="absolute inset-0" style={{ backdropFilter: "blur(6px)", background: "linear-gradient(to bottom, transparent 0%, rgba(10,10,10,0.95) 100%)" }} />
+                  <div className="absolute bottom-3 left-6 right-6 flex justify-between items-end">
+                    <span className="text-xs font-mono" style={{ color: C.mutedSand }}>25-year cashflow projection</span>
+                    <span className="text-xs font-bold" style={{ color: C.secondary }}>Locked</span>
                   </div>
                 </div>
 
-                {/* Fade overlay */}
-                <div style={{ background: `linear-gradient(to bottom, transparent, ${C.charcoal}fc)` }} className="absolute inset-0 pointer-events-none" />
+                {/* Paywall body */}
+                <div className="px-6 py-8 md:px-10 md:py-10">
+                  <div className="max-w-2xl mx-auto">
 
-                {/* Upgrade panel */}
-                <div className="absolute bottom-0 left-0 w-full p-8 flex flex-col items-center justify-center text-center z-10">
-                  <div style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, maxWidth: 540, width: "100%" }}
-                    className="p-8 flex flex-col items-center gap-5 rounded-[4px] border">
-                    <Lock style={{ color: C.primary, width: 32, height: 32 }} />
-
-                    <div className="flex w-full max-w-xs gap-1">
-                      {[C.secondary, C.secondary, C.primaryContainer, C.outlineVariant, C.outlineVariant].map((col, i) => (
-                        <div key={i} style={{ height: 2, flex: 1, background: col }} />
-                      ))}
-                    </div>
-
-                    <div className="flex flex-col gap-2">
-                      <h3 className="sp-serif text-[#F0EEE9] text-xl font-bold leading-snug">
-                        Unlock Your Full Solar Intelligence Report
+                    {/* Headline */}
+                    <div className="mb-6 text-center">
+                      <div className="inline-flex items-center gap-2 mb-3 px-3 py-1 rounded-full text-[11px] font-semibold" style={{ background: `${C.primary}15`, color: C.primary, border: `1px solid ${C.primary}30` }}>
+                        <Lock className="w-3 h-3" /> Full report locked
+                      </div>
+                      <h3 className="text-xl md:text-2xl font-bold mb-2" style={{ color: C.onSurface }}>
+                        See exactly what going solar will cost you — and save you
                       </h3>
-                      <p style={{ color: C.onSurfaceVariant }} className="text-xs leading-relaxed max-w-sm mx-auto">
-                        Access detailed financial models, itemized equipment specifications, 3D interactive viewer, and certified installer readiness breakdown.
+                      <p className="text-sm" style={{ color: C.onSurfaceVariant }}>
+                        One-time payment · instant access · no subscription needed
                       </p>
                     </div>
 
-                    <div className="flex flex-wrap justify-center gap-1.5">
-                      {["25-Yr Cashflow Model","3D AR Preview","BESS Battery Config","PDF Export"].map(f => (
-                        <div key={f} style={{ border: `1px solid ${C.secondary}30`, color: C.secondary, background: `${C.secondary}05` }} className="text-[9px] font-bold uppercase tracking-wider font-mono px-2.5 py-0.5 rounded-[3px]">
-                          {f}
+                    {/* What you get — plain language */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
+                      {[
+                        { icon: "📊", title: "Year-by-year savings breakdown", desc: "See exactly how much you save in Year 1, Year 5, Year 10, and beyond" },
+                        { icon: "📋", title: "Full equipment recommendation", desc: "Panel brand, inverter specs, and what to look for when comparing quotes" },
+                        { icon: "🏛️", title: "Subsidy application guide", desc: "Step-by-step how to claim your PM Surya Ghar subsidy (up to ₹78,000)" },
+                        { icon: "📄", title: "Download as PDF", desc: "Share the full report with family members or your solar installer" },
+                      ].map((item) => (
+                        <div key={item.title} className="flex gap-3 p-4 rounded-xl" style={{ background: C.surfaceVariant, border: `1px solid ${C.outlineVariant}` }}>
+                          <span className="text-lg shrink-0">{item.icon}</span>
+                          <div>
+                            <div className="text-xs font-semibold mb-0.5" style={{ color: C.onSurface }}>{item.title}</div>
+                            <div className="text-[11px]" style={{ color: C.mutedSand }}>{item.desc}</div>
+                          </div>
                         </div>
                       ))}
                     </div>
 
-                    <button onClick={() => setCheckoutOpen(true)}
-                      style={{ background: C.primary, color: C.onPrimary }}
-                      className="flex items-center gap-2 px-6 py-3 font-bold text-xs uppercase tracking-wider transition-all hover:opacity-90 active:scale-[0.98] rounded-[3px] cursor-pointer font-mono">
-                      Unlock Report — ₹{payPerScanPrice} {hasReferralDiscount && "(₹20 off applied)"}
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
+                    {/* CTA */}
+                    <div className="flex flex-col items-center gap-3">
+                      <button onClick={() => setCheckoutOpen(true)}
+                        style={{ background: C.primary, color: C.onPrimary, boxShadow: `0 8px 24px ${C.primary}35` }}
+                        className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 rounded-xl text-sm font-bold transition-all duration-150 hover:brightness-110 active:scale-[0.97] cursor-pointer">
 
-                    <div className="flex items-center gap-2 text-[10px] font-mono" style={{ color: C.mutedSand }}>
-                      <ShieldCheck className="w-3.5 h-3.5" style={{ color: C.secondary }} />
-                      Secure checkout. Immediate access.
+                        Get Full Report — ₹{payPerScanPrice}
+                        {hasReferralDiscount && <span className="text-[10px] opacity-80">(₹20 off)</span>}
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                      <div className="flex items-center gap-4 text-[11px]" style={{ color: C.mutedSand }}>
+                        <span className="flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" style={{ color: C.secondary }} /> Secure payment</span>
+                        <span>·</span>
+                        <span>Access immediately</span>
+                        <span>·</span>
+                        <span>No recurring charges</span>
+                      </div>
                     </div>
+
                   </div>
                 </div>
               </div>
@@ -2583,119 +2665,155 @@ const ResultsPage = () => {
           )}
 
           {/* Footnote */}
-          <div className="mt-4 text-center text-[8px] font-mono uppercase tracking-widest" style={{ color: C.mutedSand }}>
-            SolarScan AI Solar Estimation Engine · Grid loss factor: 14% · Climatology: NASA POWER API satellite profile · RCC flatness tilt structural calibration active
+          <div className="mx-auto mt-2 max-w-3xl px-3 text-center text-[10px] leading-4" style={{ color: C.mutedSand }}>
+            SUNPOWER LINK Solar Estimation Engine · Grid loss factor: 14% · Climatology: NASA POWER API satellite profile · RCC flatness tilt structural calibration active
           </div>
         </main>
 
         {/* Footer */}
-        <footer style={{ background: C.background, borderTop: `1px solid ${C.outlineVariant}` }} className="flex flex-col md:flex-row justify-between items-center px-4 md:px-16 py-4 gap-6 mt-4">
+        <footer style={{ background: C.background, borderTop: `1px solid ${C.outlineVariant}` }} className="mx-auto mt-4 flex w-full max-w-[1180px] flex-col justify-between gap-4 px-4 py-6 md:flex-row md:items-center md:px-8">
           <div className="flex flex-col gap-1.5 max-w-xl text-left">
-            <div className="sp-serif text-[#8A8A99] text-sm font-bold">SolarScan AI</div>
-            <p className="text-[11px]" style={{ color: C.mutedSand }}>© {new Date().getFullYear()} SolarScan AI. Financial intelligence driven by geospatial AI.</p>
+            <div className="text-sm font-semibold" style={{ color: C.onSurface }}>SUNPOWER LINK</div>
+            <p className="text-[11px]" style={{ color: C.mutedSand }}>© {new Date().getFullYear()} SUNPOWER LINK. Financial intelligence driven by geospatial AI.</p>
           </div>
-          <div className="flex items-center gap-3">
-            <button onClick={() => navigate("/map")} style={{ background: C.secondary, color: C.onSecondary }} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-95 transition-opacity cursor-pointer rounded-[3px] font-mono">
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={() => navigate("/map")} style={{ background: C.secondary, color: C.onSecondary }} className="min-h-10 rounded-lg px-4 text-xs font-semibold transition-[filter,transform] duration-150 ease-out hover:brightness-105 active:scale-[0.97] cursor-pointer">
               Analyze Another Rooftop
             </button>
-            <button onClick={() => navigate("/")} style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer rounded-[3px] font-mono">
+            <button onClick={() => navigate("/")} style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="min-h-10 rounded-lg px-4 text-xs font-semibold transition-[color,border-color,transform] duration-150 ease-out active:scale-[0.97] cursor-pointer">
               Back to Home
             </button>
           </div>
-          <div className="flex flex-col md:flex-row gap-6">
-            {["Methodology","Data Sources","Terms","Privacy"].map(link => (
+          <div className="hidden">
+            {["Methodology", "Data Sources", "Terms", "Privacy"].map(link => (
               <a key={link} href="#" className="text-[9px] font-bold uppercase tracking-wider font-mono transition-colors hover:text-white" style={{ color: C.mutedSand }}>{link}</a>
             ))}
           </div>
         </footer>
 
-        {/* ── Checkout Dialog ───────────────────────────────────── */}
+        {/* -- Checkout Dialog -- premium redesign (#13) */}
         <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
-          <DialogContent style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="sm:max-w-[420px] rounded-[4px] shadow-2xl p-6 focus:outline-none border">
-            <DialogHeader className="space-y-1.5 text-left">
-              <DialogTitle className="text-xs font-bold flex items-center gap-2 font-mono uppercase tracking-wider" style={{ color: C.primary }}>
-                <Sparkles className="w-3.5 h-3.5" style={{ color: C.primary }} />
-                Secure Report Checkout
-              </DialogTitle>
-              <DialogDescription className="text-[10px]" style={{ color: C.mutedSand }}>
-                Scan ID: <span className="font-mono font-bold text-neutral-300">{data.analysisId}</span>
-              </DialogDescription>
-            </DialogHeader>
+          <DialogContent style={{ background: C.charcoal, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }} className="sm:max-w-[480px] rounded-2xl shadow-2xl p-0 focus:outline-none overflow-hidden border-0">
 
-            <div className="space-y-3.5 my-3 text-left">
-              <div className="text-[9px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>Select tier</div>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { key: "pay_per_scan", label: "Single Scan", price: `₹${payPerScanPrice}`, sub: hasReferralDiscount ? "₹20 Referral Off" : "One-time payment" },
-                  { key: "pro_monthly",  label: "Pro Monthly", price: "₹999/mo", sub: "Unlimited Scans", highlight: true },
-                ].map(plan => (
-                  <button key={plan.key} onClick={() => setPaymentPlan(plan.key as any)}
-                    style={{ background: paymentPlan === plan.key ? `${C.primary}05` : "transparent", border: `1px solid ${paymentPlan === plan.key ? C.primary : C.outlineVariant}`, color: C.onSurface }}
-                    className="p-3 text-left flex flex-col justify-between h-20 transition-all font-mono rounded-[3px] cursor-pointer">
-                    <span className="text-[8px] font-bold uppercase tracking-wider" style={{ color: C.mutedSand }}>{plan.label}</span>
-                    <span className="font-bold sp-serif text-base">{plan.price}</span>
-                    <span className="text-[8px] text-[#2BD4A0]">{plan.sub}</span>
-                  </button>
-                ))}
+            {/* Header strip */}
+            <div className="px-6 pt-6 pb-5" style={{ borderBottom: `1px solid ${C.outlineVariant}` }}>
+              <div className="flex items-center gap-2 mb-1">
+                <ShieldCheck className="w-4 h-4" style={{ color: C.secondary }} />
+                <DialogTitle className="text-sm font-semibold" style={{ color: C.onSurface }}>
+                  Get your full solar report
+                </DialogTitle>
               </div>
+              <DialogDescription className="text-xs" style={{ color: C.mutedSand }}>
+                Secure checkout · Instant access · No subscription
+              </DialogDescription>
             </div>
 
-            <div className="space-y-3 my-2 text-left">
-              <div className="text-[9px] font-bold uppercase tracking-wider font-mono" style={{ color: C.mutedSand }}>Payment details</div>
-              <div style={{ background: C.background, border: `1px solid ${C.outlineVariant}` }} className="flex p-0.5 rounded-[3px]">
-                {["card","upi"].map(m => (
-                  <button key={m} onClick={() => setPaymentMethod(m as any)}
-                    style={{ background: paymentMethod===m ? C.primaryContainer : "transparent", color: paymentMethod===m ? C.onPrimary : C.mutedSand }}
-                    className="flex-1 text-[9px] py-1 font-bold uppercase transition-all font-mono rounded-[2px] cursor-pointer border-none outline-none">
-                    {m === "card" ? "Card" : "UPI"}
+            <div className="px-6 py-5 space-y-5">
+
+              {/* Plan selector */}
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { key: "pay_per_scan", label: "One Report", price: `₹${payPerScanPrice}`, sub: hasReferralDiscount ? "₹20 referral discount applied" : "One-time, this report only", recommended: false },
+                  { key: "pro_monthly", label: "Pro Plan", price: "₹999/mo", sub: "Unlimited reports + priority support", recommended: true },
+                ].map(plan => (
+                  <button key={plan.key} onClick={() => setPaymentPlan(plan.key as any)}
+                    className="relative p-4 text-left rounded-xl cursor-pointer transition-all duration-150 focus:outline-none"
+                    style={{
+                      background: paymentPlan === plan.key ? `${C.primary}10` : C.surfaceVariant,
+                      border: `2px solid ${paymentPlan === plan.key ? C.primary : C.outlineVariant}`,
+                      color: C.onSurface
+                    }}>
+                    {plan.recommended && (
+                      <span className="absolute -top-2.5 left-3 text-[9px] font-bold px-2 py-0.5 rounded-full" style={{ background: C.secondary, color: C.onSecondary }}>
+                        BEST VALUE
+                      </span>
+                    )}
+                    <div className="text-[10px] font-medium mb-1.5" style={{ color: C.mutedSand }}>{plan.label}</div>
+                    <div className="text-xl font-bold mb-1" style={{ color: C.onSurface }}>{plan.price}</div>
+                    <div className="text-[10px]" style={{ color: C.mutedSand }}>{plan.sub}</div>
                   </button>
                 ))}
               </div>
+
+              {/* Payment method tabs */}
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: C.mutedSand }}>Payment method</div>
+                <div className="flex rounded-xl overflow-hidden" style={{ border: `1px solid ${C.outlineVariant}`, background: C.background }}>
+                  {(["card", "upi"] as const).map((m, i) => (
+                    <button key={m} onClick={() => setPaymentMethod(m)}
+                      className="flex-1 py-2.5 text-xs font-semibold transition-all cursor-pointer border-none outline-none"
+                      style={{
+                        background: paymentMethod === m ? C.primaryContainer : "transparent",
+                        color: paymentMethod === m ? C.onPrimary : C.mutedSand,
+                        borderRight: i === 0 ? `1px solid ${C.outlineVariant}` : "none"
+                      }}>
+                      {m === "card" ? "💳 Card" : "📱 UPI / QR"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Card fields */}
               {paymentMethod === "card" ? (
                 <div className="space-y-3">
                   <div>
-                    <label className="text-[8px] font-bold uppercase font-mono block mb-1" style={{ color: C.mutedSand }}>Card number</label>
-                    <input type="text" placeholder="4000 1234 5678 9010" value={cardNumber} onChange={e => setCardNumber(e.target.value)}
+                    <label className="text-[10px] font-semibold block mb-1.5" style={{ color: C.mutedSand }}>Card number</label>
+                    <input type="text" placeholder="1234  5678  9012  3456" value={cardNumber} onChange={e => setCardNumber(e.target.value)}
                       style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                      className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#E8A020] rounded-[3px] border" />
+                      className="w-full px-4 py-3 text-sm rounded-xl focus:outline-none transition-all" />
+
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[8px] font-bold uppercase font-mono block mb-1" style={{ color: C.mutedSand }}>Expiry</label>
-                      <input type="text" placeholder="MM/YY" value={cardExpiry} onChange={e => setCardExpiry(e.target.value)}
+                      <label className="text-[10px] font-semibold block mb-1.5" style={{ color: C.mutedSand }}>Expiry (MM/YY)</label>
+                      <input type="text" placeholder="12 / 27" value={cardExpiry} onChange={e => setCardExpiry(e.target.value)}
                         style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                        className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#E8A020] rounded-[3px] border" />
+                        className="w-full px-4 py-3 text-sm rounded-xl focus:outline-none" />
                     </div>
                     <div>
-                      <label className="text-[8px] font-bold uppercase font-mono block mb-1" style={{ color: C.mutedSand }}>CVV</label>
+                      <label className="text-[10px] font-semibold block mb-1.5" style={{ color: C.mutedSand }}>CVV</label>
                       <input type="password" placeholder="•••" value={cardCvv} onChange={e => setCardCvv(e.target.value)}
                         style={{ background: C.background, border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                        className="w-full px-3 py-2 text-xs font-mono focus:outline-none focus:border-[#E8A020] rounded-[3px] border" />
+                        className="w-full px-4 py-3 text-sm rounded-xl focus:outline-none" />
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-4">
-                  <div style={{ border: `1px dashed ${C.secondary}30`, width: 120, height: 120, margin: "0 auto 8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <span className="text-[8px] font-mono uppercase" style={{ color: C.secondary }}>SolarScan Sandbox QR</span>
+                <div className="flex flex-col items-center gap-3 py-2">
+                  <div className="w-28 h-28 rounded-xl flex items-center justify-center" style={{ border: `1px solid ${C.outlineVariant}`, background: C.surfaceVariant }}>
+                    <span className="text-[11px] font-mono text-center" style={{ color: C.mutedSand }}>QR code<br />appears here</span>
                   </div>
-                  <div className="text-[8px] font-mono uppercase" style={{ color: C.mutedSand }}>Scan with any UPI app</div>
+                  <p className="text-xs text-center" style={{ color: C.mutedSand }}>Open any UPI app — GPay, PhonePe, Paytm — and scan to pay</p>
                 </div>
               )}
+
             </div>
 
-            <div style={{ borderTop: `1px solid ${C.outlineVariant}` }} className="space-y-2 pt-4 mt-4">
-              <button onClick={handleSandboxCheckout} disabled={paymentProcessing || paymentSuccess}
-                style={{ background: C.primary, color: C.onPrimary }}
-                className="w-full text-[10px] font-bold py-2.5 flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity uppercase tracking-wider rounded-[3px] cursor-pointer border-none outline-none font-mono">
-                {paymentProcessing ? <><RefreshCw className="w-4 h-4 animate-spin" />Processing...</> : paymentSuccess ? <><CheckCircle2 className="w-4 h-4" />Unlocking...</> : "Simulate Instant Sandbox Unlock"}
-              </button>
+            {/* Footer CTA */}
+            <div className="px-6 pb-6 space-y-3">
+              {/* DEV-only sandbox pay button — hidden in production (BUG-006 fix) */}
+              {import.meta.env.DEV && (
+                <button onClick={handleSandboxCheckout} disabled={paymentProcessing || paymentSuccess}
+                  className="w-full py-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-50 cursor-pointer border-none"
+                  style={{ background: C.primary, color: C.onPrimary, boxShadow: `0 6px 20px ${C.primary}40` }}>
+                  {paymentProcessing ? <><RefreshCw className="w-4 h-4 animate-spin" /> Processing payment...</>
+                    : paymentSuccess ? <><CheckCircle2 className="w-4 h-4" /> Unlocking your report...</>
+                      : `[DEV] Pay ₹${paymentPlan === "pro_monthly" ? "999" : payPerScanPrice} & Unlock Now`}
+                </button>
+              )}
               <button onClick={() => { setCheckoutOpen(false); initiatePayment({ plan: paymentPlan, scanId: data?.analysisId, onSuccess: refreshUnlock }); }}
                 disabled={paymentProcessing || paymentSuccess || isPaymentGatewayLoading}
-                style={{ background: "transparent", border: `1px solid ${C.outlineVariant}`, color: C.onSurface }}
-                className="w-full text-[10px] font-bold py-2.5 flex items-center justify-center gap-2 hover:bg-[#141416] transition-colors disabled:opacity-50 uppercase tracking-wider rounded-[3px] cursor-pointer font-mono">
-                {isPaymentGatewayLoading ? <><RefreshCw className="w-4 h-4 animate-spin" />Connecting...</> : "Launch Razorpay"}
+                className="w-full py-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all hover:brightness-110 disabled:opacity-50 cursor-pointer border"
+                style={{ background: "transparent", border: `1px solid ${C.outlineVariant}`, color: C.mutedSand }}>
+                {isPaymentGatewayLoading ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Connecting...</> : "Pay via Razorpay instead"}
               </button>
+              <div className="flex justify-center items-center gap-3 text-[10px]" style={{ color: C.mutedSand }}>
+                <span>🔒 256-bit SSL</span>
+                <span>·</span>
+                <span>RBI-compliant</span>
+                <span>·</span>
+                <span>Instant unlock</span>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
@@ -2780,3 +2898,4 @@ const ResultsPage = () => {
 };
 
 export default ResultsPage;
+

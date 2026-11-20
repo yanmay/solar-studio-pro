@@ -39,10 +39,29 @@ export default async function handler(req: Request): Promise<Response> {
         if (error) throw error;
 
         const isUnlocked = dbData?.some(p => p.status === 'captured') || false;
-        return new Response(JSON.stringify({ unlocked: isUnlocked }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        if (isUnlocked) {
+          return new Response(JSON.stringify({ unlocked: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+      }
+
+      // BUG-007 fix: payments table may not have a record yet (verify sets
+      // analysis_sessions.is_full_unlocked directly). Check that table as a fallback.
+      if (scanId && scanId !== 'default') {
+        const { data: sessionData, error: sessionError } = await supabase
+          .from('analysis_sessions')
+          .select('is_full_unlocked')
+          .eq('site_id', scanId)
+          .maybeSingle();
+
+        if (!sessionError && sessionData?.is_full_unlocked === true) {
+          return new Response(JSON.stringify({ unlocked: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
       }
     } catch (err) {
       console.error('status: DB query failed:', err);

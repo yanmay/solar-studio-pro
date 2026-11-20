@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -11,6 +11,7 @@ import { trackPageView } from "./lib/analytics";
 import { AuthProvider } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { captureReferrerCode } from "./lib/referrals";
+import gsap from "gsap";
 
 // Load Plausible script once (guarded by env var)
 const PLAUSIBLE_DOMAIN = import.meta.env.VITE_PLAUSIBLE_DOMAIN;
@@ -40,6 +41,29 @@ function RouteTracker() {
     captureReferrerCode(params);
   }, [loc]);
   return null;
+}
+
+function RouteMotion({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!rootRef.current) return;
+    const animation = gsap.fromTo(
+      rootRef.current,
+      { opacity: 0, y: 10 },
+      { opacity: 1, y: 0, duration: 0.48, ease: "power3.out", clearProps: "all" },
+    );
+    return () => {
+      animation.kill();
+      if (rootRef.current) {
+        rootRef.current.style.opacity = "";
+        rootRef.current.style.transform = "";
+      }
+    };
+  }, [location.pathname]);
+
+  return <div id="app-content" ref={rootRef} className="min-h-screen w-full max-w-full overflow-x-hidden" tabIndex={-1}>{children}</div>;
 }
 
 // Code-split the heavy routes
@@ -80,9 +104,13 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <a href="#app-content" className="fixed left-4 top-4 z-[200] -translate-y-20 rounded-lg bg-[#ff6600] px-4 py-2 text-sm font-semibold text-black transition-transform focus:translate-y-0">
+            Skip to content
+          </a>
           <RouteTracker />
-          <Suspense fallback={<RouteFallback />}>
-            <Routes>
+          <RouteMotion>
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/map" element={<MapPage />} />
               <Route path="/results" element={<ResultsPage />} />
@@ -99,11 +127,12 @@ const App = () => (
               <Route path="/installer/signup" element={<InstallerSignup />} />
               <Route path="/installer/dashboard" element={<InstallerDashboard />} />
               <Route path="/installer/lead/:leadId" element={<InstallerLeadDetail />} />
-              <Route path="/api/docs" element={<ApiDocs />} />
+              <Route path="/developers/docs" element={<ApiDocs />} />
               <Route path="/admin" element={<AdminPage />} />
               <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
+              </Routes>
+            </Suspense>
+          </RouteMotion>
           <PwaInstallPrompt />
         </BrowserRouter>
       </TooltipProvider>

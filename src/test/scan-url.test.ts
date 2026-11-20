@@ -108,4 +108,25 @@ describe("scan-url utilities", () => {
     const decoded = decodeScanFromUrl("invalid-base64-string!!");
     expect(decoded).toBeNull();
   });
+
+  it("should decode legacy direct polygon payloads correctly", () => {
+    const legacy = {
+      polygon: [
+        { lat: 18.5182, lng: 73.8522 },
+        { lat: 18.5184, lng: 73.8522 },
+        { lat: 18.5184, lng: 73.8526 },
+        { lat: 18.5182, lng: 73.8526 }
+      ],
+      areaM2: 120,
+      address: "Kothrud, Pune"
+    };
+    const encoded = btoa(JSON.stringify(legacy));
+    const decoded = decodeScanFromUrl(encoded);
+    expect(decoded).not.toBeNull();
+    expect(decoded!.scanInput.address).toBe("Kothrud, Pune");
+    expect(decoded!.scanInput.roofAreaM2).toBe(120);
+    expect(decoded!.scanInput.lat).toBe(18.5182);
+    expect(decoded!.panelConfig.panelCount).toBeGreaterThan(0);
+    expect(decoded!.tariff.tariffPerKwh).toBe(7.5);
+  });
 });

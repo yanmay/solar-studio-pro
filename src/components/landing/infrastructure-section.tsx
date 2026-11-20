@@ -60,18 +60,18 @@ export function InfrastructureSection() {
             </p>
 
             {/* Stats */}
-            <div className="grid grid-cols-3 gap-8">
+            <div className="grid grid-cols-3 gap-8 border-l border-[#FF6600]/35 pl-6">
               <div>
                 <div className="text-4xl lg:text-5xl font-display text-[#FF6600] mb-2">32+</div>
                 <div className="text-xs text-neutral-500 font-mono uppercase tracking-wider">DISCOMs Configured</div>
               </div>
               <div>
-                <div className="text-4xl lg:text-5xl font-display text-white mb-2">99.8%</div>
-                <div className="text-xs text-neutral-500 font-mono uppercase tracking-wider">Tariff Slab Match</div>
+                <div className="text-4xl lg:text-5xl font-display text-white mb-2">28</div>
+                <div className="text-xs text-neutral-500 font-mono uppercase tracking-wider">States Covered</div>
               </div>
               <div>
-                <div className="text-4xl lg:text-5xl font-display text-white mb-2">&lt;3m</div>
-                <div className="text-xs text-neutral-500 font-mono uppercase tracking-wider">Calculation Speed</div>
+                <div className="text-4xl lg:text-5xl font-display text-white mb-2">1</div>
+                <div className="text-xs text-neutral-500 font-mono uppercase tracking-wider">Shared Model</div>
               </div>
             </div>
           </div>
@@ -86,10 +86,7 @@ export function InfrastructureSection() {
               {/* Header */}
               <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-[#050506]">
                 <span className="text-xs font-mono text-neutral-500">Tariff ledgers pre-loaded</span>
-                <span className="flex items-center gap-2 text-[10px] font-mono text-emerald-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  All rates updated 2026
-                </span>
+                <span className="text-[10px] font-mono text-[#ff8b3d]">Published tariff inputs</span>
               </div>
 
               {/* Locations */}
@@ -102,11 +99,9 @@ export function InfrastructureSection() {
                     }`}
                   >
                     <div className="flex items-center gap-4">
-                      <span 
-                        className={`w-2 h-2 rounded-full transition-colors duration-300 ${
-                          activeLocation === index ? "bg-[#FF6600]" : "bg-white/10"
-                        }`}
-                      />
+                      <span className={`w-6 font-mono text-[10px] transition-colors duration-300 ${activeLocation === index ? "text-[#FF6600]" : "text-white/20"}`}>
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
                       <div>
                         <div className="font-semibold text-white text-sm">{location.city}</div>
                         <div className="text-xs text-neutral-500">{location.discom}</div>
@@ -114,7 +109,7 @@ export function InfrastructureSection() {
                     </div>
                     <div className="text-right">
                       <span className="font-mono text-xs text-neutral-400 block">{location.irradiance}</span>
-                      <span className="text-[10px] font-mono text-emerald-500/80 uppercase">{location.netMetering} Net-meter</span>
+                      <span className="text-[10px] font-mono text-white/35 uppercase">{location.netMetering}</span>
                     </div>
                   </div>
                 ))}

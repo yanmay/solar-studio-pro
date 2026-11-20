@@ -99,7 +99,7 @@ export function CtaSection() {
                 {/* Headline */}
                 <h2
                   className="text-4xl sm:text-6xl text-white leading-[1.0]"
-                  style={{ fontFamily: "'Calistoga', serif", fontWeight: 400 }}
+                  style={{ fontFamily: "'Outfit', system-ui, sans-serif", fontWeight: 600 }}
                 >
                   Ready to scan<br />your rooftop?
                 </h2>
@@ -112,8 +112,8 @@ export function CtaSection() {
                 <ul className="space-y-2.5">
                   {BENEFITS.map((b) => (
                     <li key={b} className="flex items-center gap-3 text-sm text-white/60">
-                      <div className="w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                        <Check className="w-2.5 h-2.5 text-emerald-400" />
+                      <div className="w-5 h-5 rounded-lg bg-[#ff6600]/15 border border-[#ff6600]/30 flex items-center justify-center shrink-0">
+                        <Check className="w-2.5 h-2.5 text-[#ff8b3d]" />
                       </div>
                       {b}
                     </li>

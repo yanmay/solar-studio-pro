@@ -143,7 +143,7 @@ export function HowItWorksSection() {
           </div>
           <h2
             className="text-4xl sm:text-5xl text-white leading-tight"
-            style={{ fontFamily: "'Calistoga', serif", fontWeight: 400 }}
+            style={{ fontFamily: "'Outfit', system-ui, sans-serif", fontWeight: 600 }}
           >
             From address to<br />
             <span className="text-[#FF6600]">bankable report in 3 steps.</span>

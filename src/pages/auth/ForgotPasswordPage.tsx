@@ -29,10 +29,10 @@ export default function ForgotPasswordPage() {
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center px-4 py-16 font-['Inter',sans-serif] antialiased text-white selection:bg-[#FF6600]/30"
-      style={{ background: "linear-gradient(160deg, #020203 0%, #050506 60%, #0a0a0c 100%)" }}
+      className="professional-product-ui min-h-screen flex flex-col items-center justify-center px-4 py-16 antialiased text-white selection:bg-[#FF6600]/30"
+      style={{ background: "#050505" }}
     >
-      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+      <div className="hidden" aria-hidden="true">
         <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full opacity-[0.07] blur-[130px]"
           style={{ background: "#FF6600", animation: "fpBlob 20s ease-in-out infinite alternate" }} />
       </div>
@@ -47,7 +47,7 @@ export default function ForgotPasswordPage() {
           <div className="flex items-center justify-center gap-2.5 mb-3">
             <img src="/logo.png" alt="Logo" className="w-10 h-10 object-contain" />
           </div>
-          <h1 className="font-['Calistoga',serif] text-3xl text-white tracking-tight">Reset Password</h1>
+          <h1 className="text-3xl font-semibold text-white">Reset Password</h1>
           <p className="text-[13px] text-white/40">Enter your email and we'll send a recovery link</p>
         </div>
 

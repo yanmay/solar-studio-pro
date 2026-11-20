@@ -12,8 +12,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        display: ["'DM Serif Display'", "Georgia", "serif"],
-        body: ["'DM Sans'", "system-ui", "sans-serif"],
+        display: ["'Outfit'", "system-ui", "sans-serif"],
+        body: ["'Outfit'", "system-ui", "sans-serif"],
         mono: ["'JetBrains Mono'", "monospace"],
       },
       colors: {

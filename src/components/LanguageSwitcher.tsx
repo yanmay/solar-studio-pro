@@ -23,6 +23,10 @@ const LanguageSwitcher = ({
   }, []);
 
   const change = (code: string) => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("sunpower-lang-user-explicit", "true");
+      localStorage.setItem("sunpower-lang", code);
+    }
     i18n.changeLanguage(code);
     track("Language Changed", { lang: code });
     setOpen(false);

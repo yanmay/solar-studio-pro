@@ -21,9 +21,12 @@ export const SYSTEM_COST_PER_KW_INR_TIERS = [
 
 // ── PM Surya Ghar Muft Bijli Yojana subsidy (Feb 2024 scheme) ──
 // 1 kW → ₹30,000 | 2 kW → ₹60,000 | ≥3 kW (residential cap) → ₹78,000
+// Q3 fix: Systems > 10 kWp are NOT eligible (10 kWp system-size cap).
 // Source: pmsuryaghar.gov.in
 export function calcSubsidyInr(installedKw: number): number {
   if (installedKw <= 0) return 0;
+  // Q3: 10 kWp system-size cap
+  if (installedKw > 10) return 0;
   if (installedKw < 1) return Math.round(30000 * installedKw);
   if (installedKw < 2) return Math.round(30000 + 30000 * (installedKw - 1));
   if (installedKw < 3) return Math.round(60000 + 18000 * (installedKw - 2));

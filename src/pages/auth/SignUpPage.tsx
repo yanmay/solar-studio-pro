@@ -38,11 +38,11 @@ export default function SignUpPage() {
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center px-4 py-16 font-['Inter',sans-serif] antialiased text-white selection:bg-[#FF6600]/30"
-      style={{ background: "linear-gradient(160deg, #020203 0%, #050506 60%, #0a0a0c 100%)" }}
+      className="professional-product-ui min-h-screen flex flex-col items-center justify-center px-4 py-16 antialiased text-white selection:bg-[#FF6600]/30"
+      style={{ background: "#050505" }}
     >
       {/* Ambient Blobs */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+      <div className="hidden" aria-hidden="true">
         <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full opacity-[0.07] blur-[130px]"
           style={{ background: "#FF6600", animation: "signupBlob1 18s ease-in-out infinite alternate" }} />
         <div className="absolute bottom-[-15%] right-[-5%] w-[500px] h-[500px] rounded-full opacity-[0.05] blur-[110px]"

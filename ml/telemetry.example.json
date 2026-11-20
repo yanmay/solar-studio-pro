@@ -1,0 +1,18 @@
+[
+  {"zoom":12,"roof_vertices":6,"viewport_width":375,"viewport_height":667,"device_pixel_ratio":1,"network_downlink_mbps":3,"webgl_available":0,"tilt":48,"max_zoom":17,"texture_quality_score":0.58},
+  {"zoom":15,"roof_vertices":8,"viewport_width":768,"viewport_height":800,"device_pixel_ratio":1.25,"network_downlink_mbps":8,"webgl_available":1,"tilt":54,"max_zoom":18,"texture_quality_score":0.68},
+  {"zoom":18,"roof_vertices":10,"viewport_width":1280,"viewport_height":900,"device_pixel_ratio":1.5,"network_downlink_mbps":12,"webgl_available":1,"tilt":58,"max_zoom":19,"texture_quality_score":0.74},
+  {"zoom":19,"roof_vertices":12,"viewport_width":1440,"viewport_height":900,"device_pixel_ratio":2,"network_downlink_mbps":18,"webgl_available":1,"tilt":60,"max_zoom":20,"texture_quality_score":0.79},
+  {"zoom":21,"roof_vertices":16,"viewport_width":1920,"viewport_height":1200,"device_pixel_ratio":3,"network_downlink_mbps":25,"webgl_available":1,"tilt":57,"max_zoom":19,"texture_quality_score":0.66},
+  {"zoom":12,"roof_vertices":20,"viewport_width":375,"viewport_height":667,"device_pixel_ratio":1,"network_downlink_mbps":25,"webgl_available":1,"tilt":57,"max_zoom":19,"texture_quality_score":0.82},
+  {"zoom":15,"roof_vertices":24,"viewport_width":768,"viewport_height":800,"device_pixel_ratio":2,"network_downlink_mbps":50,"webgl_available":1,"tilt":61,"max_zoom":20,"texture_quality_score":0.88},
+  {"zoom":18,"roof_vertices":6,"viewport_width":1280,"viewport_height":1080,"device_pixel_ratio":1.25,"network_downlink_mbps":0.5,"webgl_available":0,"tilt":45,"max_zoom":15,"texture_quality_score":0.42},
+  {"zoom":19,"roof_vertices":8,"viewport_width":1440,"viewport_height":900,"device_pixel_ratio":1.5,"network_downlink_mbps":3,"webgl_available":0,"tilt":47,"max_zoom":16,"texture_quality_score":0.51},
+  {"zoom":21,"roof_vertices":10,"viewport_width":1920,"viewport_height":1200,"device_pixel_ratio":2,"network_downlink_mbps":8,"webgl_available":1,"tilt":52,"max_zoom":17,"texture_quality_score":0.61},
+  {"zoom":12,"roof_vertices":12,"viewport_width":375,"viewport_height":800,"device_pixel_ratio":2,"network_downlink_mbps":10,"webgl_available":1,"tilt":56,"max_zoom":18,"texture_quality_score":0.7},
+  {"zoom":15,"roof_vertices":16,"viewport_width":768,"viewport_height":900,"device_pixel_ratio":3,"network_downlink_mbps":18,"webgl_available":1,"tilt":55,"max_zoom":18,"texture_quality_score":0.69},
+  {"zoom":18,"roof_vertices":20,"viewport_width":1280,"viewport_height":800,"device_pixel_ratio":1,"network_downlink_mbps":25,"webgl_available":1,"tilt":62,"max_zoom":21,"texture_quality_score":0.91},
+  {"zoom":19,"roof_vertices":24,"viewport_width":1440,"viewport_height":1080,"device_pixel_ratio":2,"network_downlink_mbps":50,"webgl_available":1,"tilt":60,"max_zoom":20,"texture_quality_score":0.86},
+  {"zoom":21,"roof_vertices":6,"viewport_width":1920,"viewport_height":1200,"device_pixel_ratio":3,"network_downlink_mbps":0.5,"webgl_available":0,"tilt":40,"max_zoom":15,"texture_quality_score":0.31},
+  {"zoom":18,"roof_vertices":8,"viewport_width":768,"viewport_height":667,"device_pixel_ratio":1.25,"network_downlink_mbps":75,"webgl_available":1,"tilt":64,"max_zoom":21,"texture_quality_score":0.94}
+]

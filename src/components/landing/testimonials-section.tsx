@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 const testimonials = [
   {
-    quote: "SolarScan AI saved us lakhs in solar installations. The layout calculations and PM Surya Ghar subsidy estimations matched our final vendor quote to the rupee.",
+    quote: "SUNPOWER LINK saved us lakhs in solar installations. The layout calculations and PM Surya Ghar subsidy estimations matched our final vendor quote to the rupee.",
     author: "Ramesh Sharma",
     role: "Homeowner",
     company: "Pune, MH",

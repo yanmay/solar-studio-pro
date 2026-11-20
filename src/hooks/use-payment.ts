@@ -71,7 +71,7 @@ export function usePayment(scanId?: string) {
         key: keyId,
         amount: amount,
         currency: currency,
-        name: "SolarScan AI",
+        name: "SUNPOWER LINK",
         description: plan === "pay_per_scan" 
           ? "Rooftop Solar Potential Feasibility Report" 
           : "Pro Subscription Monthly Plan",

@@ -2,6 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { appendTelemetryRows, telemetryStoreSummary } = require('./scripts/three-d-telemetry-store.cjs');
 
 // Load environment variables from .env and .env.local
 function loadEnv() {
@@ -171,7 +172,7 @@ if (!redis) {
     set: async (key, value, options) => {
       inMemoryCache.set(key, value);
       if (options && options.ex) {
-        setTimeout(() => inMemoryCache.delete(key), options.ex * 1000);
+        // Cap at ~24.8 days max to avoid Node.js 32-bit signed int overflow in setTimeout`r`n        const ttlMs = Math.min(options.ex * 1000, 2147483647);`r`n        setTimeout(() => inMemoryCache.delete(key), ttlMs);
       }
       return 'OK';
     }
@@ -694,6 +695,42 @@ async function handleRequest(req, res, next) {
 
   console.log(`[API SERVER] ${req.method} ${pathname}`);
 
+  if (pathname === '/api/map-tile') {
+    if (req.method !== 'GET') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const layer = parsedUrl.searchParams.get('layer');
+    const z = Number(parsedUrl.searchParams.get('z'));
+    const x = Number(parsedUrl.searchParams.get('x'));
+    const y = Number(parsedUrl.searchParams.get('y'));
+    const maxZoom = layer === 'street' ? 20 : 21;
+    const maxCoordinate = Number.isInteger(z) && z >= 0 && z <= maxZoom ? 2 ** z : 0;
+    if (!['satellite', 'labels', 'street'].includes(layer)
+      || !Number.isInteger(x) || !Number.isInteger(y)
+      || x < 0 || y < 0 || x >= maxCoordinate || y >= maxCoordinate) {
+      return sendJSON(res, { error: 'Invalid tile request' }, 400);
+    }
+
+    const tileUrl = layer === 'satellite'
+      ? `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`
+      : layer === 'labels'
+        ? `https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/${z}/${y}/${x}`
+        : `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+    try {
+      const tileResponse = await fetch(tileUrl, {
+        headers: { 'User-Agent': 'SunPowerLinkSolarApp/1.0' },
+      });
+      if (!tileResponse.ok) return sendJSON(res, { error: 'Tile provider unavailable' }, 502);
+      const tile = Buffer.from(await tileResponse.arrayBuffer());
+      res.writeHead(200, {
+        'Content-Type': tileResponse.headers.get('content-type') || 'image/jpeg',
+        'Cache-Control': 'public, max-age=604800, stale-while-revalidate=86400',
+        'Access-Control-Allow-Origin': '*',
+      });
+      return res.end(tile);
+    } catch {
+      return sendJSON(res, { error: 'Tile provider unavailable' }, 502);
+    }
+  }
+
   // INSTALLER: GSTIN format verification
   if (pathname === '/api/installer/verify-gstin') {
     if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
@@ -885,8 +922,7 @@ async function handleRequest(req, res, next) {
 
 
   // 1b. GOOGLE PLACES AUTOCOMPLETE PROXY (keeps the API key server-side)
-  // Accepts { input, mapCenter? } and returns NominatimSuggestion[]. Falls back to
-  // an empty array on any failure so the client can use its Nominatim fallback.
+  // Accepts { input, mapCenter? } and returns NominatimSuggestion[].
   if (pathname === '/api/places/autocomplete') {
     if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
     const apiKey = process.env.GOOGLE_PLACES_KEY || process.env.GOOGLE_GEOCODING_KEY || process.env.GOOGLE_MAPS_API_KEY;
@@ -894,7 +930,32 @@ async function handleRequest(req, res, next) {
     try { payload = await parseBody(req); } catch { payload = {}; }
     const input = (payload.input || '').toString().trim();
     if (!input) return sendJSON(res, []);
-    if (!apiKey || apiKey === 'your_google_geocoding_key_here') return sendJSON(res, []);
+
+    const fetchFallbackSuggestions = async () => {
+      try {
+        const fallbackRes = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(input)}&format=json&addressdetails=1&limit=6&accept-language=en`,
+          { headers: { 'User-Agent': 'SunPowerLinkSolarApp/1.0' } }
+        );
+        if (!fallbackRes.ok) return [];
+        const data = await fallbackRes.json();
+        if (!Array.isArray(data)) return [];
+        return data.map(item => ({
+          place_id: item.place_id,
+          display_name: item.display_name,
+          lat: String(item.lat),
+          lon: String(item.lon),
+          type: item.type || 'place',
+          ...(item.address ? { address: item.address } : {}),
+        }));
+      } catch {
+        return [];
+      }
+    };
+
+    if (!apiKey || apiKey === 'your_google_geocoding_key_here') {
+      return sendJSON(res, await fetchFallbackSuggestions());
+    }
 
     try {
       // Step 1: Get autocomplete suggestions
@@ -911,11 +972,11 @@ async function handleRequest(req, res, next) {
       });
       if (!acRes.ok) {
         console.error('[Places AC] autocomplete failed:', acRes.status, await acRes.text());
-        return sendJSON(res, []);
+        return sendJSON(res, await fetchFallbackSuggestions());
       }
       const acData = await acRes.json();
       const preds = (acData.suggestions || []).map(s => s.placePrediction).filter(Boolean);
-      if (preds.length === 0) return sendJSON(res, []);
+      if (preds.length === 0) return sendJSON(res, await fetchFallbackSuggestions());
 
       // Step 2: Fetch place locations in PARALLEL (not sequential)
       const detailResults = await Promise.allSettled(
@@ -932,18 +993,19 @@ async function handleRequest(req, res, next) {
         const detail = detailResults[i].status === 'fulfilled' ? detailResults[i].value : null;
         const loc = detail?.location;
         const label = pred.text?.text || pred.structuredFormat?.mainText?.text || input;
+        if (!loc || !Number.isFinite(loc.latitude) || !Number.isFinite(loc.longitude)) continue;
         suggestions.push({
           place_id: pred.placeId || `${Date.now()}_${i}`,
           display_name: label,
-          lat: loc ? String(loc.latitude) : '0',
-          lon: loc ? String(loc.longitude) : '0',
+          lat: String(loc.latitude),
+          lon: String(loc.longitude),
           type: 'place',
         });
       }
-      return sendJSON(res, suggestions);
+      return sendJSON(res, suggestions.length > 0 ? suggestions : await fetchFallbackSuggestions());
     } catch (e) {
       console.error('Places autocomplete proxy error:', e);
-      return sendJSON(res, []);
+      return sendJSON(res, await fetchFallbackSuggestions());
     }
   }
 
@@ -1548,6 +1610,117 @@ async function handleRequest(req, res, next) {
   }
 
   // 7.2 PUBLIC API ENDPOINTS FOR LOAN UNDERWRITING
+  // 7.2a 3D rendering profile fallback for local development. Production
+  // deploys use api/3d-profile.py with the scikit-learn model.
+  if (pathname === '/api/3d-profile') {
+    if (req.method !== 'POST') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    let body = {};
+    try { body = await parseBody(req); } catch { body = {}; }
+    const zoom = Number(body.zoom ?? 19);
+    const vertices = Number(body.roofVertices ?? 4);
+    const viewportWidth = Number(body.viewportWidth ?? 1280);
+    const viewportHeight = Number(body.viewportHeight ?? 800);
+    const devicePixelRatio = Number(body.devicePixelRatio ?? 1);
+    const downlink = Number(body.networkDownlinkMbps ?? 10);
+    if (body.webglAvailable !== undefined && typeof body.webglAvailable !== 'boolean') {
+      return sendJSON(res, { error: 'webglAvailable must be a boolean' }, 400);
+    }
+    const webgl = body.webglAvailable === false ? 0 : 1;
+    const features = [zoom, vertices, viewportWidth, viewportHeight, devicePixelRatio, downlink, webgl];
+    if (!features.every(Number.isFinite) || zoom < 3 || zoom > 21 || vertices < 3 || vertices > 100 || viewportWidth < 1 || viewportWidth > 16384 || viewportHeight < 1 || viewportHeight > 16384 || devicePixelRatio < 0.1 || devicePixelRatio > 8 || downlink < 0 || downlink > 1000) {
+      return sendJSON(res, { error: 'Invalid 3D profile feature range' }, 400);
+    }
+    const pressure = Math.max(0, Math.min(1, downlink / 12 + webgl * 0.35));
+    const complexityPenalty = Math.max(0, Math.min(1, (vertices - 3) / 22));
+    const bounds = [[12, 21], [5, 24], [375, 1920], [667, 1200], [1, 3], [0.5, 75], [0, 1]];
+    const distributionPenalty = Math.max(0, Math.min(1, features.reduce((total, value, index) => {
+      const [lower, upper] = bounds[index];
+      const span = Math.max(upper - lower, 1);
+      return total + Math.max(lower - value, value - upper, 0) / span;
+    }, 0) / features.length));
+    const uncertainty = Math.max(0, Math.min(1, Math.max(
+      0.02 + complexityPenalty * 0.08 + (webgl ? 0 : 0.12) + (downlink < 3 ? 0.08 : 0),
+      distributionPenalty,
+    )));
+    const tilt = Math.round(Math.max(35, Math.min(67.5, 45 + 22.5 * pressure - 10 * complexityPenalty)) * 10) / 10;
+    const maxZoom = Math.round(Math.max(15, Math.min(21, 15 + 6 * pressure - 2 * complexityPenalty)) * 10) / 10;
+    const textureScore = Math.max(0, Math.min(1, pressure - complexityPenalty * 0.2));
+    const intervalHalfWidth = [uncertainty * 32.5, uncertainty * 6, uncertainty];
+    return sendJSON(res, {
+      tilt,
+      maxZoom,
+      textureQuality: textureScore >= 0.65 ? 'high' : 'standard',
+      confidence: Math.round((1 - uncertainty) * 1000) / 1000,
+      uncertainty: Math.round(uncertainty * 1000) / 1000,
+      distributionPenalty: Math.round(distributionPenalty * 1000) / 1000,
+      boundsPenalty: Math.round(distributionPenalty * 1000) / 1000,
+      neighborPenalty: 0,
+      uncertaintyByTarget: [uncertainty, uncertainty, uncertainty],
+      calibratedUncertaintyByTarget: [uncertainty, uncertainty, uncertainty],
+      expectedErrorByTarget: [uncertainty * 32.5, uncertainty * 6, uncertainty],
+      uncertaintyCalibrationMethod: 'deterministic-fallback',
+      intervalCoverage: 0.9,
+      intervalCalibrationMethod: 'deterministic-fallback',
+      empiricalIntervalCoverageByTarget: [0.9, 0.9, 0.9],
+      intervalHalfWidthByTarget: intervalHalfWidth,
+      predictionIntervalByTarget: [
+        [Math.max(35, tilt - intervalHalfWidth[0]), Math.min(67.5, tilt + intervalHalfWidth[0])],
+        [Math.max(15, maxZoom - intervalHalfWidth[1]), Math.min(21, maxZoom + intervalHalfWidth[1])],
+        [Math.max(0, textureScore - intervalHalfWidth[2]), Math.min(1, textureScore + intervalHalfWidth[2])],
+      ],
+      model: 'fallback-node-v1',
+      trainingSource: 'deterministic-fallback',
+      trainingRows: 0,
+      metrics: { label_type: 'synthetic-rendering-policy' },
+      featureImportance: {
+        zoom: 0.14,
+        roof_vertices: 0.2,
+        viewport_width: 0.1,
+        viewport_height: 0.1,
+        device_pixel_ratio: 0.12,
+        network_downlink_mbps: 0.24,
+        webgl_available: 0.1,
+      },
+      permutationImportance: {
+        zoom: 0.14,
+        roof_vertices: 0.2,
+        viewport_width: 0.1,
+        viewport_height: 0.1,
+        device_pixel_ratio: 0.12,
+        network_downlink_mbps: 0.24,
+        webgl_available: 0.1,
+      },
+      schemaVersion: 3,
+      policyVersion: 2,
+      datasetFingerprint: 'fallback'.padEnd(64, '0'),
+      sklearnVersion: null,
+    });
+  }
+
+  if (pathname === '/api/3d-telemetry') {
+    if (req.method !== 'POST' && req.method !== 'GET') return sendJSON(res, { error: 'Method not allowed' }, 405);
+    const telemetryPath = process.env.SOLAR_3D_TELEMETRY_PATH || path.join(__dirname, 'ml', 'telemetry.json');
+    if (req.method === 'GET') {
+      try {
+        const rows = JSON.parse(fs.readFileSync(telemetryPath, 'utf8'));
+        return sendJSON(res, telemetryStoreSummary(Array.isArray(rows) ? rows : []));
+      } catch {
+        return sendJSON(res, telemetryStoreSummary([]));
+      }
+    }
+    let body = {};
+    try { body = await parseBody(req); } catch { return sendJSON(res, { error: 'Invalid JSON body' }, 400); }
+    const rows = Array.isArray(body) ? body : body.rows;
+    if (!Array.isArray(rows) || rows.length === 0 || rows.length > 500) {
+      return sendJSON(res, { error: 'rows must be a non-empty array with at most 500 items' }, 400);
+    }
+    try {
+      return sendJSON(res, appendTelemetryRows(telemetryPath, rows));
+    } catch (error) {
+      return sendJSON(res, { error: error.message }, 400);
+    }
+  }
+
   if (pathname === '/api/v1/solar-estimate' || pathname === '/api/v1/validate-roof' || pathname === '/api/v1/subsidy-check') {
     const apiKey = req.headers['x-api-key'] || req.headers['X-API-Key'] || req.headers['x-api-key'];
     if (!apiKey || (!apiKey.startsWith('sk_test_') && !apiKey.startsWith('sk_live_'))) {
@@ -2214,6 +2387,7 @@ module.exports = { handleRequest, supabase, rankInstallersByWeight, validateGsti
 
 if (require.main === module) {
   const server = http.createServer((req, res) => handleRequest(req, res));
+  const PORT = process.env.PORT || 3001;
   server.listen(PORT, () => {
     console.log(`[API SERVER] Running at http://localhost:${PORT}`);
   });

@@ -61,7 +61,7 @@ export default function NotFound({
         />
         <div
           className="absolute bottom-[-15%] right-[-5%] w-[500px] h-[500px] rounded-full blur-[110px] opacity-[0.05]"
-          style={{ background: "#10B981", animation: "blob404-2 24s ease-in-out infinite alternate" }}
+          style={{ background: "#FF8B3D", animation: "blob404-2 24s ease-in-out infinite alternate" }}
         />
       </div>
       <style>{`
@@ -84,7 +84,7 @@ export default function NotFound({
           >
             <span
               className="text-7xl sm:text-9xl font-bold select-none"
-              style={{ fontFamily: "'Calistoga', serif", color: "#FF6600", textShadow: "0 0 60px rgba(255,102,0,0.3)" }}
+              style={{ fontFamily: "'Outfit', sans-serif", color: "#FF6600", textShadow: "0 0 60px rgba(255,102,0,0.3)" }}
             >
               4
             </span>
@@ -100,7 +100,7 @@ export default function NotFound({
 
             <span
               className="text-7xl sm:text-9xl font-bold select-none"
-              style={{ fontFamily: "'Calistoga', serif", color: "#FF6600", textShadow: "0 0 60px rgba(255,102,0,0.3)" }}
+              style={{ fontFamily: "'Outfit', sans-serif", color: "#FF6600", textShadow: "0 0 60px rgba(255,102,0,0.3)" }}
             >
               4
             </span>

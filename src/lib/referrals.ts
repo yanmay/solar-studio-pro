@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Referral Engine for Organic Growth
  */
 
@@ -145,7 +145,7 @@ export function processReferralConversion(): void {
 export function getReferralShareContent(referralCode: string, address: string = "my roof") {
   const referralLink = `https://solarscan.ai/?ref=${referralCode}`;
   
-  const text = `I just estimated the solar solar potential for ${address}! ☀️ We can save thousands on electricity bills. Check your roof's solar potential with PM-Surya Ghar subsidies here: ${referralLink}`;
+  const text = `I just estimated the solar potential for ${address}! ☀️ We can save thousands on electricity bills. Check your roof's solar potential with PM-Surya Ghar subsidies here: ${referralLink}`;
   
   const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
   const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;

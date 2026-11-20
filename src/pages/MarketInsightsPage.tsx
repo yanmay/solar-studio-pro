@@ -42,6 +42,7 @@ import {
 } from '@/lib/solar-calc';
 import { getDiscomRate } from '@/lib/discom-rates';
 import { ELECTRICITY_RATE_INR } from '@/lib/solar-defaults';
+import { SiteNavbar } from "@/components/ui/site-navbar";
 
 interface MarketData {
   nationalStats: {
@@ -67,7 +68,7 @@ export default function MarketInsightsPage() {
   const [calcCapacity, setCalcCapacity] = useState(3); // kW
 
   useEffect(() => {
-    document.title = "Market Insights — SolarScan AI";
+    document.title = "Market Insights - SUNPOWER LINK";
     const meta = document.querySelector('meta[name="description"]');
     if (meta) {
       meta.setAttribute(
@@ -94,10 +95,13 @@ export default function MarketInsightsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white font-mono">
-        <div className="flex flex-col items-center gap-4 bg-[#0A0A0A]/80 border border-white/10 p-10 rounded-3xl backdrop-blur-2xl">
-          <div className="w-10 h-10 border-2 border-t-transparent border-[#FF6600] animate-spin rounded-full"></div>
-          <span className="text-xs uppercase tracking-widest text-white/50">Analyzing India's Solar Market...</span>
+      <div className="min-h-screen bg-[#050505] text-white">
+        <SiteNavbar />
+        <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-6 font-mono">
+          <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-[#0A0A0A]/80 p-8">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#FF6600] border-t-transparent" />
+            <span className="text-xs uppercase tracking-widest text-white/50">Loading market intelligence...</span>
+          </div>
         </div>
       </div>
     );
@@ -105,15 +109,14 @@ export default function MarketInsightsPage() {
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white font-mono">
-        <div className="text-center space-y-4 bg-[#0A0A0A]/80 border border-white/10 p-10 rounded-3xl backdrop-blur-2xl">
-          <p className="text-red-400 text-sm">Error: {error || "No market data received"}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-5 py-2 text-xs font-bold bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 active:scale-95 transition-all cursor-pointer"
-          >
-            Retry
-          </button>
+      <div className="min-h-screen bg-[#050505] text-white">
+        <SiteNavbar />
+        <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-6">
+          <div className="max-w-md space-y-4 text-center">
+            <h1 className="text-xl font-semibold">Market intelligence is temporarily unavailable.</h1>
+            <p className="text-sm leading-relaxed text-white/50">The analyzer remains available while this data source reconnects.</p>
+            <button onClick={() => window.location.reload()} className="h-11 rounded-xl border border-white/10 bg-white/5 px-5 text-sm font-semibold transition-[background-color,transform] duration-150 hover:bg-white/10 active:scale-[0.97]">Try again</button>
+          </div>
         </div>
       </div>
     );
@@ -146,68 +149,14 @@ export default function MarketInsightsPage() {
   const estimate = calculateEstimate();
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white font-sans antialiased overflow-x-hidden relative selection:bg-[#FF6600]/30 selection:text-white">
+    <div className="professional-product-ui min-h-screen bg-[#050505] text-white font-sans antialiased overflow-x-hidden relative selection:bg-[#FF6600]/30 selection:text-white">
       {/* Background Ambient Glow */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+      <div className="hidden" aria-hidden="true">
         <div className="absolute top-[-15%] right-[-5%] w-[600px] h-[600px] rounded-full bg-[#FF6600]/5 blur-[140px]" />
-        <div className="absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] rounded-full bg-emerald-500/3 blur-[140px]" />
+        <div className="absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] rounded-full bg-[#ff8b3d]/5 blur-[140px]" />
       </div>
 
-      {/* Header */}
-      <header className="sticky top-0 z-50 backdrop-blur-2xl bg-[#050505]/85 border-b border-white/10">
-        <div className="flex justify-between items-center px-4 md:px-12 py-3 mx-auto max-w-[1280px]">
-          <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} className="flex items-center gap-3 group">
-            <img src="/logo.png" alt="SolarScan AI Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
-            <span className="text-[15px] font-bold text-white tracking-tight">
-              SUNPOWER <span className="font-serif italic font-light text-[#FF6600]">LINK</span>
-            </span>
-          </a>
-          <nav className="hidden md:flex gap-6">
-            <button onClick={() => navigate("/")} className="text-xs font-mono uppercase tracking-wider text-white/50 hover:text-white transition-colors bg-transparent border-none cursor-pointer">Home</button>
-            <button onClick={() => navigate("/market-insights")} className="text-xs font-mono uppercase tracking-wider text-[#FF6600] font-bold bg-transparent border-none cursor-pointer">Market Insights</button>
-            <button onClick={() => navigate("/policy-tracker")} className="text-xs font-mono uppercase tracking-wider text-white/50 hover:text-white transition-colors bg-transparent border-none cursor-pointer">Policy Tracker</button>
-          </nav>
-          <div className="flex items-center gap-2 md:gap-3">
-            <button
-              onClick={() => navigate("/")}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white/60 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-all active:scale-95 cursor-pointer"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" /> Back
-            </button>
-            <button
-              onClick={() => navigate("/map")}
-              className="hidden md:flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-black bg-[#FF6600] hover:bg-orange-500 rounded-xl transition-all active:scale-95 cursor-pointer border-none shadow-lg shadow-[#FF6600]/20"
-            >
-              Launch Studio <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile Page Switching Tabs */}
-        <div className="md:hidden flex items-center justify-center py-2.5 px-4 border-t border-white/5 bg-black/10 gap-3 text-[10px] font-bold uppercase tracking-wider font-mono">
-          <a
-            onClick={() => navigate("/")}
-            className="text-neutral-400 hover:text-white cursor-pointer px-2 py-1 transition-colors"
-          >
-            Home
-          </a>
-          <span className="text-white/10 select-none">•</span>
-          <a
-            onClick={() => navigate("/market-insights")}
-            className="px-2 py-1 transition-colors cursor-pointer"
-            style={{ color: C.primary }}
-          >
-            Market Insights
-          </a>
-          <span className="text-white/10 select-none">•</span>
-          <a
-            onClick={() => navigate("/policy-tracker")}
-            className="text-neutral-400 hover:text-white cursor-pointer px-2 py-1 transition-colors"
-          >
-            Policy Tracker
-          </a>
-        </div>
-      </header>
+      <SiteNavbar />
 
       {/* Main Layout */}
       <main className="max-w-[1280px] mx-auto px-4 md:px-12 py-10 flex flex-col gap-10 relative z-10">
@@ -220,7 +169,7 @@ export default function MarketInsightsPage() {
           </div>
           <h1
             className="text-3xl md:text-5xl text-white leading-tight"
-            style={{ fontFamily: "'Calistoga', serif", fontWeight: 400 }}
+            style={{ fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif", fontWeight: 600 }}
           >
             India's Rooftop Solar <br className="hidden md:block" />
             <span className="text-[#FF6600]">Market Insights</span>
@@ -475,7 +424,7 @@ export default function MarketInsightsPage() {
       {/* Footer */}
       <footer className="mt-20 py-8 text-center border-t border-white/10 text-xs font-mono text-white/40 bg-[#050505]">
         <div className="max-w-[1280px] mx-auto px-4 md:px-12 flex flex-col md:flex-row justify-between items-center gap-4">
-          <span>© {new Date().getFullYear()} SolarScan AI. Rooftop solar analysis for India. All Rights Reserved.</span>
+          <span>© {new Date().getFullYear()} SUNPOWER LINK. Rooftop solar analysis for India. All Rights Reserved.</span>
           <div className="flex gap-6">
             <button onClick={() => navigate("/privacy")} className="hover:text-white transition-colors bg-transparent border-none cursor-pointer">Privacy Policy</button>
             <button onClick={() => navigate("/policy-tracker")} className="hover:text-white transition-colors bg-transparent border-none cursor-pointer">Policy Tracker</button>

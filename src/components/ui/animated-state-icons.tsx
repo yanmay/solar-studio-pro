@@ -49,7 +49,7 @@ export function MenuCloseIcon({ size = 40, color = "currentColor", className, du
   const open = useAutoToggle(duration);
   return (
     <svg viewBox="0 0 40 40" fill="none" className={cn("", className)} style={{ width: size, height: size }}>
-      <motion.line x1="10" x2="30" stroke={color} strokeWidth={2.5} strokeLinecap="round"
+      <motion.line x1="10" y1="12" x2="30" y2="12" stroke={color} strokeWidth={2.5} strokeLinecap="round"
         animate={open ? { y1: 20, y2: 20, rotate: 45 } : { y1: 12, y2: 12, rotate: 0 }}
         transition={{ duration: 0.35, ease: [0.32, 0.72, 0, 1] }}
         style={{ transformOrigin: "20px 20px" }}
@@ -59,7 +59,7 @@ export function MenuCloseIcon({ size = 40, color = "currentColor", className, du
         transition={{ duration: 0.2 }}
         style={{ transformOrigin: "20px 20px" }}
       />
-      <motion.line x1="10" x2="30" stroke={color} strokeWidth={2.5} strokeLinecap="round"
+      <motion.line x1="10" y1="28" x2="30" y2="28" stroke={color} strokeWidth={2.5} strokeLinecap="round"
         animate={open ? { y1: 20, y2: 20, rotate: -45 } : { y1: 28, y2: 28, rotate: 0 }}
         transition={{ duration: 0.35, ease: [0.32, 0.72, 0, 1] }}
         style={{ transformOrigin: "20px 20px" }}
@@ -223,7 +223,7 @@ export function ToggleIcon({ size = 40, color = "currentColor", className, durat
         transition={{ duration: 0.3 }}
       />
       <rect x="5" y="13" width="30" height="14" rx="7" stroke={color} strokeWidth={2} opacity={on ? 1 : 0.4} />
-      <motion.circle cy="20" r="5" fill={color}
+      <motion.circle cx="12" cy="20" r="5" fill={color}
         animate={on ? { cx: 28 } : { cx: 12 }}
         transition={{ type: "spring", stiffness: 500, damping: 25 }}
       />
@@ -307,8 +307,9 @@ export function SunPulseIcon({ size = 40, color = "currentColor", className, dur
   return (
     <svg viewBox="0 0 40 40" fill="none" className={cn("", className)} style={{ width: size, height: size }}>
       <motion.circle cx="20" cy="20" r="7" fill={color}
-        animate={bright ? { r: 8, opacity: 1 } : { r: 6, opacity: 0.7 }}
+        animate={bright ? { scale: 1.14, opacity: 1 } : { scale: 0.86, opacity: 0.7 }}
         transition={{ duration: 0.6, ease: "easeInOut" }}
+        style={{ transformOrigin: "20px 20px" }}
       />
       {[0, 45, 90, 135, 180, 225, 270, 315].map((angle, i) => {
         const rad = (angle * Math.PI) / 180;
@@ -318,10 +319,9 @@ export function SunPulseIcon({ size = 40, color = "currentColor", className, dur
         const y2 = 20 + 14 * Math.sin(rad);
         return (
           <motion.line key={angle} x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth={2} strokeLinecap="round"
-            animate={bright
-              ? { x1: 20 + 11 * Math.cos(rad), y1: 20 + 11 * Math.sin(rad), x2: 20 + 16 * Math.cos(rad), y2: 20 + 16 * Math.sin(rad), opacity: 1 }
-              : { x1, y1, x2, y2, opacity: 0.5 }}
+            animate={bright ? { scale: 1.14, opacity: 1 } : { scale: 1, opacity: 0.5 }}
             transition={{ duration: 0.6, delay: i * 0.04 }}
+            style={{ transformOrigin: "20px 20px" }}
           />
         );
       })}
@@ -360,7 +360,8 @@ export function ChartIcon({ size = 40, color = "currentColor", className, durati
         const x = 10 + i * 7;
         const h = heights[i];
         return (
-          <motion.rect key={i} x={x} width="5" rx="1.5" fill={color}
+          <motion.rect key={i} x={x} y={33 - h} width="5" height={h} rx="1.5" fill={color}
+            initial={false}
             animate={{ height: h, y: 33 - h }}
             transition={{ duration: 0.5, delay: i * 0.07, ease: [0.32, 0.72, 0, 1] }}
           />

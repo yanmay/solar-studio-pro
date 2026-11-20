@@ -83,16 +83,35 @@ const TimeOfUseCard = ({ dailyGenKwh, dailyLoadKwh, lat }: Props) => {
         </div>
       </div>
 
+      {/* Chart legend */}
+      <div className="flex items-center justify-end gap-5 text-xs font-mono mb-2">
+        <div className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#FF6600]" />
+          <span className="text-white/70">Solar Generation</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#38bdf8]" />
+          <span className="text-white/70">House Load</span>
+        </div>
+      </div>
+
       {/* Chart */}
       <div className="w-full h-[230px] sm:h-[270px]">
         <AreaChart
           data={chartData}
-          xDataKey="label"
-          margin={{ top: 10, right: 4, bottom: 0, left: -24 }}
+          xDataKey="hour"
+          margin={{ top: 12, right: 16, bottom: 24, left: 52 }}
         >
           <Grid horizontal />
-          <XAxis />
-          <YAxis />
+          <XAxis
+            numTicks={6}
+            tickFormatter={(h) =>
+              `${Math.floor(Number(h)).toString().padStart(2, "0")}:00`
+            }
+          />
+          <YAxis
+            tickFormatter={(v) => `${Number(v).toFixed(1)} kW`}
+          />
           <Area
             dataKey="gen"
             stroke="#FF6600"
@@ -110,9 +129,14 @@ const TimeOfUseCard = ({ dailyGenKwh, dailyLoadKwh, lat }: Props) => {
           <ChartTooltip
             dataKeys={["gen", "load"]}
             colors={["#FF6600", "#38bdf8"]}
+            labelFormatter={(h) => {
+              const hr = Math.floor(Number(h));
+              const m = Math.round((Number(h) % 1) * 60);
+              return `Time: ${hr.toString().padStart(2, "0")}:${m === 30 ? "30" : "00"}`;
+            }}
             formatter={(v, k) => [
-              `${Number(v).toFixed(1)} kW`,
-              k === "gen" ? "Solar Generation" : "Home Load",
+              `${Number(v).toFixed(2)} kW`,
+              k === "gen" ? "Solar Generation" : "House Load",
             ]}
           />
         </AreaChart>

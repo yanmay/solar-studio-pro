@@ -1,219 +1,96 @@
-"use client";
-
-import { useEffect, useState, useRef } from "react";
-import { Activity, TrendingUp, Leaf, Timer } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Activity, ArrowUpRight, Leaf, Timer, TrendingUp } from "lucide-react";
 
 const EASING = "cubic-bezier(0.16,1,0.3,1)";
 
-function useCounter(end: number, trigger: boolean, duration = 2000) {
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    if (!trigger) return;
-    let startTime: number | null = null;
-    const animate = (ts: number) => {
-      if (!startTime) startTime = ts;
-      const progress = Math.min((ts - startTime) / duration, 1);
-      // Expo ease out
-      const eased = 1 - Math.pow(1 - progress, 4);
-      setCount(Math.floor(eased * end));
-      if (progress < 1) requestAnimationFrame(animate);
-    };
-    requestAnimationFrame(animate);
-  }, [trigger, end, duration]);
-  return count;
-}
-
-const METRICS = [
+const SIGNALS = [
   {
     icon: Activity,
-    iconColor: "#FF6600",
-    bgGlow: "rgba(255,102,0,0.12)",
-    prefix: "",
-    end: 284739,
-    suffix: " m²",
-    label: "Rooftop area analyzed",
-    sub: "Satellite-resolution GIS",
-    accent: "#FF6600",
+    value: "284,739 m2",
+    label: "Roof area modeled",
+    source: "Satellite geometry",
+    detail: "Surface area is reduced for setbacks, obstructions, and maintenance clearance before capacity is estimated.",
   },
   {
     icon: TrendingUp,
-    iconColor: "#10B981",
-    bgGlow: "rgba(16,185,129,0.12)",
-    prefix: "₹",
-    end: 84000,
-    suffix: "/yr",
-    label: "Avg. annual savings",
-    sub: "Post-subsidy residential",
-    accent: "#10B981",
+    value: "Rs 84,000 / yr",
+    label: "Illustrative annual savings",
+    source: "Tariff + subsidy model",
+    detail: "The estimate combines local electricity rates, PM Surya Ghar eligibility, degradation, and operating costs.",
   },
   {
     icon: Leaf,
-    iconColor: "#34D399",
-    bgGlow: "rgba(52,211,153,0.10)",
-    prefix: "",
-    end: 182,
-    suffix: " Tons",
-    label: "CO₂ emissions avoided",
-    sub: "Monthly carbon offset",
-    accent: "#34D399",
-  },
-  {
-    icon: Timer,
-    iconColor: "#FBBF24",
-    bgGlow: "rgba(251,191,36,0.10)",
-    prefix: "",
-    end: 180,
-    suffix: "s",
-    label: "Avg. report speed",
-    sub: "From map to full PDF",
-    accent: "#FBBF24",
+    value: "182 t",
+    label: "Avoided emissions",
+    source: "Grid displacement model",
+    detail: "Carbon impact is derived from modeled generation and the regional grid factor, not a generic offset claim.",
   },
 ];
 
-function MetricTile({
-  metric,
-  index,
-  visible,
-}: {
-  metric: (typeof METRICS)[number];
-  index: number;
-  visible: boolean;
-}) {
-  const count = useCounter(metric.end, visible, 2200);
-  const Icon = metric.icon;
-
-  return (
-    <div
-      className="relative rounded-3xl border border-white/10 bg-[#0A0A0A]/90 backdrop-blur-2xl p-7 flex flex-col justify-between gap-6 overflow-hidden group"
-      style={{
-        opacity: visible ? 1 : 0,
-        transform: visible ? "translateY(0)" : "translateY(28px)",
-        transition: `opacity 0.6s ${EASING} ${index * 80}ms, transform 0.6s ${EASING} ${index * 80}ms, border-color 0.3s ${EASING}, box-shadow 0.3s ${EASING}`,
-        boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-        minHeight: "200px",
-      }}
-      onMouseEnter={e => {
-        (e.currentTarget as HTMLElement).style.borderColor = `${metric.accent}40`;
-        (e.currentTarget as HTMLElement).style.transform = "translateY(-4px)";
-        (e.currentTarget as HTMLElement).style.boxShadow = `0 0 32px ${metric.bgGlow}, 0 24px 60px rgba(0,0,0,0.5)`;
-      }}
-      onMouseLeave={e => {
-        (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.10)";
-        (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
-        (e.currentTarget as HTMLElement).style.boxShadow = "0 8px 32px rgba(0,0,0,0.4)";
-      }}
-    >
-      {/* Top-edge accent */}
-      <div
-        className="absolute top-0 left-0 right-0 h-px rounded-t-3xl opacity-0 group-hover:opacity-100 pointer-events-none"
-        style={{
-          background: `linear-gradient(90deg,transparent,${metric.accent}60,transparent)`,
-          transition: `opacity 300ms ${EASING}`,
-        }}
-        aria-hidden="true"
-      />
-
-      {/* Ambient glow behind icon */}
-      <div
-        className="absolute top-0 left-0 w-32 h-32 blur-3xl opacity-0 group-hover:opacity-100 pointer-events-none"
-        style={{ background: metric.bgGlow, transition: `opacity 400ms ${EASING}`, borderRadius: "24px 0 0 0" }}
-        aria-hidden="true"
-      />
-
-      {/* Icon badge */}
-      <div
-        className="w-10 h-10 rounded-2xl flex items-center justify-center border border-white/10"
-        style={{ background: `${metric.iconColor}18` }}
-        aria-hidden="true"
-      >
-        <Icon className="w-5 h-5" style={{ color: metric.iconColor }} />
-      </div>
-
-      {/* Big counter value */}
-      <div>
-        <div
-          className="text-4xl sm:text-5xl font-mono font-bold leading-none mb-2"
-          style={{ color: metric.accent }}
-        >
-          {metric.prefix}{count.toLocaleString("en-IN")}{metric.suffix}
-        </div>
-        <div className="text-sm font-semibold text-white">{metric.label}</div>
-        <div className="text-[10px] font-mono text-white/30 mt-0.5">{metric.sub}</div>
-      </div>
-    </div>
-  );
-}
-
 export function MetricsSection() {
-  const [time, setTime] = useState(new Date());
-  const [visible, setVisible] = useState(false);
   const ref = useRef<HTMLElement>(null);
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const interval = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) setVisible(true); },
-      { threshold: 0.1 }
-    );
-    if (ref.current) observer.observe(ref.current);
+    const node = ref.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setVisible(true);
+        observer.disconnect();
+      }
+    }, { threshold: 0.18 });
+    observer.observe(node);
     return () => observer.disconnect();
   }, []);
 
   return (
-    <section
-      id="metrics"
-      ref={ref}
-      className="relative py-24 bg-[#050505] overflow-hidden"
-    >
-      {/* Section ambient glow */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{ background: "radial-gradient(ellipse 80% 50% at 50% 100%, rgba(255,102,0,0.05), transparent)" }}
-        aria-hidden="true"
-      />
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-12">
-        {/* Header row */}
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-14">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-[10px] font-mono font-bold text-[#FF6600] uppercase tracking-[0.12em]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#FF6600] animate-pulse" />
-              Live Impact Metrics
-            </div>
-            <h2
-              className="text-4xl sm:text-5xl text-white leading-tight"
-              style={{ fontFamily: "'Calistoga', serif", fontWeight: 400 }}
-            >
-              Performance you<br />
-              <span className="text-[#FF6600]">can verify.</span>
-            </h2>
-          </div>
-
-          {/* Live clock badge */}
-          <div
-            className="flex items-center gap-3 px-4 py-2.5 rounded-2xl border border-white/10"
-            style={{ background: "rgba(255,255,255,0.03)", backdropFilter: "blur(12px)" }}
-          >
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[10px] font-mono text-white/50 uppercase tracking-wider">System Active</span>
-            </div>
-            <div className="w-px h-4 bg-white/10" />
-            <span className="text-[10px] font-mono text-white/70 tabular-nums">
-              {time.toLocaleTimeString("en-IN", { hour12: false })} IST
-            </span>
-          </div>
+    <section id="metrics" ref={ref} className="relative overflow-hidden bg-[#050505] px-4 py-28 sm:px-6 lg:px-12">
+      <div className="pointer-events-none absolute inset-0 opacity-70" aria-hidden="true" style={{ background: "radial-gradient(ellipse 60% 45% at 12% 30%, rgba(255,102,0,0.08), transparent 70%)" }} />
+      <div className="relative mx-auto max-w-7xl">
+        <div className="max-w-2xl" data-reveal>
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#ff8b3d]">What the model returns</p>
+          <h2 className="mt-4 max-w-xl text-4xl font-semibold leading-[1.02] tracking-[-0.04em] text-white sm:text-6xl">
+            A clearer read on the value of your roof.
+          </h2>
+          <p className="mt-5 max-w-[58ch] text-base leading-relaxed text-white/58">
+            Every result is tied to geometry, local rates, policy rules, and the assumptions you can change.
+          </p>
         </div>
 
-        {/* Metrics grid — 4 col bento */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {METRICS.map((metric, i) => (
-            <MetricTile key={metric.label} metric={metric} index={i} visible={visible} />
-          ))}
+        <div className="mt-16 grid gap-4 lg:grid-cols-12" aria-label="Solar model outputs">
+          <article className={`group relative overflow-hidden rounded-2xl border border-white/12 bg-white/[0.035] p-7 transition duration-700 hover:-translate-y-1 hover:border-[#ff6600]/50 lg:col-span-5 lg:min-h-[330px] ${visible ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"}`} style={{ transitionTimingFunction: EASING }} data-reveal>
+            <div className="flex items-center justify-between">
+              <Activity className="h-5 w-5 text-[#ff8b3d]" aria-hidden="true" />
+              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/35">{SIGNALS[0].source}</span>
+            </div>
+            <div className="mt-20">
+              <p className="font-mono text-4xl font-semibold tracking-[-0.04em] text-white sm:text-6xl">{SIGNALS[0].value}</p>
+              <h3 className="mt-3 text-lg font-semibold text-white">{SIGNALS[0].label}</h3>
+              <p className="mt-2 max-w-[42ch] text-sm leading-relaxed text-white/50">{SIGNALS[0].detail}</p>
+            </div>
+          </article>
+
+          <div className="grid gap-4 lg:col-span-7">
+            {SIGNALS.slice(1).map((signal, index) => {
+              const Icon = signal.icon;
+              return (
+                <article key={signal.label} data-reveal className={`group grid gap-5 rounded-2xl border border-white/12 bg-white/[0.025] p-6 transition duration-700 hover:-translate-y-1 hover:border-[#ff6600]/50 sm:grid-cols-[auto_1fr_auto] sm:items-start ${visible ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"}`} style={{ transitionDelay: `${(index + 1) * 90}ms`, transitionTimingFunction: EASING }}>
+                  <span className="grid h-10 w-10 place-items-center rounded-xl border border-[#ff6600]/30 bg-[#ff6600]/10 text-[#ff8b3d]"><Icon className="h-5 w-5" aria-hidden="true" /></span>
+                  <div>
+                    <p className="font-mono text-2xl font-semibold tracking-[-0.03em] text-white">{signal.value}</p>
+                    <h3 className="mt-1 text-base font-semibold text-white">{signal.label}</h3>
+                    <p className="mt-2 max-w-[52ch] text-sm leading-relaxed text-white/48">{signal.detail}</p>
+                  </div>
+                  <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/35"><span>{signal.source}</span><ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
+                </article>
+              );
+            })}
+            <div data-reveal className="grid gap-4 rounded-2xl border border-dashed border-white/15 bg-transparent p-6 sm:grid-cols-[auto_1fr] sm:items-center">
+              <Timer className="h-5 w-5 text-[#ff8b3d]" aria-hidden="true" />
+              <p className="text-sm leading-relaxed text-white/55"><span className="font-semibold text-white">A report is ready in minutes, not hours.</span> The map, panel layout, financial model, and PDF report use the same assumptions from one saved scan.</p>
+            </div>
+          </div>
         </div>
       </div>
     </section>

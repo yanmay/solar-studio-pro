@@ -34,7 +34,7 @@ const INITIAL_LEADS: Lead[] = [
     address: "Sea Face Apartment, Worli, Mumbai, MH",
     roofArea: 120, estimatedKw: 12.5, roiLakh: 14.5,
     status: "new", date: "2026-07-17",
-    activities: [{ date: "2026-07-17", type: "received", description: "Lead received from SolarScan B2C" }],
+    activities: [{ date: "2026-07-17", type: "received", description: "Lead received from SUNPOWER LINK" }],
   },
   {
     id: "lead-102", name: "Ananya Deshmukh", phone: "9819922334",
@@ -42,7 +42,7 @@ const INITIAL_LEADS: Lead[] = [
     roofArea: 85, estimatedKw: 8.5, roiLakh: 9.8,
     status: "contacted", date: "2026-07-16",
     activities: [
-      { date: "2026-07-16", type: "received", description: "Lead received from SolarScan B2C" },
+      { date: "2026-07-16", type: "received", description: "Lead received from SUNPOWER LINK" },
       { date: "2026-07-16", type: "contact", description: "First call made" },
     ],
   },
@@ -100,11 +100,11 @@ export default function Dashboard() {
 
   return (
     <div
-      className="min-h-screen text-white flex flex-col lg:flex-row font-['Inter',sans-serif] antialiased"
-      style={{ background: "linear-gradient(160deg, #020203 0%, #050506 60%, #0a0a0c 100%)" }}
+      className="professional-product-ui min-h-screen text-white flex flex-col lg:flex-row antialiased"
+      style={{ background: "#050505" }}
     >
       {/* ── Cinematic Ambient Blobs ─────────────────────────────── */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+      <div className="hidden" aria-hidden="true">
         <div className="absolute top-[-20%] left-[-10%] w-[700px] h-[700px] rounded-full opacity-[0.06] blur-[130px]"
           style={{ background: "#FF6600", animation: "dashBlob1 20s ease-in-out infinite alternate" }} />
         <div className="absolute bottom-[-15%] right-0 w-[600px] h-[600px] rounded-full opacity-[0.05] blur-[110px]"

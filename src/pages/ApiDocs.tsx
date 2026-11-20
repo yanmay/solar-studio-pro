@@ -1,6 +1,6 @@
 ﻿import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { SiteNavbar } from "@/components/ui/site-navbar";
 import {
   Sparkles,
   BookOpen,
@@ -14,16 +14,14 @@ import {
   ArrowLeftRight,
   Shield,
   Coins,
-  ArrowLeft,
   Zap,
 } from "lucide-react";
 
 export default function ApiDocs() {
-  const navigate = useNavigate();
   const { toast } = useToast();
   const [apiKeyInput, setApiKeyInput] = useState("sk_test_underwrite_demo_key");
   const [selectedLang, setSelectedLang] = useState<"curl" | "js" | "python">("curl");
-  const [activeRoute, setActiveRoute] = useState<"estimate" | "roof" | "subsidy">("estimate");
+  const [activeRoute, setActiveRoute] = useState<"estimate" | "roof" | "subsidy" | "3d-profile">("estimate");
 
   // Try it out states
   const [estimateQuery, setEstimateQuery] = useState({ lat: "19.076", lng: "72.877", area: "100", rate: "8" });
@@ -43,7 +41,11 @@ export default function ApiDocs() {
       let method = "GET";
       let body: any = null;
 
-      if (activeRoute === "estimate") {
+      if (activeRoute === "3d-profile") {
+        url = "/api/3d-profile";
+        method = "POST";
+        body = JSON.stringify({ zoom: 19, roofVertices: 8, viewportWidth: 1440, viewportHeight: 900, devicePixelRatio: 1.5, networkDownlinkMbps: 25, webglAvailable: true });
+      } else if (activeRoute === "estimate") {
         url = `/api/v1/solar-estimate?lat=${estimateQuery.lat}&lng=${estimateQuery.lng}&roofAreaM2=${estimateQuery.area}&electricityRate=${estimateQuery.rate}`;
       } else if (activeRoute === "subsidy") {
         url = `/api/v1/subsidy-check?state=Maharashtra&systemSizeKw=3.5`;
@@ -73,7 +75,7 @@ export default function ApiDocs() {
   const downloadPostman = () => {
     const postman = {
       info: {
-        name: "SolarScan AI Underwriting API v1",
+      name: "SUNPOWER LINK Underwriting API v1",
         schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
       },
       item: [
@@ -99,6 +101,15 @@ export default function ApiDocs() {
   };
 
   const getCodeSnippet = () => {
+    if (activeRoute === "3d-profile") {
+      if (selectedLang === "curl") {
+        return `curl -X POST "https://api.solarscan.ai/api/3d-profile" \\\n+  -H "Content-Type: application/json" \\\n+  -d '{"zoom":19,"roofVertices":8,"viewportWidth":1440,"viewportHeight":900,"devicePixelRatio":1.5,"networkDownlinkMbps":25,"webglAvailable":true}'`;
+      }
+      if (selectedLang === "js") {
+        return `fetch("https://api.solarscan.ai/api/3d-profile", {\n  method: "POST",\n  headers: { "Content-Type": "application/json" },\n  body: JSON.stringify({ zoom: 19, roofVertices: 8, viewportWidth: 1440, viewportHeight: 900, devicePixelRatio: 1.5, networkDownlinkMbps: 25, webglAvailable: true })\n})\n.then(res => res.json())\n.then(console.log);`;
+      }
+      return `import requests\n\npayload = {"zoom": 19, "roofVertices": 8, "viewportWidth": 1440, "viewportHeight": 900, "devicePixelRatio": 1.5, "networkDownlinkMbps": 25, "webglAvailable": True}\nresponse = requests.post("https://api.solarscan.ai/api/3d-profile", json=payload)\nprint(response.json())`;
+    }
     if (activeRoute === "estimate") {
       if (selectedLang === "curl") {
         return `curl -X GET "https://api.solarscan.ai/api/v1/solar-estimate?lat=${estimateQuery.lat}&lng=${estimateQuery.lng}&roofAreaM2=${estimateQuery.area}&electricityRate=${estimateQuery.rate}" \\\n  -H "X-API-Key: ${apiKeyInput}"`;
@@ -128,37 +139,23 @@ export default function ApiDocs() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white font-sans antialiased relative overflow-x-hidden selection:bg-[#FF6600]/30 selection:text-white pb-20">
+    <div className="professional-product-ui min-h-screen bg-[#050505] text-white antialiased relative overflow-x-hidden selection:bg-[#FF6600]/30 selection:text-white pb-20">
       {/* Background Ambient Glow */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+      <div className="hidden" aria-hidden="true">
         <div className="absolute top-[-15%] right-[-5%] w-[600px] h-[600px] rounded-full bg-[#FF6600]/5 blur-[140px]" />
       </div>
 
-      {/* Header */}
-      <header className="sticky top-0 z-50 backdrop-blur-2xl bg-[#050505]/85 border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-4 md:px-12 h-16 flex justify-between items-center">
-          <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} className="flex items-center gap-3 group">
-            <img src="/logo.png" alt="SolarScan AI Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
-            <span className="text-[15px] font-bold text-white tracking-tight">
-              SUNPOWER <span className="font-serif italic font-light text-[#FF6600]">LINK</span> <span className="font-mono text-xs text-white/40 font-normal">/ DEVELOPERS</span>
-            </span>
-          </a>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate("/")}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white/60 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-all active:scale-95 cursor-pointer"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" /> Back
-            </button>
-            <button
-              onClick={downloadPostman}
-              className="bg-[#FF6600] hover:bg-orange-500 text-black text-xs font-bold font-mono py-2 px-4 rounded-xl flex items-center gap-2 cursor-pointer transition-all active:scale-95 shadow-lg shadow-[#FF6600]/20 border-none"
-            >
-              <Download className="w-3.5 h-3.5 stroke-[2.5]" /> Postman Spec
-            </button>
-          </div>
-        </div>
-      </header>
+      <SiteNavbar
+        cta={null}
+        actions={(
+          <button
+            onClick={downloadPostman}
+            className="flex h-11 items-center gap-2 rounded-xl bg-[#FF6600] px-4 text-xs font-bold text-black transition-[background-color,transform] duration-150 hover:bg-[#FF7A1A] active:scale-[0.97]"
+          >
+            <Download className="h-4 w-4" /> Postman Spec
+          </button>
+        )}
+      />
 
       {/* Main Layout */}
       <div className="max-w-6xl mx-auto py-10 px-4 md:px-12 grid grid-cols-1 lg:grid-cols-3 gap-8 relative z-10">
@@ -220,10 +217,11 @@ export default function ApiDocs() {
         <div className="lg:col-span-2 space-y-6">
           {/* Endpoint tab selectors */}
           <div className="flex border-b border-white/10 gap-3">
-            {[
+            {[ 
               { id: "estimate", label: "GET /solar-estimate" },
               { id: "roof", label: "POST /validate-roof" },
               { id: "subsidy", label: "GET /subsidy-check" },
+              { id: "3d-profile", label: "POST /3d-profile" },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -238,6 +236,31 @@ export default function ApiDocs() {
               </button>
             ))}
           </div>
+
+          {activeRoute === "3d-profile" && (
+            <div className="bg-[#0A0A0A]/90 border border-white/10 rounded-3xl p-5 shadow-2xl">
+              <h3 className="text-xs font-bold font-mono uppercase tracking-wider text-[#FF6600] mb-3">
+                Response Contract
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-[11px] font-mono text-white/65">
+                <span><b className="text-white">tilt</b> / <b className="text-white">maxZoom</b> / <b className="text-white">textureQuality</b> - rendering profile</span>
+                <span><b className="text-white">confidence</b> / <b className="text-white">uncertainty</b> - reliability signals</span>
+                <span><b className="text-white">expectedErrorByTarget</b> - calibrated absolute error by output</span>
+                <span><b className="text-white">calibratedUncertaintyByTarget</b> - expected error normalized by target range</span>
+                <span><b className="text-white">uncertaintyCalibrationMethod</b> - error calibration strategy</span>
+                <span><b className="text-white">predictionIntervalByTarget</b> - bounded 90% residual interval</span>
+                <span><b className="text-white">intervalCalibrationMethod</b> - conformal interval strategy</span>
+                <span><b className="text-white">intervalHalfWidthByTarget</b> - target-specific interval radius</span>
+                <span><b className="text-white">empiricalIntervalCoverageByTarget</b> - held-out coverage achieved</span>
+                <span><b className="text-white">distributionPenalty</b> - max of bounds and neighbor novelty</span>
+                <span><b className="text-white">boundsPenalty</b> / <b className="text-white">neighborPenalty</b> - penalty components</span>
+                <span><b className="text-white">featureImportance</b> - averaged sklearn importances</span>
+                <span><b className="text-white">permutationImportance</b> - held-out normalized feature impact</span>
+                <span><b className="text-white">trainingSource</b> / <b className="text-white">trainingRows</b> - provenance</span>
+                <span><b className="text-white">schemaVersion</b> / <b className="text-white">datasetFingerprint</b> - artifact identity</span>
+              </div>
+            </div>
+          )}
 
           {/* Try it out Form parameters */}
           {activeRoute === "estimate" && (

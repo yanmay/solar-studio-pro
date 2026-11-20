@@ -59,3 +59,7 @@ stitch_solar_intelligence_report_executive_summary (1)/
 
 # Claude Code local config
 .claude/
+ml/telemetry.json
+
+vite.config.ts.timestamp-*
+SUNPOWER-*.pdf

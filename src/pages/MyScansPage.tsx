@@ -43,7 +43,7 @@ export default function MyScansPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    document.title = "My Scans — SolarScan AI";
+    document.title = "My Scans - SUNPOWER LINK";
     if (!user) return;
     const fetchScans = async () => {
       if (!supabase) { setLoading(false); return; }
@@ -90,9 +90,9 @@ export default function MyScansPage() {
   const unlockedCount = scans.filter(s => s.is_full_unlocked).length;
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white antialiased pb-24 selection:bg-[#FF6600]/30 selection:text-white relative overflow-x-hidden">
+    <div className="professional-product-ui min-h-screen bg-[#050505] text-white antialiased pb-24 selection:bg-[#FF6600]/30 selection:text-white relative overflow-x-hidden">
       {/* Ambient Glow Blobs — ui-ux-pro-max animated dark cinema */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+      <div className="hidden" aria-hidden="true">
         <div
           className="absolute top-[-15%] right-[-5%] w-[650px] h-[650px] rounded-full opacity-[0.07] blur-[140px]"
           style={{ background: "#FF6600", animation: "scansBlob1 20s ease-in-out infinite alternate" }}
@@ -121,8 +121,8 @@ export default function MyScansPage() {
       {/* ── Sticky Header ──────────────────────────────────────── */}
       <header className="sticky top-0 z-30 border-b border-white/[0.08] bg-[#050505]/85 backdrop-blur-2xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3 group" aria-label="SolarScan AI Home">
-            <img src="/logo.png" alt="SolarScan AI Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
+          <Link to="/" className="flex items-center gap-3 group" aria-label="SUNPOWER LINK home">
+            <img src="/logo.png" alt="SUNPOWER LINK logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
             <span className="text-[15px] font-bold text-white tracking-tight">
               SUNPOWER <span className="font-['Calistoga',serif] italic font-normal text-[#FF6600]">LINK</span>
             </span>

@@ -17,7 +17,7 @@ export default function AccountSettingsPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    document.title = "Account Settings — SolarScan AI";
+    document.title = "Account Settings - SUNPOWER LINK";
     if (profile) { setFullName(profile.full_name || ""); setPhone(profile.phone || ""); }
   }, [profile]);
 
@@ -58,9 +58,9 @@ export default function AccountSettingsPage() {
   const inputClass = "w-full px-4 py-3 rounded-xl text-xs text-white placeholder:text-white/20 border border-white/10 bg-white/[0.04] focus:outline-none focus:border-[#FF6600]/60 focus:ring-2 focus:ring-[#FF6600]/20 transition-all duration-150 font-mono";
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white font-sans antialiased pb-20 selection:bg-[#FF6600]/30 selection:text-white relative overflow-x-hidden">
+    <div className="professional-product-ui min-h-screen bg-[#050505] text-white font-sans antialiased pb-20 selection:bg-[#FF6600]/30 selection:text-white relative overflow-x-hidden">
       {/* Background Glow Blobs */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+      <div className="hidden" aria-hidden="true">
         <div className="absolute top-[-15%] left-[-10%] w-[600px] h-[600px] rounded-full bg-[#FF6600]/5 blur-[140px]" />
         <div className="absolute bottom-[-10%] right-[-5%] w-[450px] h-[450px] rounded-full bg-emerald-500/3 blur-[120px]" />
       </div>
@@ -69,7 +69,7 @@ export default function AccountSettingsPage() {
       <header className="sticky top-0 z-30 border-b border-white/10 bg-[#050505]/85 backdrop-blur-2xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3 group">
-            <img src="/logo.png" alt="SolarScan AI Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
+          <img src="/logo.png" alt="SUNPOWER LINK logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
             <span className="text-[15px] font-bold text-white tracking-tight">
               SUNPOWER <span className="font-serif italic font-light text-[#FF6600]">LINK</span>
             </span>

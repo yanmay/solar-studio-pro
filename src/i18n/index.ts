@@ -16,10 +16,19 @@ export const SUPPORTED_LANGS = [
   { code: "bn", label: "Bengali",  native: "বাংলা" },
 ] as const;
 
+// Default to English unless explicitly chosen by user
+if (typeof window !== "undefined") {
+  const userExplicit = localStorage.getItem("sunpower-lang-user-explicit");
+  if (!userExplicit) {
+    localStorage.setItem("sunpower-lang", "en");
+  }
+}
+
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
+    lng: "en",
     resources: {
       en: { translation: en },
       hi: { translation: hi },
@@ -31,7 +40,7 @@ i18n
     supportedLngs: SUPPORTED_LANGS.map((l) => l.code),
     interpolation: { escapeValue: false },
     detection: {
-      order: ["localStorage", "navigator", "htmlTag"],
+      order: ["localStorage"],
       lookupLocalStorage: "sunpower-lang",
       caches: ["localStorage"],
     },

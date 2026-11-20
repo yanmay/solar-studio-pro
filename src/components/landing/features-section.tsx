@@ -6,6 +6,7 @@ import {
   ShieldCheck, TrendingUp, Sun, ArrowRight
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useGsapReveal, useGsapStack } from "@/hooks/use-gsap-motion";
 
 const EASING = "cubic-bezier(0.16,1,0.3,1)";
 
@@ -13,7 +14,7 @@ const EASING = "cubic-bezier(0.16,1,0.3,1)";
 const BENTO_CELLS = [
   {
     id: "trace",
-    span: "lg:col-span-2",
+    span: "lg:col-span-7",
     icon: Scan,
     iconColor: "#FF6600",
     tag: "CORE — GIS ENGINE",
@@ -25,7 +26,7 @@ const BENTO_CELLS = [
   },
   {
     id: "yield",
-    span: "lg:col-span-1",
+    span: "lg:col-span-5",
     icon: Sun,
     iconColor: "#FBBF24",
     tag: "NASA POWER",
@@ -36,7 +37,7 @@ const BENTO_CELLS = [
   },
   {
     id: "discom",
-    span: "lg:col-span-1",
+    span: "lg:col-span-4",
     icon: IndianRupee,
     iconColor: "#10B981",
     tag: "DISCOM TARIFFS",
@@ -47,7 +48,7 @@ const BENTO_CELLS = [
   },
   {
     id: "subsidy",
-    span: "lg:col-span-1",
+    span: "lg:col-span-4",
     icon: ShieldCheck,
     iconColor: "#10B981",
     tag: "PM SURYA GHAR",
@@ -58,7 +59,7 @@ const BENTO_CELLS = [
   },
   {
     id: "roi",
-    span: "lg:col-span-2",
+    span: "lg:col-span-4",
     icon: TrendingUp,
     iconColor: "#FF6600",
     tag: "FINANCIAL MODEL",
@@ -70,7 +71,7 @@ const BENTO_CELLS = [
   },
   {
     id: "policy",
-    span: "lg:col-span-1",
+    span: "lg:col-span-12",
     icon: BarChart3,
     iconColor: "#818CF8",
     tag: "ANALYTICS",
@@ -132,6 +133,8 @@ function RoiVisual() {
 export function FeaturesSection() {
   const navigate = useNavigate();
   const sectionRef = useRef<HTMLElement>(null);
+  useGsapReveal(sectionRef);
+  useGsapStack(sectionRef);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -182,7 +185,7 @@ export function FeaturesSection() {
       {/* Ambient glow */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] blur-[150px] pointer-events-none" style={{ background: "rgba(255,102,0,0.04)" }} aria-hidden="true" />
 
-      <div className="max-w-7xl mx-auto">
+      <div className="mx-auto max-w-7xl">
         {/* Section header */}
         <div className="mb-14 flex flex-col sm:flex-row sm:items-end justify-between gap-6">
           <div className="space-y-3">
@@ -191,7 +194,7 @@ export function FeaturesSection() {
             </div>
             <h2
               className="text-4xl sm:text-5xl text-white leading-tight"
-              style={{ fontFamily: "'Calistoga', serif", fontWeight: 400 }}
+              style={{ fontFamily: "'Outfit', system-ui, sans-serif", fontWeight: 600 }}
             >
               Everything you need to<br />
               <span className="text-[#FF6600]">go solar, intelligently.</span>
@@ -201,8 +204,8 @@ export function FeaturesSection() {
             onClick={() => navigate("/map")}
             className="shrink-0 flex items-center gap-2 h-11 px-6 rounded-2xl text-xs font-bold text-black cursor-pointer border-none group"
             style={{
-              background: "linear-gradient(135deg,#FF6600,#FF8C38)",
-              boxShadow: "0 0 24px rgba(255,102,0,0.2)",
+              background: "#FF6600",
+              boxShadow: "none",
               transition: `all 200ms ${EASING}`,
             }}
           >
@@ -212,12 +215,14 @@ export function FeaturesSection() {
         </div>
 
         {/* Bento Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-auto">
+        <div className="grid grid-flow-dense grid-cols-1 gap-4 auto-rows-[minmax(210px,auto)] sm:grid-cols-2 lg:grid-cols-12">
           {BENTO_CELLS.map((cell) => {
             const Icon = cell.icon;
             return (
               <div
                 key={cell.id}
+                data-reveal
+                data-stack-card
                 className={`bento-cell relative overflow-hidden rounded-3xl border border-white/10 p-6 sm:p-7 flex flex-col justify-between gap-8 group cursor-default ${cell.span}`}
                 style={{
                   background: "rgba(10,10,10,0.90)",

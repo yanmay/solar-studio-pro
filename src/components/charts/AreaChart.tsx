@@ -106,9 +106,10 @@ export function AreaChart({
     const yMin = Math.min(...allValues);
     const yMax = Math.max(...allValues);
     const yPad = (yMax - yMin) * 0.1 || 10;
+    const minY = yMin >= 0 ? 0 : yMin - yPad;
     const yScale = scaleLinear({
       range: [innerHeight, 0],
-      domain: [yMin - yPad, yMax + yPad],
+      domain: [minY, yMax + yPad],
       nice: true,
     });
 

@@ -1,5 +1,10 @@
+import * as Sentry from '@sentry/node';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { getSupabaseAdmin, ensureSession } from '../_utils/supabase.js';
+
+if (process.env.VITE_SENTRY_DSN) {
+  Sentry.init({ dsn: process.env.VITE_SENTRY_DSN, environment: process.env.NODE_ENV || 'production' });
+}
 
 export const config = {
   runtime: 'nodejs',
@@ -32,7 +37,7 @@ export default async function handler(req: Request): Promise<Response> {
       });
     }
 
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, scanId, plan } = body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, scanId, plan, scan_hash } = body;
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return new Response(JSON.stringify({ error: 'Missing signature parameters' }), {

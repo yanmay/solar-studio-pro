@@ -1,5 +1,7 @@
-﻿import { useState, useEffect, useRef } from "react";
+import React from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   Menu,
   X,
@@ -25,8 +27,12 @@ import {
   FileIcon,
 } from "@/components/ui/animated-state-icons";
 import { CTASection } from "@/components/ui/cta-with-glow";
+import { ParallaxComponent } from "@/components/ui/parallax-scrolling";
+import { Header } from "@/components/ui/header-3";
+
 
 const LandingPage = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -181,12 +187,9 @@ const LandingPage = () => {
     <div className="min-h-screen bg-[#050505] text-white antialiased selection:bg-[#FF6600]/30 selection:text-white overflow-x-hidden">
 
       {/* ── Nav ──────────────────────────────────────────────── */}
+      <Header />
       <header
-        className={`fixed z-[1000] transition-all duration-500 ${
-          isScrolled 
-            ? "top-4 left-4 right-4" 
-            : "top-0 left-0 right-0"
-        }`}
+        className="hidden"
       >
         <nav
           className={`mx-auto transition-all duration-500 relative ${
@@ -340,7 +343,7 @@ const LandingPage = () => {
                       onClick={() => { setPlatformOpen(false); navigate("/map"); }}
                       className="px-4 py-2 text-xs font-bold rounded-xl bg-[#FF6600] text-black hover:bg-orange-500 transition-all active:scale-95 flex items-center gap-1.5 border-none cursor-pointer shadow-md shadow-[#FF6600]/20"
                     >
-                      <span>Launch Spatial Scan</span>
+                      <span>{t("landing.launchSpatialScan")}</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -372,7 +375,7 @@ const LandingPage = () => {
               {/* Light sweep animation on hover */}
               <span className="absolute inset-0 bg-gradient-to-r from-transparent via-amber-400/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out pointer-events-none" />
 
-              <span className="tracking-wide font-semibold">For Installers</span>
+              <span className="tracking-wide font-semibold">{t("landing.forInstallers")}</span>
 
               <ArrowRight className="w-3.5 h-3.5 text-amber-400/80 group-hover:text-amber-300 group-hover:translate-x-0.5 transition-all duration-300" />
             </button>
@@ -381,7 +384,7 @@ const LandingPage = () => {
               onClick={() => navigate("/map")}
               className="btn-primary px-5 h-10 text-sm font-bold rounded-xl active:scale-[0.98] transition-all border-none cursor-pointer bg-[#FF6600] text-black hover:bg-orange-500 shadow-lg shadow-[#FF6600]/20 hover:shadow-[#FF6600]/40"
             >
-              Launch Analyzer
+              {t("landing.launchAnalyzer")}
             </button>
           </div>
 
@@ -448,7 +451,7 @@ const LandingPage = () => {
               onClick={() => { setMobileMenuOpen(false); navigate("/map"); }}
               className="btn-primary bg-[#FF6600] text-black hover:bg-orange-500 w-full py-4 text-base mt-2 rounded-xl flex items-center justify-center gap-2 border-none cursor-pointer font-bold"
             >
-              Launch Analyzer
+              {t("landing.launchAnalyzer")}
             </button>
           </div>
         </div>
@@ -458,12 +461,13 @@ const LandingPage = () => {
       {/* ── Hero — Optimized Scroll & Copy ─────────── */}
       <section
         id="hero"
-        className="relative h-[100dvh] flex flex-col justify-center items-center text-center overflow-hidden bg-black"
+        className="relative flex min-h-screen flex-col justify-center items-center text-center overflow-hidden bg-black"
+        style={{ minHeight: "100dvh" }}
         aria-label="Hero — Calculate Your Solar Potential"
       >
         <div id="hero-bg" className="absolute inset-0 z-0 scale-110">
           <img
-            src="https://i.postimg.cc/nFT9Rhzw/hf-20260129-171005-8aec9a7d-9d5e-48c9-a88c-0728bf22e731.webp"
+            src="/hero-bg.webp"
             alt="Dusk Hills Landscape"
             className="w-full h-full object-cover object-[center_60%] md:object-center opacity-60"
           />
@@ -471,15 +475,16 @@ const LandingPage = () => {
           <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent z-10" />
         </div>
 
+
         <div
           id="hero-content"
           className="relative z-10 max-w-5xl mx-auto px-5 md:px-6 w-full flex flex-col items-center justify-center h-full pb-20 md:pb-0"
         >
 
           <h1 className="text-[2.5rem] leading-[1.15] sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight mb-6 md:mb-8 animate-fade-in-up font-display text-white">
-            Calculate Your Rooftop<br className="hidden md:block" />
+            {t("landing.heroHeading1")}<br className="hidden md:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-amber-500 italic font-medium block md:inline mt-2 md:mt-0">
-              {" "}Solar Potential in 60 Seconds
+              {" "}{t("landing.heroHeadingHighlight")}
             </span>
           </h1>
 
@@ -512,18 +517,26 @@ const LandingPage = () => {
                 onClick={handleHeroSearch}
                 className="btn-primary bg-gradient-to-r from-[#FF6600] to-amber-500 text-black hover:brightness-110 active:scale-[0.98] px-6 h-11 text-xs rounded-xl font-bold transition-all shrink-0 border-none cursor-pointer shadow-lg shadow-[#FF6600]/25 flex items-center gap-2"
               >
-                <span>Calculate My Savings</span>
+                <span>{t("landing.heroSearchCta")}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-neutral-400 animate-fade-in-up" style={{ animationDelay: "250ms" }}>
-            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-white/80">
-              <Check className="w-3.5 h-3.5 text-[#FF6600]" /> Instant GIS satellite scan
+          <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-xs text-neutral-500 animate-fade-in-up" style={{ animationDelay: "250ms" }}>
+            <span className="flex items-center gap-2">
+              <Check className="w-3 h-3 text-[#FF6600] shrink-0" />
+              {t("landing.trustScan")}
             </span>
-            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-medium">
-              <Check className="w-3.5 h-3.5 text-emerald-400" /> PM Surya Ghar eligible: up to ₹78,000
+            <span className="hidden sm:block w-px h-3 bg-white/10" />
+            <span className="flex items-center gap-2">
+              <Check className="w-3 h-3 text-emerald-500 shrink-0" />
+              {t("landing.trustSubsidy")}
+            </span>
+            <span className="hidden sm:block w-px h-3 bg-white/10" />
+            <span className="flex items-center gap-2">
+              <Check className="w-3 h-3 text-emerald-500 shrink-0" />
+              {t("landing.trustNoSignup")}
             </span>
           </div>
         </div>
@@ -535,6 +548,8 @@ const LandingPage = () => {
         </div>
       </section>
 
+      <ParallaxComponent />
+
       {/* ── Content ──────────────────────────────────────────── */}
       <main className="bg-[#050505]">
 
@@ -542,7 +557,7 @@ const LandingPage = () => {
         <section className="border-b border-white/5 py-14 bg-[#050505] text-center">
           <div className="max-w-[1200px] mx-auto px-6">
             <p className="text-[11px] font-mono text-neutral-700 uppercase tracking-[0.2em] mb-8">
-              Empowered by leading data standards &amp; systems
+              {t("landing.dataSectionLabel")}
             </p>
             <div className="flex flex-wrap justify-center items-center gap-x-12 gap-y-5">
               <span className="font-mono font-bold text-sm tracking-wider text-neutral-300">NASA POWER API</span>
@@ -575,9 +590,9 @@ const LandingPage = () => {
           <div className="max-w-[1200px] mx-auto px-6 flex flex-col lg:flex-row gap-16 items-center justify-between relative z-10">
             <div className="w-full lg:w-[35%] flex flex-col gap-3 slide-in-left">
               {/* Plain text label — no capsule */}
-              <p className="text-[#FF6600] font-mono text-[11px] uppercase tracking-[0.2em]">The Technology</p>
+              <p className="text-[#FF6600] font-mono text-[11px] uppercase tracking-[0.2em]">{t("landing.techLabel")}</p>
               <h2 className="text-3xl md:text-4xl font-extrabold text-white mt-2 tracking-tight">
-                SolarNet<span className="text-[#FF6600] font-extrabold">.</span>
+                {t("landing.techHeading").replace(".", "")}<span className="text-[#FF6600] font-extrabold">.</span>
               </h2>
               
               {/* Animated scanner/data lines */}
@@ -599,10 +614,7 @@ const LandingPage = () => {
 
             <div className="w-full lg:w-[60%] flex flex-col slide-in-right">
               <h3 className="text-3xl md:text-[2.6rem] font-light text-white leading-[1.25] tracking-[-0.025em]">
-                Instead of bouncing between complex engineering calculators, mapping software, and utility rate sheets,{" "}
-                <span className="text-[#FF6600] font-semibold transition-all duration-300 hover:text-orange-400">SolarScan AI</span>{" "}
-                provides a single AI-powered canvas for rooftop detection, layout design, and financial mapping.
-              </h3>
+                {t("landing.techBody").split("SolarScan AI")[0]}<span className="text-[#FF6600] font-semibold transition-all duration-300 hover:text-orange-400">SolarScan AI</span>{t("landing.techBody").split("SolarScan AI")[1]}</h3>
             </div>
           </div>
         </section>
@@ -612,21 +624,20 @@ const LandingPage = () => {
           <div className="max-w-[1200px] mx-auto px-6">
             <div className="mb-20 text-center">
               {/* Plain text label */}
-              <p className="text-[#FFAA00] font-mono text-[11px] uppercase tracking-[0.2em] mb-4">AI at the Core</p>
+              <p className="text-[#FFAA00] font-mono text-[11px] uppercase tracking-[0.2em] mb-4">{t("landing.aboutLabel")}</p>
               <h2 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight leading-[1.1] max-w-2xl mx-auto">
-                SolarScan AI is built from the ground up{" "}
-                <span className="text-[#FF6600]">for Indian rooftops.</span>
+                {t("landing.aboutHeading").replace("for Indian rooftops.", "")}<span className="text-[#FF6600]">for Indian rooftops.</span>
               </h2>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-0 max-w-4xl mx-auto">
               {[
-                { Icon: AIIcon, text: "Automated rooftop identification and boundary tracing via SolarNet AI neural networks" },
-                { Icon: SunPulseIcon, text: "Direct integration with NASA POWER database for geographical solar irradiance mapping" },
-                { Icon: ChartIcon, text: "Localized net metering utility tariff algorithms configured for Indian distribution licensees" },
-                { Icon: LocationPinIcon, text: "Automatic panel layout generation optimized to minimize shaded areas" },
-                { Icon: ZapIcon, text: "Real-time offset equations to gauge immediate CO₂ and environmental impacts" },
-                { Icon: FileIcon, text: "One-click exports for comprehensive PDF solar capability reports" },
+                { Icon: AIIcon,          text: t("landing.feature1") },
+                { Icon: SunPulseIcon,    text: t("landing.feature2") },
+                { Icon: ChartIcon,       text: t("landing.feature3") },
+                { Icon: LocationPinIcon, text: t("landing.feature4") },
+                { Icon: ZapIcon,         text: t("landing.feature5") },
+                { Icon: FileIcon,        text: t("landing.feature6") },
               ].map((item, idx) => (
                 <div
                   key={idx}
@@ -646,21 +657,24 @@ const LandingPage = () => {
         {/* ── Stats ────────────────────────────────────────── */}
         <section className="py-24 md:py-32 bg-[#0a0a0a] border-b border-white/5 text-center reveal-on-scroll">
           <div className="max-w-[1200px] mx-auto px-6">
-            <p className="text-[11px] font-mono text-neutral-700 uppercase tracking-[0.2em] mb-16">Real impact. Real numbers.</p>
+            <p className="text-sm text-neutral-400 mb-2">{t("landing.statsHeadingLabel")}</p>
+            <p className="text-[11px] font-mono text-neutral-700 uppercase tracking-[0.2em] mb-16">{t("landing.statsHeadingCaption")}</p>
             <div className="flex flex-col md:flex-row justify-center items-center gap-16 md:gap-0">
               <div className="flex-1 reveal-on-scroll">
                 <p className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-br from-[#FF6600] to-[#FFAA00] tracking-[-3px] leading-none">₹84K</p>
-                <p className="text-[11px] text-neutral-600 font-mono uppercase tracking-[0.16em] mt-5">average annual savings per home</p>
+                <p className="text-sm text-neutral-400 mt-3">{t("landing.statsSavingsLabel")}</p>
+                <p className="text-[11px] text-neutral-700 mt-1">{t("landing.statsSavingsCaption")}</p>
               </div>
               <div className="hidden md:block w-px h-24 bg-white/5 mx-8" />
               <div className="flex-1 reveal-on-scroll" style={{ transitionDelay: "80ms" }}>
-                <p className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-br from-[#FFAA00] to-[#FFD600] tracking-[-3px] leading-none">18.2T</p>
+                <p className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-br from-[#FFAA00] to-[#FFD600] tracking-[-3px] leading-none">{t("landing.statsCo2Value")}</p>
                 <p className="text-[11px] text-neutral-600 font-mono uppercase tracking-[0.16em] mt-5">CO₂ tons avoided annually</p>
               </div>
               <div className="hidden md:block w-px h-24 bg-white/5 mx-8" />
               <div className="flex-1 reveal-on-scroll" style={{ transitionDelay: "160ms" }}>
-                <p className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-br from-[#FF6600] to-amber-300 tracking-[-3px] leading-none">3min</p>
-                <p className="text-[11px] text-neutral-600 font-mono uppercase tracking-[0.16em] mt-5">full roof analysis time</p>
+                <p className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-br from-[#FF6600] to-amber-300 tracking-[-3px] leading-none">{t("landing.statsTimeValue")}</p>
+                <p className="text-sm text-neutral-400 mt-3">{t("landing.statsTimeLabel")}</p>
+                <p className="text-[11px] text-neutral-700 mt-1">{t("landing.statsTimeCaption")}</p>
               </div>
             </div>
           </div>
@@ -671,17 +685,17 @@ const LandingPage = () => {
           <div className="max-w-[1200px] mx-auto px-6">
             <div className="mb-20 text-center">
               {/* Plain text label */}
-              <p className="text-neutral-500 font-mono text-[11px] uppercase tracking-[0.2em] mb-4">How It Works</p>
+              <p className="text-neutral-500 font-mono text-[11px] uppercase tracking-[0.2em] mb-4">{t("landing.howLabel")}</p>
               <h2 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight leading-[1.1] max-w-lg mx-auto">
-                Three steps to your solar future.
+                {t("landing.howHeading")}
               </h2>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6">
               {[
-                { step: "01", title: "Find Your Roof", desc: "Enter your address or pincode. Our satellite imagery engine locates your property on the map instantly.", Icon: LocationPinIcon },
-                { step: "02", title: "Trace & Analyze", desc: "Draw your rooftop boundary. SolarNet AI computes panel geometry, shading losses, and solar yield from NASA irradiance data.", Icon: AIIcon },
-                { step: "03", title: "Get Your Report", desc: "Receive a detailed savings projection, PM Surya Ghar subsidy estimate, and payback period — all in under 3 minutes.", Icon: FileIcon },
+                { step: "01", title: t("landing.step1Title"), desc: t("landing.step1Desc"), Icon: LocationPinIcon },
+                { step: "02", title: t("landing.step2Title"), desc: t("landing.step2Desc"), Icon: AIIcon },
+                { step: "03", title: t("landing.step3Title"), desc: t("landing.step3Desc"), Icon: FileIcon },
               ].map((item, idx) => (
                 <div
                   key={idx}
@@ -698,7 +712,7 @@ const LandingPage = () => {
                   <h3 className="text-xl font-bold text-white mb-3 tracking-tight">{item.title}</h3>
                   <p className="text-sm text-neutral-600 leading-relaxed font-light">{item.desc}</p>
                   <div className="mt-6 flex items-center gap-2 text-xs text-[#FF6600]/0 group-hover:text-[#FF6600] transition-all duration-300 font-mono uppercase tracking-widest">
-                    <span>Start here</span>
+                    <span>{t("landing.stepStartHere")}</span>
                     <ArrowRight className="w-3.5 h-3.5 -translate-x-1 group-hover:translate-x-0 transition-transform" />
                   </div>
                 </div>
@@ -712,9 +726,9 @@ const LandingPage = () => {
           <div className="max-w-[1200px] mx-auto px-6 grid grid-cols-1 md:grid-cols-12 gap-12">
             <div className="md:col-span-4 flex flex-col gap-3 slide-in-left">
               {/* Plain text label */}
-              <p className="text-[#FF6600] font-mono text-[11px] uppercase tracking-[0.2em]">Regional Databases</p>
+              <p className="text-[#FF6600] font-mono text-[11px] uppercase tracking-[0.2em]">{t("landing.citiesLabel")}</p>
               <h3 className="text-2xl md:text-3xl font-bold text-white mt-2 leading-tight max-w-xs">
-                Solar models calibrated for major Indian urban centers.
+                {t("landing.citiesHeading")}
               </h3>
               <p className="text-sm text-neutral-600 font-light leading-relaxed mt-3 max-w-xs">
                 City-specific irradiance data, utility tariffs, and state incentive schemes — pre-loaded for accurate local analysis.
@@ -744,18 +758,17 @@ const LandingPage = () => {
           <div className="mb-24">
             <div className="mb-12">
               {/* Plain text label */}
-              <p className="text-[#FFAA00] font-mono text-[11px] uppercase tracking-[0.2em] mb-5">Knowledge Base</p>
+              <p className="text-[#FFAA00] font-mono text-[11px] uppercase tracking-[0.2em] mb-5">{t("landing.faqLabel")}</p>
               <h2 className="text-3xl md:text-5xl font-extrabold text-white leading-[1.1] tracking-tight">
-                Common queries from <br />
-                <span className="text-neutral-600 italic font-light">homeowners &amp; developers.</span>
+                {t("landing.faqHeading")}
               </h2>
             </div>
             <div className="border-t border-white/5">
               {[
-                { q: "How does SolarNet analyze my roof?", a: "Our deep learning neural networks analyze geographic coordinate tiles to identify boundaries, slopes, and shading from surrounding foliage or buildings, generating a high-fidelity rendering of your usable solar surface area." },
-                { q: "What is NASA POWER data?", a: "The NASA Prediction of Worldwide Energy Resources (POWER) project distributes solar irradiance data. We integrate this to assess localized daily and yearly solar radiation based on GPS coordinates." },
-                { q: "Are the savings calculations accurate?", a: "Calculations match local electricity utility tariff schedules (slab charges, fixed fees, and taxes) against net energy production predictions, making final estimations highly realistic." },
-                { q: "What is the PM Surya Ghar scheme?", a: "PM Surya Ghar: Muft Bijli Yojana is the Government of India's flagship rooftop solar subsidy scheme offering up to ₹78,000 for residential installations. SolarScan AI automatically calculates your applicable subsidy based on system capacity." },
+                { q: t("landing.faq1Q"), a: t("landing.faq1A") },
+                { q: t("landing.faq2Q"), a: t("landing.faq2A") },
+                { q: t("landing.faq3Q"), a: t("landing.faq3A") },
+                { q: t("landing.faq4Q"), a: t("landing.faq4A") },
               ].map((faq, index) => (
                 <div className="border-b border-white/5" key={index}>
                   <button
@@ -778,9 +791,9 @@ const LandingPage = () => {
 
         {/* ── CTA Section with Ambient Glow ─────────────────── */}
         <CTASection
-          title="Your rooftop is an untapped power station."
+          title={t("landing.ctaHeroTitle")}
           action={{
-            text: "Analyze Your Rooftop →",
+            text: t("landing.cta") + " \u2192",
             href: "/map",
             variant: "glow"
           }}
@@ -794,7 +807,7 @@ const LandingPage = () => {
                 <img src="/logo.png" alt="SolarScan AI Logo" className="w-12 h-12 object-contain" />
                 <span className="text-lg font-bold text-white">SUNPOWER <span className="font-serif italic font-light">LINK</span></span>
               </div>
-              <p className="text-neutral-600 text-sm leading-relaxed max-w-xs">The AI-native solar intelligence system for modern energy planning in India.</p>
+              <p className="text-neutral-600 text-sm leading-relaxed max-w-xs">{t("landing.footerTagline")}</p>
               <div className="flex space-x-4 text-neutral-700">
                 <a href="#" className="hover:text-[#FF6600] transition-colors"><Instagram className="w-5 h-5" /></a>
                 <a href="#" className="hover:text-[#FF6600] transition-colors"><Linkedin className="w-5 h-5" /></a>
@@ -828,8 +841,8 @@ const LandingPage = () => {
           <div className="py-8 flex flex-col md:flex-row justify-between items-center gap-6 text-xs text-neutral-700 font-mono">
             <span>© {new Date().getFullYear()} SolarScan AI. Rooftop solar analysis for India. All Rights Reserved.</span>
             <div className="flex space-x-6">
-              <button onClick={() => navigate("/privacy")} className="hover:text-[#FF6600] transition-colors bg-transparent border-none cursor-pointer p-0">Privacy Policy</button>
-              <button className="hover:text-[#FF6600] transition-colors bg-transparent border-none cursor-pointer p-0">Sitemap</button>
+              <button onClick={() => navigate("/privacy")} className="hover:text-[#FF6600] transition-colors bg-transparent border-none cursor-pointer p-0">{t("landing.footerPrivacy")}</button>
+              <button className="hover:text-[#FF6600] transition-colors bg-transparent border-none cursor-pointer p-0">{t("landing.footerSitemap")}</button>
             </div>
           </div>
 
@@ -847,7 +860,7 @@ const LandingPage = () => {
             onClick={() => navigate("/map")}
             className="btn-primary w-full py-3.5 bg-[#FF6600] text-black font-bold text-sm rounded-xl hover:bg-orange-500 transition-all active:scale-[0.98] border-none cursor-pointer flex items-center justify-center gap-1.5"
           >
-            <span>Analyze My Rooftop</span>
+            <span>{t("landing.mobileCta")}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
@@ -859,3 +872,5 @@ const LandingPage = () => {
 };
 
 export default LandingPage;
+
+
