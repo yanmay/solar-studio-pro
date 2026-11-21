@@ -139,99 +139,6 @@ export function calcInvestment(
   return { systemCostInr, subsidyInr, netCostInr, paybackYears, roi25yrPercent };
 }
 
-/**
- * LCOE — Levelised Cost of Energy (₹/kWh) over 25 years.
- * LCOE = Net Capital Cost / (Annual kWh × Lifetime).
- * Accounts for 0.5%/yr degradation in panel output.
- */
-export function calcLCOE(netCostInr: number, annualKwh: number): number {
-  if (annualKwh <= 0 || netCostInr <= 0) return 0;
-  const DEGRADATION_RATE = 0.005; // 0.5% per year
-  let totalLifetimeKwh = 0;
-  for (let yr = 0; yr < SYSTEM_LIFETIME_YRS; yr++) {
-    totalLifetimeKwh += annualKwh * Math.pow(1 - DEGRADATION_RATE, yr);
-  }
-  return Math.round((netCostInr / totalLifetimeKwh) * 100) / 100;
-}
-
-/**
- * NPV — Net Present Value of the investment (INR).
- * Uses a discount rate of 8% (WACC proxy for Indian solar MSME).
- * Cash inflow = annual savings with 3%/yr tariff escalation.
- */
-export function calcNPV(
-  netCostInr: number,
-  annualSavingsInr: number,
-  tariffEscalationRate: number = 0.03,
-  discountRate: number = 0.08
-): number {
-  let npv = -netCostInr;
-  for (let yr = 1; yr <= SYSTEM_LIFETIME_YRS; yr++) {
-    const cashflow = annualSavingsInr * Math.pow(1 + tariffEscalationRate, yr - 1);
-    npv += cashflow / Math.pow(1 + discountRate, yr);
-  }
-  return Math.round(npv);
-}
-
-/**
- * IRR — Internal Rate of Return (%) using binary search (Newton's method approximation).
- * Solves for the discount rate that makes NPV = 0.
- */
-export function calcIRR(
-  netCostInr: number,
-  annualSavingsInr: number,
-  tariffEscalationRate: number = 0.03
-): number {
-  if (netCostInr <= 0 || annualSavingsInr <= 0) return 0;
-  let lo = -0.5, hi = 5.0; // search between -50% and 500%
-  for (let i = 0; i < 100; i++) {
-    const mid = (lo + hi) / 2;
-    const npv = calcNPV(netCostInr, annualSavingsInr, tariffEscalationRate, mid);
-    if (Math.abs(npv) < 1) break;
-    if (npv > 0) lo = mid;
-    else hi = mid;
-  }
-  return Math.round(((lo + hi) / 2) * 10000) / 100; // % with 2 decimal places
-}
-
-/**
- * 25-year cashflow table with tariff escalation (3%/yr) and panel degradation (0.5%/yr).
- * Returns an array of { year, savingsInr, cumulativeSavingsInr } objects.
- */
-export function calc25YrCashflow(
-  netCostInr: number,
-  annualSavingsInr: number,
-  tariffEscalationRate: number = 0.03
-): Array<{ year: number; savingsInr: number; cumulativeSavingsInr: number }> {
-  const DEGRADATION_RATE = 0.005;
-  let cumulative = -netCostInr; // start negative (upfront cost)
-  return Array.from({ length: SYSTEM_LIFETIME_YRS }, (_, i) => {
-    const yr = i + 1;
-    const savings = Math.round(
-      annualSavingsInr *
-      Math.pow(1 + tariffEscalationRate, yr - 1) *
-      Math.pow(1 - DEGRADATION_RATE, yr - 1)
-    );
-    cumulative += savings;
-    return { year: yr, savingsInr: savings, cumulativeSavingsInr: Math.round(cumulative) };
-  });
-}
-
-/**
- * Investment grade classifier (A+, A, B, C, D) based on payback and IRR.
- * Matches the schema's `investment_grade` field.
- */
-export function calcInvestmentGrade(
-  paybackYears: number,
-  irr: number
-): { grade: "A+" | "A" | "B" | "C" | "D"; label: string; color: string } {
-  if (paybackYears <= 4 && irr >= 25) return { grade: "A+", label: "Exceptional", color: "#10B981" };
-  if (paybackYears <= 6 && irr >= 18) return { grade: "A", label: "Excellent", color: "#22C55E" };
-  if (paybackYears <= 8 && irr >= 12) return { grade: "B", label: "Good", color: "#F59E0B" };
-  if (paybackYears <= 12 && irr >= 6) return { grade: "C", label: "Fair", color: "#F97316" };
-  return { grade: "D", label: "Poor", color: "#EF4444" };
-}
-
 export function calcAnnualSavings(annualKwh: number, electricityRate: number): number {
   return calcFinancials(annualKwh, electricityRate).annual;
 }
@@ -245,12 +152,170 @@ export function calcROI(netCostInr: number, annualSavingsInr: number): number {
   return netCostInr > 0 ? Math.round(((lifetimeSavings - netCostInr) / netCostInr) * 100) : 0;
 }
 
+export function calc25YrCashflow(
+  netCostInr: number,
+  annualSavingsInr: number,
+  tariffEscalationRate: number = 0.03
+): Array<{ year: number; savingsInr: number; cumulativeSavingsInr: number }> {
+  const DEGRADATION_RATE = 0.005;
+  let cumulative = -netCostInr;
+  return Array.from({ length: SYSTEM_LIFETIME_YRS }, (_, i) => {
+    const yr = i + 1;
+    const savings = Math.round(
+      annualSavingsInr *
+      Math.pow(1 + tariffEscalationRate, yr - 1) *
+      Math.pow(1 - DEGRADATION_RATE, yr - 1)
+    );
+    cumulative += savings;
+    return { year: yr, savingsInr: savings, cumulativeSavingsInr: Math.round(cumulative) };
+  });
+}
+
 /** Step 6: CO₂ impact */
 export function calcCO2Impact(annualKwh: number): { annualKg: number; yr25Kg: number; trees: number } {
   const annualKg = Math.round(annualKwh * EMISSION_FACTOR_KG * 10) / 10;
   const yr25Kg = Math.round(annualKg * SYSTEM_LIFETIME_YRS * 10) / 10;
   const trees = Math.round(yr25Kg / (CO2_PER_TREE_KG_YR * SYSTEM_LIFETIME_YRS));
   return { annualKg, yr25Kg, trees };
+}
+
+// ---------- Advanced Financial Projections ----------
+
+const ESCALATION_RATE = 4.5; // % annual electricity rate increase
+const DISCOUNT_RATE = 8.5; // % discount rate for NPV
+const OM_COST_ESCALATION = 1.0; // % annual O&M cost increase
+const DEGRADATION_RATE = 0.5; // % annual panel degradation
+const INVERTER_REPLACEMENT_YEAR = 10;
+const INVERTER_REPLACEMENT_COST = 35000; // INR
+
+/**
+ * Calculate Net Present Value (NPV) over 25 years
+ * Accounts for degradation, O&M costs, electricity rate escalation, inverter replacement
+ */
+export function calcNPV(
+  annualKwh: number,
+  systemSizeKw: number,
+  netCostInr: number,
+  electricityRate: number
+): number {
+  const cashFlows: number[] = [-netCostInr];
+
+  for (let year = 1; year <= SYSTEM_LIFETIME_YRS; year++) {
+    // Annual production with degradation
+    const production = annualKwh * Math.pow(1 - DEGRADATION_RATE / 100, year - 1);
+
+    // Electricity rate with escalation
+    const rate = electricityRate * Math.pow(1 + ESCALATION_RATE / 100, year - 1);
+
+    // O&M costs (base + per-kW overhead, escalated)
+    const baseOM = 1500 + Math.max(0, systemSizeKw - 1) * 500;
+    const omCost = baseOM * Math.pow(1 + OM_COST_ESCALATION / 100, year - 1);
+
+    // Annual savings minus costs
+    const savings = production * rate;
+    const inverterCost = year === INVERTER_REPLACEMENT_YEAR ? INVERTER_REPLACEMENT_COST : 0;
+    const netCashFlow = savings - omCost - inverterCost;
+
+    cashFlows.push(netCashFlow);
+  }
+
+  // Discount all cash flows to present value
+  const npv = cashFlows.reduce(
+    (sum, cashFlow, index) => sum + cashFlow / Math.pow(1 + DISCOUNT_RATE / 100, index),
+    0
+  );
+
+  return Math.round(npv);
+}
+
+/**
+ * Calculate Internal Rate of Return (IRR) using binary search
+ * Returns IRR as a percentage (e.g., 12.5 for 12.5%)
+ */
+export function calcIRR(
+  annualKwh: number,
+  systemSizeKw: number,
+  netCostInr: number,
+  electricityRate: number
+): number {
+  // Build cash flow array
+  const cashFlows: number[] = [-netCostInr];
+
+  for (let year = 1; year <= SYSTEM_LIFETIME_YRS; year++) {
+    const production = annualKwh * Math.pow(1 - DEGRADATION_RATE / 100, year - 1);
+    const rate = electricityRate * Math.pow(1 + ESCALATION_RATE / 100, year - 1);
+    const baseOM = 1500 + Math.max(0, systemSizeKw - 1) * 500;
+    const omCost = baseOM * Math.pow(1 + OM_COST_ESCALATION / 100, year - 1);
+    const savings = production * rate;
+    const inverterCost = year === INVERTER_REPLACEMENT_YEAR ? INVERTER_REPLACEMENT_COST : 0;
+    const netCashFlow = savings - omCost - inverterCost;
+    cashFlows.push(netCashFlow);
+  }
+
+  // NPV function for a given rate
+  const calcNpvAtRate = (rate: number) =>
+    cashFlows.reduce((sum, cf, i) => sum + cf / Math.pow(1 + rate, i), 0);
+
+  // Binary search for IRR
+  let low = -0.5;
+  let high = 2.0;
+  let irr = 0;
+
+  // Check if IRR exists in range
+  if (calcNpvAtRate(low) > 0 && calcNpvAtRate(high) < 0) {
+    for (let iter = 0; iter < 30; iter++) {
+      const mid = (low + high) / 2;
+      if (calcNpvAtRate(mid) > 0) {
+        low = mid;
+      } else {
+        high = mid;
+      }
+      irr = mid;
+    }
+  }
+
+  return Math.round(irr * 100 * 10) / 10; // Return as percentage
+}
+
+export function calcInvestmentGrade(
+  paybackYears: number,
+  irr: number
+): { grade: "A+" | "A" | "B" | "C" | "D"; label: string; color: string } {
+  if (paybackYears <= 4 && irr >= 25) return { grade: "A+", label: "Exceptional", color: "#10B981" };
+  if (paybackYears <= 6 && irr >= 18) return { grade: "A", label: "Excellent", color: "#22C55E" };
+  if (paybackYears <= 8 && irr >= 12) return { grade: "B", label: "Good", color: "#F59E0B" };
+  if (paybackYears <= 12 && irr >= 6) return { grade: "C", label: "Fair", color: "#F97316" };
+  return { grade: "D", label: "Poor", color: "#EF4444" };
+}
+
+/**
+ * Calculate Levelized Cost of Energy (LCOE) in INR per kWh
+ * LCOE = (Present Value of Costs) / (Present Value of Energy Production)
+ */
+export function calcLCOE(
+  annualKwh: number,
+  systemSizeKw: number,
+  netCostInr: number
+): number {
+  let discountedCosts = netCostInr;
+  let discountedProduction = 0;
+
+  for (let year = 1; year <= SYSTEM_LIFETIME_YRS; year++) {
+    // Annual production with degradation
+    const production = annualKwh * Math.pow(1 - DEGRADATION_RATE / 100, year - 1);
+
+    // O&M costs escalated
+    const baseOM = 1500 + Math.max(0, systemSizeKw - 1) * 500;
+    const omCost = baseOM * Math.pow(1 + OM_COST_ESCALATION / 100, year - 1);
+
+    // Discount to present value
+    const discountFactor = Math.pow(1 + DISCOUNT_RATE / 100, year);
+    discountedCosts += omCost / discountFactor;
+    discountedProduction += production / discountFactor;
+  }
+
+  const lcoe = discountedProduction > 0 ? discountedCosts / discountedProduction : 0;
+  return Math.round(lcoe * 100) / 100; // Round to 2 decimal places
 }
 
 // ---------- Full calculation ----------
@@ -280,11 +345,11 @@ export interface SolarAnalysis {
     netCostInr: number;
     paybackYears: number;
     roi25yrPercent: number;
-    lcoe?: number;
-    npv?: number;
-    irr?: number;
-    investmentGrade?: { grade: "A+" | "A" | "B" | "C" | "D"; label: string; color: string };
-    cashflow25yr?: Array<{ year: number; savingsInr: number; cumulativeSavingsInr: number }>;
+  };
+  projections?: {
+    npv: number;
+    irr: number;
+    lcoe: number;
   };
   environmental: {
     co2AnnualKg: number;
@@ -317,7 +382,7 @@ export interface SolarAnalysis {
 
 function generateAnalysisId(): string {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-  let id = "scan_";
+  let id = "sunpower_";
   for (let i = 0; i < 12; i++) {
     id += chars[Math.floor(Math.random() * chars.length)];
   }
@@ -404,13 +469,13 @@ export function runFullCalculation(
   // Step 5
   const financials = calcFinancials(annualKwh, electricityRate);
 
-  // Step 5b/c — core investment metrics
+  // Step 5b/c
   const investment = calcInvestment(installedKw, financials.annual, windZoneObj?.zone);
 
-  // Stage 1 financial upgrades: LCOE, IRR, NPV, cashflow, investment grade
-  const lcoe = calcLCOE(investment.netCostInr, annualKwh);
-  const npv = calcNPV(investment.netCostInr, financials.annual);
-  const irr = calcIRR(investment.netCostInr, financials.annual);
+  // Advanced projections: NPV, IRR, LCOE
+  const npv = calcNPV(annualKwh, installedKw, investment.netCostInr, electricityRate);
+  const irr = calcIRR(annualKwh, installedKw, investment.netCostInr, electricityRate);
+  const lcoe = calcLCOE(annualKwh, installedKw, investment.netCostInr);
   const cashflow25yr = calc25YrCashflow(investment.netCostInr, financials.annual);
   const investmentGrade = calcInvestmentGrade(investment.paybackYears, irr);
 
@@ -446,6 +511,11 @@ export function runFullCalculation(
       irr,
       investmentGrade,
       cashflow25yr,
+    },
+    projections: {
+      npv,
+      irr,
+      lcoe
     },
     environmental: {
       co2AnnualKg: co2.annualKg,

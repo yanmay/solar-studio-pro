@@ -1,7 +1,7 @@
-﻿import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+// Router hooks removed — global AppShell now owns navigation chrome.
 import { useAuth } from "@/contexts/AuthContext";
-import { Loader2, User, Phone, Lock, ArrowLeft, ShieldCheck, CheckCircle2, KeyRound } from "lucide-react";
+import { Loader2, User, Phone, Lock, ShieldCheck, CheckCircle2, KeyRound } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 
@@ -13,11 +13,10 @@ export default function AccountSettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
   const [passwordSaving, setPasswordSaving] = useState(false);
-  const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
-    document.title = "Account Settings - SUNPOWER LINK";
+    document.title = "Account Settings — SUNPOWER LINK";
     if (profile) { setFullName(profile.full_name || ""); setPhone(profile.phone || ""); }
   }, [profile]);
 
@@ -58,33 +57,15 @@ export default function AccountSettingsPage() {
   const inputClass = "w-full px-4 py-3 rounded-xl text-xs text-white placeholder:text-white/20 border border-white/10 bg-white/[0.04] focus:outline-none focus:border-[#FF6600]/60 focus:ring-2 focus:ring-[#FF6600]/20 transition-all duration-150 font-mono";
 
   return (
-    <div className="professional-product-ui min-h-screen bg-[#050505] text-white font-sans antialiased pb-20 selection:bg-[#FF6600]/30 selection:text-white relative overflow-x-hidden">
+    <div className="text-white font-sans antialiased pb-20 selection:bg-[#FF6600]/30 selection:text-white relative overflow-x-hidden">
       {/* Background Glow Blobs */}
-      <div className="hidden" aria-hidden="true">
+      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         <div className="absolute top-[-15%] left-[-10%] w-[600px] h-[600px] rounded-full bg-[#FF6600]/5 blur-[140px]" />
         <div className="absolute bottom-[-10%] right-[-5%] w-[450px] h-[450px] rounded-full bg-emerald-500/3 blur-[120px]" />
       </div>
 
-      {/* Header */}
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#050505]/85 backdrop-blur-2xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3 group">
-          <img src="/logo.png" alt="SUNPOWER LINK logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
-            <span className="text-[15px] font-bold text-white tracking-tight">
-              SUNPOWER <span className="font-serif italic font-light text-[#FF6600]">LINK</span>
-            </span>
-          </Link>
-          <button
-            onClick={() => navigate("/")}
-            className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white/50 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-all duration-150 active:scale-[0.98] cursor-pointer"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Back to Home
-          </button>
-        </div>
-      </header>
-
       {/* Main Content */}
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 pt-10 relative z-10 space-y-8">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-10 relative z-10 space-y-8">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-[#FF6600] text-[10px] font-mono font-bold uppercase tracking-[0.12em] mb-3">
             <User className="w-3.5 h-3.5" />
@@ -177,7 +158,7 @@ export default function AccountSettingsPage() {
           <ShieldCheck className="w-4 h-4 text-emerald-400" />
           <span>Sessions encrypted via Supabase Auth Security</span>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

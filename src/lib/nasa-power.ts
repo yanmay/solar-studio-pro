@@ -17,13 +17,17 @@ export interface NASAPowerResponse {
 
 export interface IrradianceResult {
   peakSunHours: number;
-  source: "NASA_POWER" | "REGIONAL_FALLBACK";
+  source: "NASA_POWER" | "REGIONAL_FALLBACK" | "GOOGLE_SOLAR" | "NSRDB_IODC";
   region?: string;
   monthlyValues?: Record<string, number>;
   ws10m?: number;
   ws50m?: number;
   t2m?: number;
   t2m_monthly?: number[];
+  // Google Solar overrides (present only when source === "GOOGLE_SOLAR")
+  pitchDegrees?: number;
+  azimuthDegrees?: number;
+  computedShadingLoss?: number;
 }
 
 export interface MonthlyGHIResult {
@@ -35,6 +39,14 @@ export interface MonthlyGHIResult {
   ws50m?: number;
   t2m?: number;
   t2m_monthly?: number[];
+  // Provenance tag set by /api/solar-data. "GOOGLE_SOLAR" when Google coverage
+  // augments the NASA payload; "NSRDB_IODC" when NREL NSRDB (India) fully
+  // supplies the payload. Absent → plain NASA POWER.
+  source?: "GOOGLE_SOLAR" | "NSRDB_IODC";
+  google_psh?: number;
+  pitch_degrees?: number;
+  azimuth_degrees?: number;
+  shading_loss?: number;
 }
 
 // In-memory cache: key → { data, timestamp }
@@ -104,14 +116,34 @@ export async function fetchSolarIrradiance(lat: number, lng: number): Promise<Ir
         ? validValues.reduce((sum, v) => sum + v, 0) / validValues.length
         : 4.5; // regional fallback
 
+    // When /api/solar-data augmented the payload with Google Solar coverage,
+    // its live PSH / geometry / shading OVERRIDE the NASA-derived estimates.
+    // NASA's monthly profile, wind and temperature are always retained since
+    // Google supplies none of them.
+    const isGoogle = data.source === "GOOGLE_SOLAR" && typeof data.google_psh === "number";
+
+    // NSRDB IODC (India) supplies a real 12-month GHI array, so it rides the
+    // standard monthly-average path above — no google_psh-style PSH override.
+    // It only changes the provenance tag so the UI/PDF can label it correctly.
+    const isNsrdb = data.source === "NSRDB_IODC";
+
     const result: IrradianceResult = {
-      peakSunHours: Math.round(peakSunHours * 100) / 100,
-      source: "NASA_POWER",
+      peakSunHours: isGoogle
+        ? data.google_psh!
+        : Math.round(peakSunHours * 100) / 100,
+      source: isNsrdb ? "NSRDB_IODC" : isGoogle ? "GOOGLE_SOLAR" : "NASA_POWER",
       monthlyValues,
       ws10m: data.ws10m,
       ws50m: data.ws50m,
       t2m: data.t2m,
       t2m_monthly: data.t2m_monthly,
+      ...(isGoogle
+        ? {
+            pitchDegrees: data.pitch_degrees,
+            azimuthDegrees: data.azimuth_degrees,
+            computedShadingLoss: data.shading_loss,
+          }
+        : {}),
     };
 
     cache.set(key, { data: result, timestamp: Date.now() });

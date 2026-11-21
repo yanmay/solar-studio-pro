@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   TrendingUp,
@@ -69,7 +69,7 @@ export default function AdminPage() {
   const [loadingAlert, setLoadingAlert] = useState<string | null>(null);
 
   useEffect(() => {
-    document.title = "Admin Console - SUNPOWER LINK";
+    document.title = "Admin Console — SUNPOWER LINK";
   }, []);
 
   // Mock database statistics over date range
@@ -153,43 +153,31 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="professional-product-ui min-h-screen bg-[#050505] text-white antialiased flex flex-col relative overflow-x-hidden selection:bg-[#FF6600]/30 selection:text-white pb-20">
+    <div className="text-white font-sans antialiased flex flex-col relative overflow-x-hidden selection:bg-[#FF6600]/30 selection:text-white pb-20">
       {/* Background Ambient Glow */}
-      <div className="hidden" aria-hidden="true">
+      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         <div className="absolute top-[-15%] right-[-5%] w-[600px] h-[600px] rounded-full bg-[#FF6600]/5 blur-[140px]" />
       </div>
 
-      {/* Header */}
-      <header className="sticky top-0 z-50 backdrop-blur-2xl bg-[#050505]/85 border-b border-white/10 px-4 md:px-12 py-3">
-        <div className="max-w-[1280px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} className="flex items-center gap-3 group">
-          <img src="/logo.png" alt="SUNPOWER LINK logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
-            <span className="text-[15px] font-bold text-white tracking-tight">
-              SUNPOWER <span className="font-serif italic font-light text-[#FF6600]">LINK</span> <span className="font-mono text-xs text-white/40 font-normal">/ ADMIN</span>
-            </span>
-          </a>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate("/map")}
-              className="px-3.5 py-1.5 text-xs font-semibold text-white/60 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-all cursor-pointer"
-            >
-              Client App
-            </button>
-            <button
-              onClick={() => navigate("/installer/dashboard")}
-              className="px-3.5 py-1.5 text-xs font-bold text-black bg-[#FF6600] hover:bg-orange-500 rounded-xl transition-all cursor-pointer border-none shadow-lg shadow-[#FF6600]/20"
-            >
-              Installer Portal
-            </button>
-          </div>
-        </div>
-      </header>
-
       {/* Main Body */}
       <main className="max-w-[1280px] mx-auto w-full px-4 md:px-12 py-8 flex-1 space-y-6 relative z-10">
-        
-        {/* Title */}
+
+        {/* Admin cross-links — kept in-page since they aren't in the sidebar */}
+        <div className="flex items-center justify-end gap-3">
+          <button
+            onClick={() => navigate("/map")}
+            className="px-3.5 py-1.5 text-xs font-semibold text-white/60 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-all cursor-pointer"
+          >
+            Client App
+          </button>
+          <button
+            onClick={() => navigate("/installer/dashboard")}
+            className="px-3.5 py-1.5 text-xs font-bold text-black bg-[#FF6600] hover:bg-orange-500 rounded-xl transition-all cursor-pointer border-none shadow-lg shadow-[#FF6600]/20"
+          >
+            Installer Portal
+          </button>
+        </div>
+
         <section className="flex flex-col gap-1.5">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-white/5 border border-white/10 text-[#FF6600] text-xs font-mono w-fit">
             <ShieldCheck className="w-3.5 h-3.5" />

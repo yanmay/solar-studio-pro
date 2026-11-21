@@ -1,8 +1,6 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ArrowLeft,
-  ArrowRight,
   ShieldCheck,
   Search,
   CheckCircle2,
@@ -44,7 +42,7 @@ export default function PolicyTrackerPage() {
   const [compareB, setCompareB] = useState("Maharashtra");
 
   useEffect(() => {
-    document.title = "Policy Tracker - SUNPOWER LINK";
+    document.title = "Policy Tracker — SUNPOWER LINK";
     const meta = document.querySelector('meta[name="description"]');
     if (meta) {
       meta.setAttribute(
@@ -71,13 +69,10 @@ export default function PolicyTrackerPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#050505] text-white">
-        <SiteNavbar />
-        <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-6 font-mono">
-          <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-[#0A0A0A]/80 p-8">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#FF6600] border-t-transparent" />
-            <span className="text-xs uppercase tracking-widest text-white/50">Loading policy intelligence...</span>
-          </div>
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white font-mono">
+        <div className="flex flex-col items-center gap-4 bg-[#0A0A0A]/80 border border-white/10 p-10 rounded-3xl backdrop-blur-2xl">
+          <div className="w-10 h-10 border-2 border-t-transparent border-[#FF6600] animate-spin rounded-full"></div>
+          <span className="text-xs uppercase tracking-widest text-white/50">Fetching Policy Databases...</span>
         </div>
       </div>
     );
@@ -85,14 +80,15 @@ export default function PolicyTrackerPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-[#050505] text-white">
-        <SiteNavbar />
-        <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-6">
-          <div className="max-w-md space-y-4 text-center">
-            <h1 className="text-xl font-semibold">Policy intelligence is temporarily unavailable.</h1>
-            <p className="text-sm leading-relaxed text-white/50">You can continue to the analyzer while the state-policy database reconnects.</p>
-            <button onClick={() => window.location.reload()} className="h-11 rounded-xl border border-white/10 bg-white/5 px-5 text-sm font-semibold transition-[background-color,transform] duration-150 hover:bg-white/10 active:scale-[0.97]">Try again</button>
-          </div>
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white font-mono">
+        <div className="text-center space-y-4 bg-[#0A0A0A]/80 border border-white/10 p-10 rounded-3xl backdrop-blur-2xl">
+          <p className="text-red-400 text-sm">Error: {error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-5 py-2 text-xs font-bold bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 active:scale-95 transition-all cursor-pointer"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
@@ -124,13 +120,14 @@ export default function PolicyTrackerPage() {
   const stateB = states.find((s) => s.state === compareB) || states[1] || states[0];
 
   return (
-    <div className="professional-product-ui min-h-screen bg-[#050505] text-white font-sans antialiased overflow-x-hidden relative selection:bg-[#FF6600]/30 selection:text-white">
+    <div className="min-h-screen bg-[#050505] text-white font-sans antialiased overflow-x-hidden relative selection:bg-[#FF6600]/30 selection:text-white">
       {/* Background Glow Blobs */}
-      <div className="hidden" aria-hidden="true">
+      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         <div className="absolute top-[-15%] right-[-5%] w-[600px] h-[600px] rounded-full bg-[#FF6600]/5 blur-[140px]" />
-        <div className="absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] rounded-full bg-[#ff8b3d]/5 blur-[140px]" />
+        <div className="absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] rounded-full bg-emerald-500/3 blur-[140px]" />
       </div>
 
+      {/* Shared dark-glass top navigation */}
       <SiteNavbar />
 
       {/* Main Layout */}
@@ -144,7 +141,7 @@ export default function PolicyTrackerPage() {
           </div>
           <h1
             className="text-3xl md:text-5xl text-white leading-tight"
-            style={{ fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif", fontWeight: 600 }}
+            style={{ fontFamily: "'Calistoga', serif", fontWeight: 400 }}
           >
             State Solar Subsidies & <br className="hidden md:block" />
             <span className="text-[#FF6600]">Policy Tracker</span>

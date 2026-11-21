@@ -1,11 +1,11 @@
-﻿import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { encodeScanToUrl } from "@/lib/scan-url";
 import {
-  Loader2, HardDrive, Calendar, MapPin, Zap, ArrowRight, ArrowLeft,
-  ScanLine, BarChart3, Sun, Activity, Search
+  Loader2, HardDrive, Calendar, MapPin, Zap, ArrowRight,
+  ScanLine, BarChart3, Sun, Search
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -43,7 +43,7 @@ export default function MyScansPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    document.title = "My Scans - SUNPOWER LINK";
+    document.title = "My Scans — SUNPOWER LINK";
     if (!user) return;
     const fetchScans = async () => {
       if (!supabase) { setLoading(false); return; }
@@ -90,9 +90,9 @@ export default function MyScansPage() {
   const unlockedCount = scans.filter(s => s.is_full_unlocked).length;
 
   return (
-    <div className="professional-product-ui min-h-screen bg-[#050505] text-white antialiased pb-24 selection:bg-[#FF6600]/30 selection:text-white relative overflow-x-hidden">
+    <div className="text-white antialiased pb-24 selection:bg-[#FF6600]/30 selection:text-white relative overflow-x-hidden">
       {/* Ambient Glow Blobs — ui-ux-pro-max animated dark cinema */}
-      <div className="hidden" aria-hidden="true">
+      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         <div
           className="absolute top-[-15%] right-[-5%] w-[650px] h-[650px] rounded-full opacity-[0.07] blur-[140px]"
           style={{ background: "#FF6600", animation: "scansBlob1 20s ease-in-out infinite alternate" }}
@@ -118,36 +118,8 @@ export default function MyScansPage() {
         .scan-card:nth-child(6) { animation-delay: 300ms; }
       `}</style>
 
-      {/* ── Sticky Header ──────────────────────────────────────── */}
-      <header className="sticky top-0 z-30 border-b border-white/[0.08] bg-[#050505]/85 backdrop-blur-2xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3 group" aria-label="SUNPOWER LINK home">
-            <img src="/logo.png" alt="SUNPOWER LINK logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-105" />
-            <span className="text-[15px] font-bold text-white tracking-tight">
-              SUNPOWER <span className="font-['Calistoga',serif] italic font-normal text-[#FF6600]">LINK</span>
-            </span>
-          </Link>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate("/map")}
-              className="hidden sm:flex items-center gap-1.5 h-9 px-4 rounded-xl text-[11px] font-bold text-black transition-all active:scale-[0.97] cursor-pointer border-none shadow-lg shadow-[#FF6600]/20"
-              style={{ background: "linear-gradient(135deg,#FF6600 0%,#FF8C38 100%)", transition: `all 200ms ${EASING}` }}
-            >
-              <Zap className="w-3.5 h-3.5 fill-current" /> New Scan
-            </button>
-            <button
-              onClick={() => navigate("/")}
-              className="flex items-center gap-1.5 h-9 px-4 rounded-xl text-[11px] font-semibold text-white/60 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all active:scale-[0.97] cursor-pointer"
-              style={{ transition: `all 200ms ${EASING}` }}
-            >
-              <ArrowLeft className="w-3.5 h-3.5" /> Back
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* ── Main ───────────────────────────────────────────────── */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-10 relative z-10 space-y-8">
+      {/* ── Content ────────────────────────────────────────────── */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-10 relative z-10 space-y-8">
 
         {/* Page Title — Calistoga hero */}
         <section className="space-y-3">
@@ -318,7 +290,7 @@ export default function MyScansPage() {
             ))}
           </div>
         )}
-      </main>
+      </div>
     </div>
   );
 }

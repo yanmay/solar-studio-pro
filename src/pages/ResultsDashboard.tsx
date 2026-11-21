@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -13,8 +13,6 @@ import {
   Sparkles,
   ChevronRight,
   ShieldCheck,
-  User,
-  LogOut,
   LayoutDashboard,
   BarChart3,
   Settings
@@ -31,10 +29,8 @@ import {
 import { useScanStore } from "@/hooks/use-scan-store";
 import { useToast } from "@/hooks/use-toast";
 import { generatePDFReport } from "@/lib/pdf-generator";
-import { useAuth } from "@/contexts/AuthContext";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
-import { SiteNavbar } from "@/components/ui/site-navbar";
 import {
   Dialog,
   DialogContent,
@@ -192,7 +188,6 @@ const mockAnalysis = {
 export default function ResultsDashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user, signOut } = useAuth();
   const { fullAnalysis } = useScanStore();
 
   const [activeTab, setActiveTab] = useState("overview");
@@ -219,7 +214,7 @@ export default function ResultsDashboard() {
   const confidenceScore = isSample ? 0.91 : 0.84;
 
   useEffect(() => {
-    document.title = "Solar Scan Dashboard - SUNPOWER LINK";
+    document.title = "Solar Scan Dashboard — SUNPOWER LINK";
   }, []);
 
   // Generate 25 year timeline cash flow
@@ -297,67 +292,44 @@ export default function ResultsDashboard() {
   };
 
   return (
-    <div className="professional-product-ui min-h-screen bg-[#050505] text-white font-sans antialiased pb-16 relative selection:bg-[#FF6600]/30 selection:text-white">
+    <div className="text-white font-sans antialiased pb-16 pt-4 relative selection:bg-[#FF6600]/30 selection:text-white">
       {/* Background Ambient Glow */}
-      <div className="hidden" aria-hidden="true">
+      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         <div className="absolute top-[-15%] right-[-5%] w-[600px] h-[600px] rounded-full bg-[#FF6600]/5 blur-[140px]" />
         <div className="absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] rounded-full bg-emerald-500/3 blur-[140px]" />
       </div>
 
-      <SiteNavbar
-        actions={user ? (
-          <div className="flex h-11 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3">
-            <User className="h-4 w-4 text-white/55" />
-            <span className="hidden max-w-[120px] truncate text-xs text-white/55 sm:inline">{user.email}</span>
-            <button onClick={() => signOut()} className="grid h-8 w-8 place-items-center rounded-lg text-white/45 transition-colors duration-150 hover:bg-white/5 hover:text-white" aria-label="Sign out">
-              <LogOut className="h-4 w-4" />
-            </button>
-          </div>
-        ) : (
-          <button onClick={() => navigate("/auth/signin")} className="flex h-11 items-center rounded-xl border border-white/10 bg-white/[0.04] px-4 text-xs font-semibold text-white transition-[background-color,transform] duration-150 hover:bg-white/[0.08] active:scale-[0.97]">
-            Sign In
-          </button>
-        )}
-      />
-
       {/* Content Container */}
       <main className="max-w-[1280px] mx-auto px-4 md:px-8 mt-4 flex flex-col gap-6 relative z-10">
         
-        {/* Sample report banner — improved (#5) */}
+        {/* Sample report banner */}
         {isSample && (
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="rounded-2xl overflow-hidden"
-            style={{ background: "linear-gradient(135deg, rgba(255,102,0,0.12) 0%, rgba(43,212,160,0.08) 100%)", border: "1px solid rgba(255,102,0,0.25)" }}
+            className="bg-[#0A0A0A] border border-[#FF6600]/30 text-white px-5 py-3.5 text-xs rounded-2xl flex items-center justify-between gap-4 shadow-2xl backdrop-blur-2xl"
           >
-            <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5" style={{ background: "rgba(255,102,0,0.2)" }}>
-                  <Sparkles className="w-4 h-4 text-[#FF6600]" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-white mb-0.5">This is a sample report — not your actual roof</p>
-                  <p className="text-xs text-white/60">To see real savings and subsidy for your home, scan your own rooftop. Takes under 3 minutes.</p>
-                </div>
-              </div>
-              <button
-                onClick={() => navigate("/map")}
-                className="h-10 bg-[#FF6600] hover:bg-[#FF7A1A] text-black text-xs font-bold px-5 rounded-xl shrink-0 transition-all duration-150 active:scale-[0.97] cursor-pointer border-none flex items-center gap-1.5 whitespace-nowrap"
-              >
-                Analyze My Roof <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+            <div className="flex items-center gap-2.5">
+              <Sparkles className="w-4 h-4 text-[#FF6600] shrink-0 animate-pulse" />
+              <span className="text-white/80">Viewing <strong className="text-white font-bold">Sample Solar Report</strong>. Launch a custom rooftop scan to analyze your own property.</span>
             </div>
+            <button
+              onClick={() => navigate("/map")}
+              className="bg-[#FF6600] hover:bg-orange-500 text-black text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-xl shrink-0 transition-all active:scale-95 cursor-pointer border-none shadow-lg shadow-[#FF6600]/20"
+            >
+              Scan Now
+            </button>
           </motion.div>
         )}
+
         {/* Title */}
         <section className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2 text-xs font-mono text-white/50">
             <MapPin className="w-3.5 h-3.5 text-[#FF6600]" />
             <span>{analysis.location?.label || "Selected Roof Location"}</span>
           </div>
-          <h1 className="text-2xl md:text-4xl font-semibold text-white">
-            Sample rooftop solar report
+          <h1 className="text-2xl md:text-4xl font-extrabold text-white tracking-tight">
+            Rooftop Solar Diagnostic <span className="text-[#FF6600] font-serif italic font-light">Dashboard</span>
           </h1>
         </section>
 
@@ -682,4 +654,3 @@ export default function ResultsDashboard() {
     </div>
   );
 }
-

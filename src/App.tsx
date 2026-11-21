@@ -11,6 +11,8 @@ import { trackPageView } from "./lib/analytics";
 import { AuthProvider } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { captureReferrerCode } from "./lib/referrals";
+import { AppLayout } from "./components/shell/AppLayout";
+import { CommandPalette } from "./components/shell/CommandPalette";
 import gsap from "gsap";
 
 // Load Plausible script once (guarded by env var)
@@ -35,7 +37,7 @@ function RouteTracker() {
   const loc = useLocation();
   useEffect(() => {
     trackPageView(loc.pathname);
-    
+
     // Capture referral query parameter
     const params = new URLSearchParams(loc.search);
     captureReferrerCode(params);
@@ -104,35 +106,38 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <a href="#app-content" className="fixed left-4 top-4 z-[200] -translate-y-20 rounded-lg bg-[#ff6600] px-4 py-2 text-sm font-semibold text-black transition-transform focus:translate-y-0">
-            Skip to content
-          </a>
           <RouteTracker />
           <RouteMotion>
             <Suspense fallback={<RouteFallback />}>
               <Routes>
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/map" element={<MapPage />} />
-              <Route path="/results" element={<ResultsPage />} />
-              <Route path="/privacy" element={<PrivacyPage />} />
-              <Route path="/market-insights" element={<MarketInsightsPage />} />
-              <Route path="/policy-tracker" element={<PolicyTrackerPage />} />
-              <Route path="/auth/signin" element={<SignInPage />} />
-              <Route path="/auth/signup" element={<SignUpPage />} />
-              <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
-              <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
-              <Route path="/my-scans" element={<ProtectedRoute><MyScansPage /></ProtectedRoute>} />
-              <Route path="/settings" element={<ProtectedRoute><AccountSettingsPage /></ProtectedRoute>} />
-              <Route path="/dashboard" element={<ResultsDashboard />} />
-              <Route path="/installer/signup" element={<InstallerSignup />} />
-              <Route path="/installer/dashboard" element={<InstallerDashboard />} />
-              <Route path="/installer/lead/:leadId" element={<InstallerLeadDetail />} />
-              <Route path="/developers/docs" element={<ApiDocs />} />
-              <Route path="/admin" element={<AdminPage />} />
-              <Route path="*" element={<NotFound />} />
+                <Route path="/" element={<LandingPage />} />
+                <Route path="/map" element={<MapPage />} />
+                <Route path="/results" element={<ResultsPage />} />
+                <Route path="/privacy" element={<PrivacyPage />} />
+                <Route path="/market-insights" element={<MarketInsightsPage />} />
+                <Route path="/policy-tracker" element={<PolicyTrackerPage />} />
+                <Route path="/auth/signin" element={<SignInPage />} />
+                <Route path="/auth/signup" element={<SignUpPage />} />
+                <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
+
+                {/* App cluster — one shared shell (sidebar + top bar + palette). */}
+                <Route element={<AppLayout />}>
+                  <Route path="/dashboard" element={<ResultsDashboard />} />
+                  <Route path="/my-scans" element={<ProtectedRoute><MyScansPage /></ProtectedRoute>} />
+                  <Route path="/settings" element={<ProtectedRoute><AccountSettingsPage /></ProtectedRoute>} />
+                  <Route path="/admin" element={<AdminPage />} />
+                </Route>
+
+                <Route path="/installer/signup" element={<InstallerSignup />} />
+                <Route path="/installer/dashboard" element={<InstallerDashboard />} />
+                <Route path="/installer/leads/:id" element={<ProtectedRoute><InstallerLeadDetail /></ProtectedRoute>} />
+                <Route path="/api/docs" element={<ApiDocs />} />
+                <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
           </RouteMotion>
+          <CommandPalette />
           <PwaInstallPrompt />
         </BrowserRouter>
       </TooltipProvider>
