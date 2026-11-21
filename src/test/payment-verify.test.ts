@@ -7,7 +7,7 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import { describe, it, expect } from "vitest";
 
-const VERIFY_API = resolve(__dirname, "../../api/payment/verify.ts");
+const VERIFY_API = resolve(__dirname, "../../api/_payment/verify.ts");
 
 describe("BUG-003: scan_hash destructuring in payment verify", () => {
   it("verify.ts must destructure scan_hash from request body", () => {

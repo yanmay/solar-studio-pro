@@ -6,7 +6,7 @@ from unittest.mock import patch
 import joblib
 
 
-MODULE_PATH = Path(__file__).with_name("3d-profile.py")
+MODULE_PATH = Path(__file__).resolve().parent.parent / "api" / "3d-profile.py"
 SPEC = importlib.util.spec_from_file_location("three_d_profile", MODULE_PATH)
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)

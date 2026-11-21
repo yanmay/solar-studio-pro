@@ -1,5 +1,10 @@
 import * as Sentry from '@sentry/node';
 import { getSupabaseAdmin, ensureSession } from './_utils/supabase.js';
+import distributeHandler from './_leads/distribute.js';
+import purchasedHandler from './_leads/purchased.js';
+import updateAssignmentHandler from './_leads/update-assignment.js';
+
+export { calculateLeadPrice } from './_leads/distribute.js';
 
 if (process.env.VITE_SENTRY_DSN) {
   Sentry.init({ dsn: process.env.VITE_SENTRY_DSN, environment: process.env.NODE_ENV || 'production' });
@@ -9,7 +14,7 @@ export const config = {
   runtime: 'nodejs',
 };
 
-export default async function handler(req: Request): Promise<Response> {
+async function leadCaptureHandler(req: Request): Promise<Response> {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
@@ -85,4 +90,22 @@ export default async function handler(req: Request): Promise<Response> {
       headers: { 'Content-Type': 'application/json' },
     });
   }
+}
+
+export default async function handler(req: Request): Promise<Response> {
+  const url = new URL(req.url, 'http://localhost');
+  const routeParam = url.searchParams.get('_route') || '';
+  const pathname = url.pathname;
+
+  if (routeParam === 'distribute' || pathname.endsWith('/distribute')) {
+    return distributeHandler(req);
+  }
+  if (routeParam === 'installer/purchased' || routeParam === 'purchased' || pathname.endsWith('/purchased')) {
+    return purchasedHandler(req);
+  }
+  if (routeParam === 'installer/update-assignment' || routeParam === 'update-assignment' || pathname.endsWith('/update-assignment')) {
+    return updateAssignmentHandler(req);
+  }
+
+  return leadCaptureHandler(req);
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calculateLeadPrice } from "../../api/leads/distribute";
+import { calculateLeadPrice } from "../../api/_leads/distribute";
 
 describe("Lead Marketplace Pricing and Distribution", () => {
   it("should calculate correct Lead Pricing based on homeowner city tiers", () => {

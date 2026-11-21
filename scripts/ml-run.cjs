@@ -5,7 +5,7 @@ const { spawnSync } = require("node:child_process");
 const mode = process.argv[2] || "test";
 const extraArgs = process.argv.slice(3);
 const argsByMode = {
-  test: ["-m", "unittest", "ml.test_train_3d_quality_model", "api.test_3d_profile"],
+  test: ["-m", "unittest", "ml.test_train_3d_quality_model", "ml.test_3d_profile"],
   train: ["ml/train_3d_quality_model.py"],
   online: ["ml/train_3d_quality_model.py", "--online"],
   validate: ["ml/train_3d_quality_model.py", "--validate-artifact", "ml/artifacts/3d_quality_model.joblib"],

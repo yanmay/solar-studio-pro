@@ -599,16 +599,16 @@ const MapPage = () => {
     });
 
     const esriSat = L.tileLayer(
-      "/api/map-tile?layer=satellite&z={z}&x={x}&y={y}",
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
       { attribution: "Tiles &copy; Esri", maxNativeZoom: 19, maxZoom: 21, updateWhenZooming: false }
     );
     const esriLabels = L.tileLayer(
-      "/api/map-tile?layer=labels&z={z}&x={x}&y={y}",
+      "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
       { maxNativeZoom: 19, maxZoom: 21, opacity: 0.85, pane: "overlayPane", updateWhenZooming: false }
     );
     const street = L.tileLayer(
-      "/api/map-tile?layer=street&z={z}&x={x}&y={y}",
-      { attribution: "Â© OpenStreetMap contributors", maxZoom: 20 },
+      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      { attribution: "&copy; OpenStreetMap contributors", maxZoom: 20 },
     );
     const hybrid = L.layerGroup([esriSat, esriLabels]) as unknown as L.TileLayer;
     basemapLayersRef.current = { satellite: esriSat, hybrid, street };

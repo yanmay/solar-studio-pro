@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import solarEstimateHandler from "../../api/v1/solar-estimate";
-import subsidyCheckHandler from "../../api/v1/subsidy-check";
-import validateRoofHandler from "../../api/v1/validate-roof";
+import solarEstimateHandler from "../../api/_v1/solar-estimate";
+import subsidyCheckHandler from "../../api/_v1/subsidy-check";
+import validateRoofHandler from "../../api/_v1/validate-roof";
 
 describe("Solar Loan Underwriting Public API Endpoints", () => {
   it("should deny access if X-API-Key is missing or invalid", async () => {

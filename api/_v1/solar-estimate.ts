@@ -1,4 +1,4 @@
-import { calculateLeadPrice } from "../leads/distribute.js";
+import { calculateLeadPrice } from "../_leads/distribute.js";
 
 export const config = {
   runtime: 'nodejs',

@@ -7,7 +7,7 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import { describe, it, expect } from "vitest";
 
-const STATUS_API = resolve(__dirname, "../../api/payment/status.ts");
+const STATUS_API = resolve(__dirname, "../../api/_payment/status.ts");
 
 describe("BUG-007: payment/status must check analysis_sessions as fallback", () => {
   it("status.ts must query analysis_sessions table", () => {
