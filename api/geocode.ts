@@ -1,13 +1,10 @@
 import * as Sentry from '@sentry/node';
 import { checkRateLimit } from "./_utils/rate-limit.js";
+import { toNodeHandler } from "./_utils/vercel-node.js";
 
 if (process.env.VITE_SENTRY_DSN) {
   Sentry.init({ dsn: process.env.VITE_SENTRY_DSN, environment: process.env.NODE_ENV || 'production' });
 }
-
-export const config = {
-  runtime: "nodejs",
-};
 
 interface GoogleGeocodingResult {
   geometry: {
@@ -31,7 +28,7 @@ interface GoogleGeocodingResponse {
   error_message?: string;
 }
 
-export default async function handler(req: Request): Promise<Response> {
+async function handler(req: Request): Promise<Response> {
   if (req.method !== "GET") {
     return new Response(JSON.stringify({ error: "Method not allowed. Use GET." }), {
       status: 405,
@@ -149,18 +146,97 @@ export default async function handler(req: Request): Promise<Response> {
 
   // Force TypeScript type assertion that q is string from this point forward
   const queryStr = q as string;
+  const limitParam = Math.min(Math.max(parseInt(searchParams.get("limit") || "1", 10) || 1, 1), 10);
 
   async function fetchNominatimGeocode(queryStr: string): Promise<Response | null> {
     try {
+      const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(queryStr.trim())}&limit=${limitParam}&lang=en`;
+      const pRes = await fetch(photonUrl, {
+        headers: { "User-Agent": "SolarScanAIApp/1.0" },
+      });
+      if (pRes.ok) {
+        const pData = await pRes.json();
+        const features = Array.isArray(pData?.features) ? pData.features : [];
+        if (features.length > 0) {
+          if (limitParam > 1) {
+            const list = features
+              .map((feat: any, idx: number) => {
+                const coords = feat.geometry?.coordinates;
+                if (!Array.isArray(coords) || coords.length < 2) return null;
+                const p = feat.properties || {};
+                const parts = Array.from(
+                  new Set([p.name, p.street, p.locality || p.district, p.city, p.state, p.country].filter(Boolean))
+                );
+                return {
+                  place_id: p.osm_id ? `${p.osm_type || "W"}-${p.osm_id}` : `photon-${idx}`,
+                  display_name: parts.join(", ") || queryStr,
+                  lat: String(coords[1]),
+                  lon: String(coords[0]),
+                  type: p.osm_value || p.type || "place",
+                  ...(p.state ? { address: { state: p.state } } : {}),
+                };
+              })
+              .filter(Boolean);
+            if (list.length > 0) {
+              return new Response(JSON.stringify(list), {
+                status: 200,
+                headers: {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "public, max-age=3600",
+                },
+              });
+            }
+          } else {
+            const first = features[0];
+            const coords = first.geometry?.coordinates;
+            if (Array.isArray(coords) && coords.length >= 2) {
+              const p = first.properties || {};
+              const parts = Array.from(
+                new Set([p.name, p.street, p.locality || p.district, p.city, p.state, p.country].filter(Boolean))
+              );
+              return new Response(
+                JSON.stringify({
+                  lat: coords[1],
+                  lng: coords[0],
+                  formatted_address: parts.join(", ") || queryStr,
+                  place_id: String(p.osm_id || "photon-0"),
+                  state: p.state || undefined,
+                }),
+                {
+                  status: 200,
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Cache-Control": "public, max-age=3600",
+                  },
+                }
+              );
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Photon geocoding fallback failed:", e);
+    }
+
+    try {
       const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
         queryStr.trim()
-      )}&format=json&addressdetails=1&limit=1&accept-language=en`;
+      )}&format=json&addressdetails=1&limit=${limitParam}&accept-language=en`;
       const res = await fetch(nominatimUrl, {
         headers: { "User-Agent": "SolarScanAIApp/1.0" },
       });
       if (res.ok) {
         const nomData = await res.json();
         if (nomData && nomData.length > 0) {
+          if (limitParam > 1) {
+            return new Response(JSON.stringify(nomData), {
+              status: 200,
+              headers: {
+                "Content-Type": "application/json",
+                "Cache-Control": "public, max-age=3600",
+              },
+            });
+          }
           const first = nomData[0];
           return new Response(
             JSON.stringify({
@@ -273,4 +349,6 @@ export default async function handler(req: Request): Promise<Response> {
     );
   }
 }
+
+export default toNodeHandler(handler);
 

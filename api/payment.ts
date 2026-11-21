@@ -2,12 +2,9 @@ import createOrderHandler from './_payment/create-order.js';
 import verifyHandler from './_payment/verify.js';
 import statusHandler from './_payment/status.js';
 import restoreHandler from './_payment/restore.js';
+import { toNodeHandler } from './_utils/vercel-node.js';
 
-export const config = {
-  runtime: 'nodejs',
-};
-
-export default async function handler(req: Request): Promise<Response> {
+async function handler(req: Request): Promise<Response> {
   const url = new URL(req.url, 'http://localhost');
   const routeParam = url.searchParams.get('_route') || '';
   const pathname = url.pathname;
@@ -30,3 +27,5 @@ export default async function handler(req: Request): Promise<Response> {
     headers: { 'Content-Type': 'application/json' },
   });
 }
+
+export default toNodeHandler(handler);

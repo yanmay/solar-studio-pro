@@ -1,16 +1,13 @@
 import * as Sentry from "@sentry/node";
 import { checkRateLimit } from "./_utils/rate-limit.js";
 import { getSupabaseAdmin } from "./_utils/supabase.js";
+import { toNodeHandler } from "./_utils/vercel-node.js";
 import { augmentPayloadWithGoogleSolar } from "../src/lib/google-solar";
 import {
   fetchNsrdbIodc,
   isNsrdbEnabled,
   isWithinIodcCoverage,
 } from "../src/lib/nsrdb-iodc";
-
-export const config = {
-  runtime: "nodejs",
-};
 
 interface NASAPowerResponse {
   properties: {
@@ -30,7 +27,7 @@ if (process.env.VITE_SENTRY_DSN) {
   });
 }
 
-export default async function handler(req: Request): Promise<Response> {
+async function handler(req: Request): Promise<Response> {
   if (req.method !== "GET") {
     return new Response(JSON.stringify({ error: "Method not allowed. Use GET." }), {
       status: 405,
@@ -360,4 +357,6 @@ export default async function handler(req: Request): Promise<Response> {
     );
   }
 }
+
+export default toNodeHandler(handler);
 

@@ -1,12 +1,9 @@
 import solarEstimateHandler from './_v1/solar-estimate.js';
 import subsidyCheckHandler from './_v1/subsidy-check.js';
 import validateRoofHandler from './_v1/validate-roof.js';
+import { toNodeHandler } from './_utils/vercel-node.js';
 
-export const config = {
-  runtime: 'nodejs',
-};
-
-export default async function handler(req: Request): Promise<Response> {
+async function handler(req: Request): Promise<Response> {
   const url = new URL(req.url, 'http://localhost');
   const routeParam = url.searchParams.get('_route') || '';
   const pathname = url.pathname;
@@ -26,3 +23,5 @@ export default async function handler(req: Request): Promise<Response> {
     headers: { 'Content-Type': 'application/json' },
   });
 }
+
+export default toNodeHandler(handler);

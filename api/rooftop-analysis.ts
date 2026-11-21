@@ -1,4 +1,5 @@
 import { checkRateLimit } from './_utils/rate-limit.js';
+import { toNodeHandler } from './_utils/vercel-node.js';
 
 type Point = { lat: number; lng: number };
 
@@ -10,7 +11,7 @@ function validPolygon(vertices: unknown): vertices is Point[] {
   });
 }
 
-export default async function handler(req: Request): Promise<Response> {
+async function handler(req: Request): Promise<Response> {
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   const { allowed } = await checkRateLimit(req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown', 'rooftop-analysis', 10, 3600);
@@ -61,3 +62,5 @@ export default async function handler(req: Request): Promise<Response> {
   }
   return json({ ...data, status: 'complete', provider: 'segmentation_model' });
 }
+
+export default toNodeHandler(handler);

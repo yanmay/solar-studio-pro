@@ -1,6 +1,4 @@
-export const config = {
-  runtime: "nodejs",
-};
+import { toNodeHandler } from "./_utils/vercel-node.js";
 
 const providers = {
   satellite: (z: number, x: number, y: number) =>
@@ -13,7 +11,7 @@ const providers = {
 
 type Layer = keyof typeof providers;
 
-export default async function handler(req: Request): Promise<Response> {
+async function handler(req: Request): Promise<Response> {
   if (req.method !== "GET") {
     return Response.json({ error: "Method not allowed" }, { status: 405 });
   }
@@ -48,3 +46,5 @@ export default async function handler(req: Request): Promise<Response> {
     return Response.json({ error: "Tile provider unavailable" }, { status: 502 });
   }
 }
+
+export default toNodeHandler(handler);

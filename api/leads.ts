@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/node';
 import { getSupabaseAdmin, ensureSession } from './_utils/supabase.js';
+import { toNodeHandler } from './_utils/vercel-node.js';
 import distributeHandler from './_leads/distribute.js';
 import purchasedHandler from './_leads/purchased.js';
 import updateAssignmentHandler from './_leads/update-assignment.js';
@@ -9,10 +10,6 @@ export { calculateLeadPrice } from './_leads/distribute.js';
 if (process.env.VITE_SENTRY_DSN) {
   Sentry.init({ dsn: process.env.VITE_SENTRY_DSN, environment: process.env.NODE_ENV || 'production' });
 }
-
-export const config = {
-  runtime: 'nodejs',
-};
 
 async function leadCaptureHandler(req: Request): Promise<Response> {
   if (req.method !== 'POST') {
@@ -92,7 +89,7 @@ async function leadCaptureHandler(req: Request): Promise<Response> {
   }
 }
 
-export default async function handler(req: Request): Promise<Response> {
+async function handler(req: Request): Promise<Response> {
   const url = new URL(req.url, 'http://localhost');
   const routeParam = url.searchParams.get('_route') || '';
   const pathname = url.pathname;
@@ -109,3 +106,5 @@ export default async function handler(req: Request): Promise<Response> {
 
   return leadCaptureHandler(req);
 }
+
+export default toNodeHandler(handler);

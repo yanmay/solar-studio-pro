@@ -1,8 +1,5 @@
 import { checkRateLimit } from "./_utils/rate-limit.js";
-
-export const config = {
-  runtime: "nodejs",
-};
+import { toNodeHandler } from "./_utils/vercel-node.js";
 
 interface AutocompletePayload {
   input?: string;
@@ -18,11 +15,54 @@ interface LocationSuggestion {
   address?: { state?: string };
 }
 
-async function fetchFallbackSuggestions(input: string): Promise<LocationSuggestion[]> {
+async function fetchPhotonSuggestions(
+  input: string,
+  mapCenter?: { lat?: number; lng?: number },
+): Promise<LocationSuggestion[]> {
+  try {
+    let url = `https://photon.komoot.io/api/?q=${encodeURIComponent(input)}&limit=6&lang=en`;
+    if (typeof mapCenter?.lat === "number" && typeof mapCenter?.lng === "number") {
+      url += `&lat=${mapCenter.lat.toFixed(4)}&lon=${mapCenter.lng.toFixed(4)}`;
+    }
+    const response = await fetch(url, {
+      headers: { "User-Agent": "SolarScanAI/1.0" },
+    });
+    if (!response.ok) return [];
+    const data = await response.json();
+    if (!Array.isArray(data?.features)) return [];
+    return data.features
+      .map((feat: any, idx: number) => {
+        const coords = feat.geometry?.coordinates;
+        if (!Array.isArray(coords) || coords.length < 2) return null;
+        const p = feat.properties || {};
+        const parts = [p.name, p.street, p.locality || p.district, p.city, p.state, p.country].filter(Boolean);
+        const deduped = Array.from(new Set(parts));
+        return {
+          place_id: p.osm_id ? `${p.osm_type || "W"}-${p.osm_id}` : `photon-${idx}`,
+          display_name: deduped.join(", ") || input,
+          lat: String(coords[1]),
+          lon: String(coords[0]),
+          type: p.osm_value || p.type || "place",
+          ...(p.state ? { address: { state: p.state } } : {}),
+        } as LocationSuggestion;
+      })
+      .filter(Boolean) as LocationSuggestion[];
+  } catch {
+    return [];
+  }
+}
+
+async function fetchFallbackSuggestions(
+  input: string,
+  mapCenter?: { lat?: number; lng?: number },
+): Promise<LocationSuggestion[]> {
+  const photonResults = await fetchPhotonSuggestions(input, mapCenter);
+  if (photonResults.length > 0) return photonResults;
+
   try {
     const response = await fetch(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(input)}&format=json&addressdetails=1&limit=6&accept-language=en`,
-      { headers: { "User-Agent": "SunPowerLinkSolarApp/1.0" } },
+      { headers: { "User-Agent": "SolarScanAI/1.0" } },
     );
     if (!response.ok) return [];
     const data = await response.json();
@@ -40,7 +80,7 @@ async function fetchFallbackSuggestions(input: string): Promise<LocationSuggesti
   }
 }
 
-export default async function handler(req: Request): Promise<Response> {
+async function handler(req: Request): Promise<Response> {
   if (req.method !== "POST") {
     return Response.json({ error: "Method not allowed. Use POST." }, { status: 405 });
   }
@@ -117,8 +157,10 @@ export default async function handler(req: Request): Promise<Response> {
       type: "place",
     })).filter((suggestion) => suggestion.lat !== "0" && suggestion.lon !== "0");
 
-    return Response.json(suggestions.length > 0 ? suggestions : await fetchFallbackSuggestions(input));
+    return Response.json(suggestions.length > 0 ? suggestions : await fetchFallbackSuggestions(input, payload.mapCenter));
   } catch {
-    return Response.json(await fetchFallbackSuggestions(input));
+    return Response.json(await fetchFallbackSuggestions(input, payload.mapCenter));
   }
 }
+
+export default toNodeHandler(handler);
