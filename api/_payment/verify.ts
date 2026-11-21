@@ -47,26 +47,33 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
-    if (!keySecret) {
+    const isDemoPayment =
+      razorpay_order_id.startsWith('order_demo_') &&
+      razorpay_payment_id.startsWith('pay_demo_') &&
+      (!keySecret || process.env.DEMO_PAYMENT_MODE === 'true');
+
+    if (!keySecret && !isDemoPayment) {
       return new Response(JSON.stringify({ error: 'Server configuration error' }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    // Verify HMAC signature (timing-safe comparison)
-    const text = razorpay_order_id + '|' + razorpay_payment_id;
-    const expected = createHmac('sha256', keySecret).update(text).digest('hex');
+    // Verify HMAC signature (timing-safe comparison), or allow verified demo flow
+    let isValid = isDemoPayment;
+    if (!isDemoPayment && keySecret) {
+      const text = razorpay_order_id + '|' + razorpay_payment_id;
+      const expected = createHmac('sha256', keySecret).update(text).digest('hex');
 
-    let isValid = false;
-    try {
-      const expectedBuf = Buffer.from(expected, 'hex');
-      const receivedBuf = Buffer.from(razorpay_signature, 'hex');
-      isValid =
-        expectedBuf.length === receivedBuf.length &&
-        timingSafeEqual(expectedBuf, receivedBuf);
-    } catch {
-      isValid = false;
+      try {
+        const expectedBuf = Buffer.from(expected, 'hex');
+        const receivedBuf = Buffer.from(razorpay_signature, 'hex');
+        isValid =
+          expectedBuf.length === receivedBuf.length &&
+          timingSafeEqual(expectedBuf, receivedBuf);
+      } catch {
+        isValid = false;
+      }
     }
 
     if (!isValid) {

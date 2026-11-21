@@ -51,12 +51,20 @@ export default async function handler(req: Request): Promise<Response> {
       : 99900;
     const keyId = process.env.RAZORPAY_KEY_ID;
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    const isDemoMode = !keyId || !keySecret || process.env.DEMO_PAYMENT_MODE === 'true';
 
-    if (!keyId || !keySecret) {
+    if (isDemoMode) {
+      const demoOrderId = `order_demo_${Date.now()}`;
       return new Response(
-        JSON.stringify({ error: 'Payment service credentials missing on server' }),
+        JSON.stringify({
+          orderId: demoOrderId,
+          amount,
+          currency: 'INR',
+          keyId: 'rzp_test_demo',
+          demoMode: true,
+        }),
         {
-          status: 500,
+          status: 200,
           headers: { 'Content-Type': 'application/json' },
         }
       );

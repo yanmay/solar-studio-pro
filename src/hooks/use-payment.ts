@@ -12,21 +12,6 @@ interface InitiatePaymentArgs {
   onSuccess?: () => void;
 }
 
-// Function to dynamically load scripts
-function loadScript(src: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    if (document.querySelector(`script[src="${src}"]`)) {
-      resolve(true);
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = src;
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
-  });
-}
-
 export function usePayment(scanId?: string) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,116 +25,80 @@ export function usePayment(scanId?: string) {
     const activeScanId = methodScanId || scanId;
 
     try {
-      // 1. Create order on the serverless API
+      // 1. Create demo order on the serverless API (falls back to local demo order if offline)
       const referrerCode = localStorage.getItem("sunpower-referrer-code") || undefined;
-      const res = await fetch("/api/payment/create-order", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan, scanId: activeScanId, referrerCode }),
-      });
-
-      if (!res.ok) {
-        throw new Error("Failed to create order on server");
-      }
-
-      const orderData = await res.json();
-      const { orderId, amount, currency, keyId } = orderData;
-
-      // 2. Load Razorpay script
-      const scriptLoaded = await loadScript("https://checkout.razorpay.com/v1/checkout.js");
-      if (!scriptLoaded) {
-        throw new Error("Razorpay SDK failed to load. Are you offline?");
-      }
-
-      const Razorpay = (window as any).Razorpay;
-      if (!Razorpay) {
-        throw new Error("Razorpay instance not available");
-      }
-
-      // 3. Define Razorpay Options
-      const options = {
-        key: keyId,
-        amount: amount,
-        currency: currency,
-        name: "SUNPOWER LINK",
-        description: plan === "pay_per_scan" 
-          ? "Rooftop Solar Potential Feasibility Report" 
-          : "Pro Subscription Monthly Plan",
-        order_id: orderId,
-        theme: {
-          color: "#F17C58", // Accent orange
-        },
-        handler: async (response: any) => {
-          setIsLoading(true);
-          try {
-            // Verify payment signature on the backend
-             const verifyRes = await fetch("/api/payment/verify", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                plan,
-                scanId: activeScanId || "default",
-                scan_hash: activeScanId || "default",
-                referrerCode: localStorage.getItem("sunpower-referrer-code") || undefined
-              }),
-            });
-
-            if (!verifyRes.ok) {
-              throw new Error("Payment signature verification failed");
-            }
-
-            const verifyData = await verifyRes.json();
-            if (verifyData.verified) {
-              // Track payment completed event
-              trackPaymentCompleted(plan);
-
-              // Attribute referral reward
-              processReferralConversion();
-
-              // Let the caller revalidate the server-authoritative unlock status
-              onSuccess?.();
-
-              toast({
-                title: "Payment Successful",
-                description: plan === "pro_monthly"
-                  ? "Pro Subscription activated! Unlimited scans unlocked."
-                  : "Report unlocked successfully! Premium GIS data loaded.",
-              });
-            }
-          } catch (err: any) {
-            console.error("Verification failed:", err);
-            toast({
-              title: "Verification Failed",
-              description: err.message || "Payment verified failed. Please contact support.",
-              variant: "destructive",
-            });
-            setError(err.message || "Verification failed");
-          } finally {
-            setIsLoading(false);
-          }
-        },
-        modal: {
-          ondismiss: () => {
-            setIsLoading(false);
-            toast({
-              title: "Payment Cancelled",
-              description: "You closed the payment dialog without checking out.",
-            });
-          },
-        },
+      let orderData: { orderId: string; amount: number; currency: string; keyId?: string; demoMode?: boolean } = {
+        orderId: `order_demo_${Date.now()}`,
+        amount: plan === "pro_monthly" ? 99900 : (referrerCode ? 12900 : 14900),
+        currency: "INR",
+        keyId: "rzp_test_demo",
+        demoMode: true,
       };
 
-      const rzp = new Razorpay(options);
-      rzp.open();
+      try {
+        const res = await fetch("/api/payment/create-order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ plan, scanId: activeScanId, referrerCode }),
+        });
+        if (res.ok) {
+          orderData = await res.json();
+        }
+      } catch {
+        // Use local demo order fallback
+      }
+
+      // 2. Demo payment flow (skips opening live Razorpay checkout popup)
+      const demoOrderId = orderData.orderId?.startsWith("order_demo_")
+        ? orderData.orderId
+        : `order_demo_${Date.now()}`;
+      const demoPaymentId = `pay_demo_${Date.now()}`;
+
+      await new Promise((resolve) => setTimeout(resolve, 900));
+
+      // Best-effort server verification so HttpOnly unlock cookie / DB record are persisted
+      try {
+        await fetch("/api/payment/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            razorpay_order_id: demoOrderId,
+            razorpay_payment_id: demoPaymentId,
+            razorpay_signature: "demo_signature",
+            plan,
+            scanId: activeScanId || "default",
+            scan_hash: activeScanId || "default",
+            referrerCode,
+          }),
+        });
+      } catch {
+        // Client unlock state still applies below for demo mode
+      }
+
+      // Unlock report in client store immediately
+      const scanStore = useScanStore.getState();
+      scanStore.setIsPaid(true, demoPaymentId);
+      if (scanStore.fullAnalysis) {
+        scanStore.setFullAnalysis({ ...scanStore.fullAnalysis, unlocked: true });
+      }
+
+      trackPaymentCompleted(plan);
+      processReferralConversion();
+      onSuccess?.();
+
+      toast({
+        title: "Demo Payment Successful",
+        description: plan === "pro_monthly"
+          ? "Pro Subscription activated (Demo)! Unlimited scans unlocked."
+          : "Report unlocked (Demo)! Full 25-year analysis & PDF ready.",
+      });
+      setIsLoading(false);
     } catch (err: any) {
       console.error("Payment initiation error:", err);
       setError(err.message || "Failed to initiate payment");
       toast({
         title: "Checkout Error",
-        description: err.message || "Unable to open payment gateway. Try again.",
+        description: err.message || "Unable to complete demo payment. Try again.",
         variant: "destructive",
       });
       setIsLoading(false);

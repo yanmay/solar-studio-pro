@@ -2801,11 +2801,11 @@ const ResultsPage = () => {
                       : `[DEV] Pay ₹${paymentPlan === "pro_monthly" ? "999" : payPerScanPrice} & Unlock Now`}
                 </button>
               )}
-              <button onClick={() => { setCheckoutOpen(false); initiatePayment({ plan: paymentPlan, scanId: data?.analysisId, onSuccess: refreshUnlock }); }}
+              <button onClick={() => { initiatePayment({ plan: paymentPlan, scanId: data?.analysisId, onSuccess: () => { refreshUnlock(); setCheckoutOpen(false); } }); }}
                 disabled={paymentProcessing || paymentSuccess || isPaymentGatewayLoading}
-                className="w-full py-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all hover:brightness-110 disabled:opacity-50 cursor-pointer border"
-                style={{ background: "transparent", border: `1px solid ${C.outlineVariant}`, color: C.mutedSand }}>
-                {isPaymentGatewayLoading ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Connecting...</> : "Pay via Razorpay instead"}
+                className="w-full py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-50 cursor-pointer border-none"
+                style={{ background: C.primary, color: C.onPrimary, boxShadow: `0 6px 20px ${C.primary}40` }}>
+                {isPaymentGatewayLoading ? <><RefreshCw className="w-4 h-4 animate-spin" /> Processing demo payment...</> : `Pay ₹${paymentPlan === "pro_monthly" ? "999" : payPerScanPrice} & Unlock (Demo)`}
               </button>
               <div className="flex justify-center items-center gap-3 text-[10px]" style={{ color: C.mutedSand }}>
                 <span>🔒 256-bit SSL</span>
