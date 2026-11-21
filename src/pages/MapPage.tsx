@@ -1922,24 +1922,45 @@ const MapPage = () => {
             )}
           </div>
 
-          {/* â”€â”€ GPS locator floating button â”€â”€ */}
-          <div className="absolute bottom-6 right-4 z-[1000] flex flex-col gap-2">
+          {/* ── Bottom-right floating controls bar (Help, Controls toggle, GPS locator) ── */}
+          <div className="absolute bottom-6 right-4 z-[1005] flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => startTour(getRooftopTourPhase({ hasSearched, drawState }), true)}
+              className="grid h-10 w-10 place-items-center rounded-xl border border-white/15 bg-black/75 text-white/80 shadow-lg backdrop-blur-xl transition-[background-color,color,transform] duration-200 ease-out hover:bg-black/90 hover:text-white active:scale-[0.97] cursor-pointer"
+              aria-label="Open guided tour"
+              title="Open guided tour"
+            >
+              <HelpCircle className="h-4 w-4 text-[#ff8b3d]" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSidebarExpanded((open) => !open)}
+              data-tour="workspace-toggle"
+              className="flex h-10 items-center gap-2 rounded-xl border border-white/15 bg-black/75 px-3 text-xs font-semibold text-white/80 shadow-lg backdrop-blur-xl transition-[background-color,color,transform] duration-200 ease-out hover:bg-black/90 hover:text-white active:scale-[0.97] cursor-pointer"
+              aria-label={sidebarExpanded ? "Close mapping controls" : "Open mapping controls"}
+            >
+              <Sliders className="h-4 w-4 text-[#ff8b3d]" />
+              <span className="hidden md:inline">{sidebarExpanded ? "Hide controls" : "Map controls"}</span>
+            </button>
+
             <button
               onClick={handleLocateMe}
               disabled={locating}
-              className="w-10 h-10 bg-card/65 backdrop-blur-2xl border border-border/80 shadow-md rounded-xl flex items-center justify-center hover:border-primary/80 hover:text-primary active:scale-95 transition-all disabled:opacity-60 cursor-pointer"
+              className="w-10 h-10 bg-black/75 backdrop-blur-xl border border-white/15 shadow-lg rounded-xl flex items-center justify-center hover:bg-black/90 hover:border-primary/80 hover:text-primary active:scale-95 transition-all disabled:opacity-60 cursor-pointer"
               aria-label="Find my location"
               title="Find my location"
             >
               {locating ? (
                 <Loader2 className="w-4.5 h-4.5 text-primary animate-spin" />
               ) : (
-                <LocateFixed className="w-4.5 h-4.5 text-muted-foreground hover:text-primary transition-colors" />
+                <LocateFixed className="w-4.5 h-4.5 text-white/80 hover:text-primary transition-colors" />
               )}
             </button>
           </div>
 
-          {/* â”€â”€ Right workspace sidebar config panel â”€â”€ */}
+          {/* ── Right workspace sidebar config panel ── */}
           {!sidebarExpanded && (
             <div className="absolute bottom-20 right-4 z-[1000] hidden sm:block">
               <GisGuide
@@ -1950,30 +1971,9 @@ const MapPage = () => {
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => setSidebarExpanded((open) => !open)}
-            data-tour="workspace-toggle"
-            className="absolute bottom-6 right-16 z-[1000] flex h-10 items-center gap-2 rounded-xl border border-white/15 bg-black/70 px-3 text-xs font-semibold text-white/75 shadow-lg backdrop-blur-xl transition-[background-color,color,transform] duration-200 ease-out hover:bg-black/85 hover:text-white active:scale-[0.97]"
-            aria-label={sidebarExpanded ? "Close mapping controls" : "Open mapping controls"}
-          >
-            <Sliders className="h-4 w-4 text-[#ff8b3d]" />
-            <span className="hidden md:inline">{sidebarExpanded ? "Hide controls" : "Map controls"}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => startTour(getRooftopTourPhase({ hasSearched, drawState }), true)}
-            className="absolute bottom-6 right-[9.5rem] z-[1000] grid h-10 w-10 place-items-center rounded-xl border border-white/15 bg-black/70 text-white/75 shadow-lg backdrop-blur-xl transition-[background-color,color,transform] duration-200 ease-out hover:bg-black/85 hover:text-white active:scale-[0.97]"
-            aria-label="Open guided tour"
-            title="Open guided tour"
-          >
-            <HelpCircle className="h-4 w-4 text-[#ff8b3d]" />
-          </button>
-
           <Card
             data-tour="drawing-workspace"
-            className={`absolute top-[100px] bottom-6 right-4 w-[360px] z-[1000] border border-white/10 shadow-2xl flex flex-col overflow-hidden rounded-3xl transition-[opacity,transform] duration-240 ease-out bg-[#0A0A0A]/90 backdrop-blur-2xl ${
+            className={`absolute top-[100px] bottom-20 right-4 w-[360px] z-[1000] border border-white/10 shadow-2xl flex flex-col overflow-hidden rounded-3xl transition-[opacity,transform] duration-240 ease-out bg-[#0A0A0A]/90 backdrop-blur-2xl ${
               sidebarExpanded ? "opacity-100 translate-x-0" : "opacity-0 translate-x-[40px] pointer-events-none"
             }`}
             onMouseDown={(e) => e.stopPropagation()}
